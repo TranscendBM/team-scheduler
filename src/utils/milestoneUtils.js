@@ -172,6 +172,7 @@ export function buildBarsForPerson(personId, projects, rules) {
           ? getLoadingLevel(project.boothSize, project.name)
           : null,
         boothSize: project.boothSize || null,
+        artworkDone: project.type === 'tradeshow' ? !!project.artworkDone : false,
       })
     }
   }

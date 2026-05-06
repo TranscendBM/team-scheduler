@@ -66,6 +66,22 @@ const BUSY_COLORS = [
 ]
 function getBusyColor(count) { return BUSY_COLORS[Math.min(count, 10)] }
 
+const SHIMMER_CSS = `
+@keyframes gantt-shimmer {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
+.gantt-shimmer-overlay {
+  position: absolute; inset: 0; overflow: hidden; border-radius: inherit; pointer-events: none;
+}
+.gantt-shimmer-overlay::after {
+  content: '';
+  position: absolute; top: 0; bottom: 0; width: 30%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.28), transparent);
+  animation: gantt-shimmer 1.8s ease-in-out infinite;
+}
+`
+
 export default function GanttPage() {
   const [people, setPeople] = useState([])
   const [projects, setProjects] = useState([])
@@ -97,6 +113,7 @@ export default function GanttPage() {
   const viewStart = new Date(year, 0, 1)
   const viewEnd = new Date(year, 11, 31)
   const totalDays = Math.round((viewEnd - viewStart) / 86400000) + 1
+  const todayDate = new Date(); todayDate.setHours(0, 0, 0, 0)
 
   function dayOffset(date) {
     return Math.round((new Date(date) - viewStart) / 86400000)
@@ -144,6 +161,7 @@ export default function GanttPage() {
 
   return (
     <div className="flex flex-col h-full">
+      <style>{SHIMMER_CSS}</style>
       {/* Top bar */}
       <div className="flex items-center justify-between px-6 py-4 border-b bg-white">
         <div>
@@ -309,6 +327,10 @@ export default function GanttPage() {
                       const laneIndex = barLane.get(bar) ?? 0
                       const topPx = ROW_PADDING / 2 + laneIndex * (LANE_HEIGHT + LANE_GAP)
 
+                      const wsDate = new Date(bar.workStart); wsDate.setHours(0,0,0,0)
+                      const weDate = new Date(bar.workEnd); weDate.setHours(0,0,0,0)
+                      const isInProgress = todayDate >= wsDate && todayDate <= weDate
+
                       return (
                         <div key={bi}
                           className="absolute rounded-md cursor-pointer hover:brightness-110 flex items-center overflow-hidden transition-all"
@@ -317,18 +339,23 @@ export default function GanttPage() {
                             width: `${widthPct}%`,
                             height: LANE_HEIGHT,
                             top: topPx,
-                            backgroundColor: bar.color,
-                            opacity: 0.88,
+                            backgroundColor: bar.artworkDone ? '#6b7280' : bar.color,
+                            opacity: bar.artworkDone ? 0.65 : 0.88,
                             zIndex: 5,
                             minWidth: 4,
                           }}
                           onMouseEnter={(e) => setTooltip({ bar, x: e.clientX, y: e.clientY })}
                           onMouseLeave={() => setTooltip(null)}
                         >
+                          {/* Shimmer overlay for in-progress */}
+                          {isInProgress && !bar.artworkDone && <div className="gantt-shimmer-overlay" />}
+
                           <span className="text-white text-xs font-medium px-2 truncate select-none leading-none flex-1 min-w-0">
                             {bar.projectName}
                           </span>
-                          {bar.loadingLevel && (() => {
+
+                          {/* Loading level badge */}
+                          {bar.loadingLevel && !bar.artworkDone && (() => {
                             const ls = LOADING_COLORS[bar.loadingLevel]
                             return (
                               <span className="text-xs font-bold px-1.5 mr-1 rounded flex-shrink-0 leading-none py-0.5"
@@ -337,6 +364,14 @@ export default function GanttPage() {
                               </span>
                             )
                           })()}
+
+                          {/* Artwork done badge */}
+                          {bar.artworkDone && (
+                            <span className="text-xs font-bold px-1.5 mr-1 rounded flex-shrink-0 leading-none py-0.5 bg-white/30 text-white" style={{ fontSize: 9 }}>
+                              ✓出稿
+                            </span>
+                          )}
+
                           {/* Milestone diamonds */}
                           {bar.milestones.map((ms) => {
                             const msOff = dayOffset(ms.date)

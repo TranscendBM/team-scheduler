@@ -16,7 +16,7 @@ const emptyForm = {
   location: '', showType: '', office: '', year: new Date().getFullYear(),
   assignments: [],
   // tradeshow
-  boothSize: '',
+  boothSize: '', artworkDone: false,
   // design / kv
   designSubtype: '',
   kvEventDate: '', kvCategory: '', kvRegion: 'WWW', kvNote: '',
@@ -104,6 +104,7 @@ export default function ProjectsPage() {
       year: p.year || new Date().getFullYear(),
       assignments: p.assignments || [],
       boothSize: p.boothSize || '',
+      artworkDone: !!p.artworkDone,
       designSubtype: p.designSubtype || (p.type === 'seasonal_kv' ? '季節KV' : ''),
       kvEventDate: p.endDate || '',
       kvCategory: p.kvCategory || '',
@@ -138,6 +139,7 @@ export default function ProjectsPage() {
         startDate: form.startDate, endDate: form.endDate,
         showType: form.showType, office: form.office,
         boothSize: form.boothSize ? parseInt(form.boothSize) : null,
+        artworkDone: !!form.artworkDone,
       }
     } else if (form.type === 'design') {
       data.designSubtype = form.designSubtype
@@ -184,6 +186,10 @@ export default function ProjectsPage() {
   async function handleDelete(id) {
     await deleteDoc(doc(db, 'projects', id))
     setDeleteConfirm(null)
+  }
+
+  async function toggleArtworkDone(p) {
+    await updateDoc(doc(db, 'projects', p.id), { artworkDone: !p.artworkDone, updatedAt: new Date().toISOString() })
   }
 
   function toggleAssignment(personId, role) {
@@ -303,6 +309,9 @@ export default function ProjectsPage() {
                           {(p.type === 'seasonal_kv' || (p.type === 'design' && p.designSubtype === '季節KV')) && p.kvRegion && (
                             <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 flex-shrink-0">{p.kvRegion}</span>
                           )}
+                          {p.type === 'tradeshow' && p.artworkDone && (
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium flex-shrink-0">✓ 已出稿</span>
+                          )}
                         </div>
                         <div className="flex items-center gap-4 text-xs text-gray-500 flex-wrap">
                           {p.startDate && <span>📅 {p.startDate} ~ {p.endDate}</span>}
@@ -323,7 +332,14 @@ export default function ProjectsPage() {
                       </div>
                     </div>
                     {isAdmin && (
-                      <div className="flex gap-2 flex-shrink-0">
+                      <div className="flex gap-2 flex-shrink-0 items-center">
+                        {p.type === 'tradeshow' && (
+                          <button onClick={() => toggleArtworkDone(p)}
+                            title={p.artworkDone ? '取消出稿完畢' : '標記出稿完畢'}
+                            className={`text-xs px-2 py-1 rounded border transition-colors ${p.artworkDone ? 'bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-200' : 'text-gray-400 border-gray-200 hover:bg-gray-50'}`}>
+                            {p.artworkDone ? '✓ 出稿' : '出稿'}
+                          </button>
+                        )}
                         <button onClick={() => openEdit(p)} className="text-xs text-blue-600 hover:text-blue-800 px-2 py-1 rounded hover:bg-blue-50">編輯</button>
                         <button onClick={() => setDeleteConfirm(p.id)} className="text-xs text-red-500 hover:text-red-700 px-2 py-1 rounded hover:bg-red-50">刪除</button>
                       </div>
@@ -560,6 +576,16 @@ export default function ProjectsPage() {
                       </div>
                     )
                   })()}
+                  {/* 出稿完畢 toggle */}
+                  <button
+                    onClick={() => setForm(f => ({ ...f, artworkDone: !f.artworkDone }))}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border-2 transition-colors w-full justify-center ${
+                      form.artworkDone
+                        ? 'bg-emerald-600 border-emerald-600 text-white'
+                        : 'border-gray-200 text-gray-500 hover:bg-gray-50'
+                    }`}>
+                    {form.artworkDone ? '✓ 已出稿完畢' : '出稿完畢'}
+                  </button>
                 </>
               )}
 

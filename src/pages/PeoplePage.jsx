@@ -46,10 +46,7 @@ export default function PeoplePage() {
         await addDoc(collection(db, 'people'), { ...data, createdAt: new Date().toISOString() })
       }
       setShowModal(false)
-      setSaving(false)
-    } catch (err) {
-      console.error('儲存失敗:', err)
-      alert('儲存失敗：' + err.message)
+    } finally {
       setSaving(false)
     }
   }
@@ -190,6 +187,9 @@ function PersonCard({ person, assignedProjects, isAdmin, onEdit, onDelete }) {
           <div>
             <p className="font-semibold text-gray-800">{person.name}</p>
             <p className="text-xs text-gray-400">{person.role === 'designer' ? '設計師' : 'Planner'}</p>
+            {person.email && (
+              <p className="text-xs text-gray-400 truncate max-w-[140px]">{person.email}</p>
+            )}
           </div>
         </div>
         {isAdmin && (
