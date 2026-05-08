@@ -67,18 +67,14 @@ const BUSY_COLORS = [
 function getBusyColor(count) { return BUSY_COLORS[Math.min(count, 10)] }
 
 const SHIMMER_CSS = `
-@keyframes gantt-shimmer {
-  0%   { transform: translateX(-100%); }
-  100% { transform: translateX(400%); }
+@keyframes gantt-breathe {
+  0%, 100% { opacity: 0; }
+  50%       { opacity: 1; }
 }
-.gantt-shimmer-overlay {
-  position: absolute; inset: 0; overflow: hidden; border-radius: inherit; pointer-events: none;
-}
-.gantt-shimmer-overlay::after {
-  content: '';
-  position: absolute; top: 0; bottom: 0; width: 30%;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.28), transparent);
-  animation: gantt-shimmer 1.8s ease-in-out infinite;
+.gantt-breathe-overlay {
+  position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: rgba(255,255,255,0.22);
+  animation: gantt-breathe 3.5s ease-in-out infinite;
 }
 `
 
@@ -347,8 +343,8 @@ export default function GanttPage() {
                           onMouseEnter={(e) => setTooltip({ bar, x: e.clientX, y: e.clientY })}
                           onMouseLeave={() => setTooltip(null)}
                         >
-                          {/* Shimmer overlay for in-progress */}
-                          {isInProgress && !bar.artworkDone && <div className="gantt-shimmer-overlay" />}
+                          {/* Breathing overlay for in-progress */}
+                          {isInProgress && !bar.artworkDone && <div className="gantt-breathe-overlay" />}
 
                           <span className="text-white text-xs font-medium px-2 truncate select-none leading-none flex-1 min-w-0">
                             {bar.projectName}

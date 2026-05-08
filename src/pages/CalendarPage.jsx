@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react'
-import { collection, onSnapshot } from 'firebase/firestore'
+import { collection, onSnapshot, doc, getDoc } from 'firebase/firestore'
 import { db } from '../firebase'
-import { TYPE_COLORS, TYPE_LABELS, TYPE_BG } from '../utils/milestoneUtils'
+import {
+  TYPE_COLORS, TYPE_LABELS, DEFAULT_RULES,
+  getWorkStart, getMilestones, getKVMilestones, getLoadingLevel,
+} from '../utils/milestoneUtils'
 
 const MONTHS_LABEL = ['一月', '二月', '三月', '四月', '五月', '六月', '七月', '八月', '九月', '十月', '十一月', '十二月']
 const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六']
@@ -14,9 +17,15 @@ const LEAVE_COLORS = {
   '其他': '#d1d5db',
 }
 
+// Format a Date object to YYYY-MM-DD using LOCAL time (avoids UTC shift)
+function toLocalDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 export default function CalendarPage() {
   const [projects, setProjects] = useState([])
   const [leaves, setLeaves] = useState([])
+  const [rules, setRules] = useState(DEFAULT_RULES)
   const [today] = useState(new Date())
   const [viewDate, setViewDate] = useState(new Date(today.getFullYear(), today.getMonth(), 1))
 
@@ -27,6 +36,11 @@ export default function CalendarPage() {
     const unsub2 = onSnapshot(collection(db, 'leaves'), snap => {
       setLeaves(snap.docs.map(d => ({ id: d.id, ...d.data() })))
     })
+    const loadRules = async () => {
+      const rDoc = await getDoc(doc(db, 'settings', 'milestoneRules'))
+      if (rDoc.exists()) setRules({ ...DEFAULT_RULES, ...rDoc.data() })
+    }
+    loadRules()
     return () => { unsub1(); unsub2() }
   }, [])
 
@@ -39,15 +53,83 @@ export default function CalendarPage() {
   function nextMonth() { setViewDate(new Date(year, month + 1, 1)) }
   function goToday() { setViewDate(new Date(today.getFullYear(), today.getMonth(), 1)) }
 
-  // Get projects active on a given day
-  function getProjectsForDay(day) {
-    const date = new Date(year, month, day)
-    return projects.filter(p => {
-      if (!p.startDate || !p.endDate) return false
-      const s = new Date(p.startDate)
-      const e = new Date(p.endDate)
-      return date >= s && date <= e
-    })
+  // Build milestone events for each day (only key dates, not full spans)
+  function getMilestoneEventsForDay(day) {
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+    const events = []
+
+    for (const p of projects) {
+      if (!p.startDate) continue
+      const color = TYPE_COLORS[p.type] || '#6B7280'
+
+      if (p.type === 'tradeshow') {
+        const level = getLoadingLevel(p.boothSize, p.name)
+
+        // Designer work start
+        const dsDate = toLocalDateStr(getWorkStart(p.startDate, 'designer', rules, level))
+        if (dsDate === dateStr) {
+          events.push({ key: `${p.id}-ds`, label: p.name, sub: '設計師開始', color, dot: '✏' })
+        }
+
+        // Planner work start
+        const psDate = toLocalDateStr(getWorkStart(p.startDate, 'planner', rules, level))
+        if (psDate === dateStr) {
+          events.push({ key: `${p.id}-ps`, label: p.name, sub: 'Planner開始', color, dot: '📋' })
+        }
+
+        // Tradeshow milestones (邀請函, 新聞稿, LI預告, LI發文)
+        const milestones = getMilestones(p.startDate, rules, level)
+        for (const ms of milestones) {
+          if (toLocalDateStr(ms.date) === dateStr) {
+            const isShowDay = ms.key === 'linkedinPost'
+            events.push({
+              key: `${p.id}-${ms.key}`,
+              label: p.name,
+              sub: isShowDay ? '展覽開始' : ms.label,
+              color,
+              dot: isShowDay ? '🚀' : '◆',
+            })
+          }
+        }
+
+      } else if (p.type === 'design' || p.type === 'seasonal_kv') {
+        // Design project start
+        if (p.startDate === dateStr) {
+          events.push({ key: `${p.id}-start`, label: p.name, sub: '設計開始', color, dot: '✏' })
+        }
+
+        // KV release milestone
+        const isKV = p.type === 'seasonal_kv' || (p.type === 'design' && p.designSubtype === '季節KV')
+        if (isKV && p.endDate) {
+          const kvMs = getKVMilestones(p.endDate, rules)
+          for (const ms of kvMs) {
+            if (toLocalDateStr(ms.date) === dateStr) {
+              events.push({ key: `${p.id}-${ms.key}`, label: p.name, sub: ms.label, color, dot: '◆' })
+            }
+          }
+        }
+
+        // End / event date
+        if (p.endDate && p.endDate === dateStr) {
+          events.push({ key: `${p.id}-end`, label: p.name, sub: '活動日', color, dot: '🎨' })
+        }
+
+      } else if (p.type === 'event') {
+        if (p.startDate === dateStr) {
+          events.push({ key: `${p.id}-start`, label: p.name, sub: '活動開始', color, dot: '🎯' })
+        }
+        if (p.endDate && p.endDate !== p.startDate && p.endDate === dateStr) {
+          events.push({ key: `${p.id}-end`, label: p.name, sub: '活動結束', color, dot: '🏁' })
+        }
+
+      } else if (p.type === 'award') {
+        if (p.startDate === dateStr) {
+          events.push({ key: `${p.id}-start`, label: p.name, sub: '截止日', color, dot: '🏆' })
+        }
+      }
+    }
+
+    return events
   }
 
   // Get leaves active on a given day
@@ -74,7 +156,7 @@ export default function CalendarPage() {
       <div className="flex items-center justify-between px-6 py-4 border-b bg-white">
         <div>
           <h2 className="text-xl font-bold text-gray-800">日曆視圖</h2>
-          <p className="text-sm text-gray-400">{year} 年 {MONTHS_LABEL[month]}</p>
+          <p className="text-sm text-gray-400">{year} 年 {MONTHS_LABEL[month]}｜僅顯示重要里程碑</p>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={goToday} className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600">
@@ -98,13 +180,15 @@ export default function CalendarPage() {
         <div className="grid grid-cols-7 gap-1">
           {cells.map((day, i) => {
             if (day === null) return <div key={`empty-${i}`} />
-            const dayProjects = getProjectsForDay(day)
+            const msEvents = getMilestoneEventsForDay(day)
             const dayLeaves = getLeavesForDay(day)
-            const totalItems = dayProjects.length + dayLeaves.length
-            const shownProjects = dayProjects.slice(0, 3)
-            const remainingSlots = 3 - shownProjects.length
-            const shownLeaves = dayLeaves.slice(0, Math.max(0, remainingSlots))
-            const overflow = totalItems - shownProjects.length - shownLeaves.length
+
+            // Show up to 3 items total; leaves shown after milestones
+            const shownMs = msEvents.slice(0, 3)
+            const remainSlots = Math.max(0, 3 - shownMs.length)
+            const shownLeaves = dayLeaves.slice(0, remainSlots)
+            const overflow = (msEvents.length - shownMs.length) + (dayLeaves.length - shownLeaves.length)
+
             return (
               <div key={day}
                 className={`min-h-24 rounded-lg p-1.5 border ${isToday(day) ? 'border-blue-400 bg-blue-50' : 'border-gray-100 bg-white hover:border-gray-300'}`}>
@@ -112,12 +196,18 @@ export default function CalendarPage() {
                   {day}
                 </p>
                 <div className="space-y-0.5">
-                  {shownProjects.map(p => (
-                    <div key={p.id}
-                      className="text-xs px-1.5 py-0.5 rounded truncate text-white font-medium"
-                      style={{ backgroundColor: TYPE_COLORS[p.type] || '#6B7280' }}
-                      title={`${p.name} (${TYPE_LABELS[p.type]})`}>
-                      {p.name}
+                  {shownMs.map(ev => (
+                    <div key={ev.key}
+                      className="text-xs px-1.5 py-0.5 rounded flex items-center gap-1 min-w-0"
+                      style={{ backgroundColor: ev.color + '18', borderLeft: `2.5px solid ${ev.color}` }}
+                      title={`${ev.label}・${ev.sub}`}>
+                      <span className="flex-shrink-0" style={{ fontSize: 9 }}>{ev.dot}</span>
+                      <span className="truncate font-medium" style={{ color: ev.color, fontSize: 10 }}>
+                        {ev.label}
+                      </span>
+                      <span className="flex-shrink-0 text-gray-400 hidden sm:inline" style={{ fontSize: 9 }}>
+                        {ev.sub}
+                      </span>
                     </div>
                   ))}
                   {shownLeaves.map(l => (
@@ -141,21 +231,41 @@ export default function CalendarPage() {
         </div>
 
         {/* Legend */}
-        <div className="flex items-center gap-4 mt-4 px-2 flex-wrap">
-          {Object.entries(TYPE_LABELS).map(([type, label]) => (
-            <div key={type} className="flex items-center gap-1.5">
-              <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: TYPE_COLORS[type] }} />
-              <span className="text-xs text-gray-500">{label}</span>
+        <div className="mt-5 space-y-2">
+          <p className="text-xs font-medium text-gray-500">里程碑圖例</p>
+          <div className="flex flex-wrap gap-x-5 gap-y-1.5">
+            <div className="flex items-center gap-1.5 text-xs text-gray-500">
+              <span>✏</span><span>設計師/設計開始</span>
             </div>
-          ))}
-          <div className="w-px h-4 bg-gray-200 mx-1" />
-          {Object.entries(LEAVE_COLORS).map(([type, color]) => (
-            <div key={type} className="flex items-center gap-1.5">
-              <div className="w-3 h-3 rounded-sm"
-                style={{ backgroundColor: color, backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(255,255,255,0.4) 2px, rgba(255,255,255,0.4) 4px)' }} />
-              <span className="text-xs text-gray-500">{type}</span>
+            <div className="flex items-center gap-1.5 text-xs text-gray-500">
+              <span>📋</span><span>Planner開始</span>
             </div>
-          ))}
+            <div className="flex items-center gap-1.5 text-xs text-gray-500">
+              <span>◆</span><span>邀請函・新聞稿・LinkedIn・KV里程碑</span>
+            </div>
+            <div className="flex items-center gap-1.5 text-xs text-gray-500">
+              <span>🚀</span><span>展覽開始</span>
+            </div>
+            <div className="flex items-center gap-1.5 text-xs text-gray-500">
+              <span>🎯</span><span>活動</span>
+            </div>
+            <div className="flex items-center gap-1.5 text-xs text-gray-500">
+              <span>🏆</span><span>報獎截止</span>
+            </div>
+            <div className="flex items-center gap-1.5 text-xs text-gray-500">
+              <span>🏖</span><span>休假</span>
+            </div>
+          </div>
+
+          {/* Project type color chips */}
+          <div className="flex flex-wrap gap-x-4 gap-y-1.5 pt-1">
+            {Object.entries(TYPE_LABELS).map(([type, label]) => (
+              <div key={type} className="flex items-center gap-1.5">
+                <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: TYPE_COLORS[type] }} />
+                <span className="text-xs text-gray-500">{label}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
     </div>
