@@ -1,0 +1,29 @@
+name: Test Email (手動觸發)
+
+on:
+  workflow_dispatch:
+    inputs:
+      recipient:
+        description: '收件人 Email'
+        required: false
+        default: 'elvis_cheng@transcend-info.com'
+
+jobs:
+  test-email:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Send test email
+        env:
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          TEST_RECIPIENT: ${{ github.event.inputs.recipient }}
+        run: python scripts/test_email.py
