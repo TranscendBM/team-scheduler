@@ -3,6 +3,7 @@ import { collection, query, where, onSnapshot, doc, updateDoc, serverTimestamp }
 import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
 import { statusMeta, NEXT_STATUS, NEXT_STATUS_LABEL, STATUS_TIMESTAMP, ACTIVE_STATUSES } from '../utils/requestConstants'
+import Attachments from '../components/Attachments'
 
 function fmt(ts) {
   if (!ts) return '—'
@@ -78,6 +79,7 @@ export default function TasksPage() {
                   <p className="text-xs text-gray-400 mt-0.5">來自：{t.submittedByName || t.submittedBy}</p>
                   {t.description && <p className="text-sm text-gray-600 mt-2 whitespace-pre-wrap bg-gray-50 rounded-lg p-2">{t.description}</p>}
                   {t.reviewNote && <p className="text-xs text-gray-500 mt-1">主管備註：{t.reviewNote}</p>}
+                  {t.attachments?.length > 0 && <div className="mt-2"><Attachments items={t.attachments} /></div>}
                 </div>
                 <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${meta.color}`}>{meta.label}</span>
               </div>

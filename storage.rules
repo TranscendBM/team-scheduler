@@ -1,0 +1,14 @@
+rules_version = '2';
+
+// 附件路徑：attachments/{requestId}/{fileName}
+// 已登入者可讀寫；單檔上限 10MB。
+// （Storage 規則無法讀 Firestore，故以「已登入」為界；系統流程本身已限白名單登入才進得了表單。）
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /attachments/{requestId}/{fileName} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && request.resource.size < 10 * 1024 * 1024;
+    }
+  }
+}

@@ -3,6 +3,7 @@ import { collection, query, where, onSnapshot } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
 import { STATUS, statusMeta } from '../utils/requestConstants'
+import Attachments from '../components/Attachments'
 
 function fmt(ts) {
   if (!ts) return '—'
@@ -81,6 +82,9 @@ export default function MyRequestsPage() {
               {open && (
                 <div className="px-5 pb-4 pt-1 border-t border-gray-100 text-sm space-y-2">
                   {r.description && <p className="text-gray-600 whitespace-pre-wrap">{r.description}</p>}
+                  {r.attachments?.length > 0 && (
+                    <div><p className="text-xs text-gray-400 mb-1">附件</p><Attachments items={r.attachments} /></div>
+                  )}
                   <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs text-gray-500 mt-2">
                     <div><dt className="inline text-gray-400">送出時間：</dt><dd className="inline text-gray-600">{fmt(r.createdAt)}</dd></div>
                     <div><dt className="inline text-gray-400">指派設計師：</dt><dd className="inline text-gray-600">{r.assignedDesigner || '—'}</dd></div>

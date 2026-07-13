@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app'
 import { getAuth, GoogleAuthProvider } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
+import { getStorage } from 'firebase/storage'
 
 // 設定改為讀環境變數（本機用 .env、CI 用 GitHub Secrets）。
 // 若環境變數未設定，暫時 fallback 到舊專案，確保移轉期間不會壞掉。
@@ -18,4 +19,5 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig)
 export const auth = getAuth(app)
 export const db = getFirestore(app)
+export const storage = getStorage(app)
 export const googleProvider = new GoogleAuthProvider()

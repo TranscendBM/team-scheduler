@@ -45,6 +45,13 @@ function buildHtml(r) {
        <td style="padding:8px 12px;color:#6b7280;width:32%;vertical-align:top">${k}</td>
        <td style="padding:8px 12px;font-weight:500;white-space:pre-wrap">${String(v).replace(/</g, '&lt;')}</td>
      </tr>`).join('')
+  const atts = (r.attachments || [])
+  const attHtml = atts.length
+    ? `<div style="margin-top:16px">
+         <p style="font-size:13px;color:#6b7280;margin:0 0 6px">附件</p>
+         ${atts.map(a => `<a href="${a.url}" style="display:inline-block;margin:0 6px 6px 0;background:#f3f4f6;color:#374151;text-decoration:none;padding:6px 12px;border-radius:6px;font-size:12px">📄 ${String(a.name).replace(/</g, '&lt;')}</a>`).join('')}
+       </div>`
+    : ''
   return `
   <div style="font-family:sans-serif;color:#1f2937;max-width:560px;margin:auto;padding:24px">
     <div style="background:#eff6ff;border-left:4px solid #3b82f6;padding:14px 18px;border-radius:8px;margin-bottom:18px">
@@ -52,6 +59,7 @@ function buildHtml(r) {
       <p style="margin:0;color:#6b7280;font-size:13px">你被指派了一項設計需求，詳情如下</p>
     </div>
     <table style="width:100%;border-collapse:collapse;font-size:13px;border:1px solid #f0f0f0;border-radius:8px;overflow:hidden">${tr}</table>
+    ${attHtml}
     <a href="${SITE}/#/tasks" style="display:inline-block;margin-top:20px;background:#2563eb;color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-size:14px">前往我的任務 →</a>
     <p style="color:#9ca3af;font-size:12px;margin-top:24px">此信由 Team Scheduler 於需求核准發稿時自動寄出。</p>
   </div>`
