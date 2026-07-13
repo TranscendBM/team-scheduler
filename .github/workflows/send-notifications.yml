@@ -1,9 +1,11 @@
 name: Send Daily Notifications
 
 on:
-  schedule:
-    # 01:00 UTC = 09:00 Taiwan time (UTC+8)
-    - cron: '0 1 * * *'
+  # ⏸️ 每日排程暫時停用（Firebase 移轉期間）。要恢復時把下面兩行取消註解，
+  #    並確認 GitHub Secrets 的 FIREBASE_SERVICE_ACCOUNT / FIREBASE_PROJECT_ID 已指向新專案 team-scheduler-dc7ce。
+  # schedule:
+  #   # 01:00 UTC = 09:00 Taiwan time (UTC+8)
+  #   - cron: '0 1 * * *'
   workflow_dispatch:   # allow manual trigger from GitHub Actions UI
 
 jobs:

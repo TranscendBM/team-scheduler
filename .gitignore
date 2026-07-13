@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.firebase/
+*.log
+
+# ⚠️ 服務帳戶金鑰：絕對不要 commit 進 git
+secrets/
+*serviceAccount*.json
+*service-account*.json
+.env
+.env.local

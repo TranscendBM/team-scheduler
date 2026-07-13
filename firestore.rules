@@ -1,0 +1,49 @@
+rules_version = '2';
+
+// 角色由 users collection 決定（白名單制，不綁公司網域）。
+// doc id = 小寫 email。只有列在 users 裡的帳號能存取任何資料。
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function email() { return request.auth.token.email.lower(); }
+    function whitelisted() {
+      return signedIn() && exists(/databases/$(database)/documents/users/$(email()));
+    }
+    function role() {
+      return get(/databases/$(database)/documents/users/$(email())).data.role;
+    }
+    function isManager() { return whitelisted() && role() == 'manager'; }
+
+    // 使用者名單：自己可讀自己那筆（登入時查角色用）；主管可讀寫全部
+    match /users/{uid} {
+      allow read: if signedIn() && (uid == email() || isManager());
+      allow write: if isManager();
+    }
+
+    // 客製化設計需求
+    match /requests/{id} {
+      allow read: if isManager()
+        || (whitelisted() && resource.data.submittedBy == email())        // planner 看自己送的
+        || (whitelisted() && resource.data.assignedDesigner == email());  // designer 看指派給自己的
+      allow create: if whitelisted()
+        && request.resource.data.submittedBy == email()
+        && request.resource.data.status == 'pending';
+      allow update: if isManager()
+        || (whitelisted()
+            && resource.data.assignedDesigner == email()
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['status', 'startedAt', 'reviewingAt', 'completedAt']));
+      allow delete: if isManager();
+    }
+
+    // 既有 team-scheduler 資料：開放給已登入白名單使用者讀寫（維持原功能，之後可再依角色收斂）
+    match /projects/{id}     { allow read, write: if whitelisted(); }
+    match /people/{id}       { allow read, write: if whitelisted(); }
+    match /leaves/{id}       { allow read, write: if whitelisted(); }
+    match /settings/{id}     { allow read, write: if whitelisted(); }
+    match /hblPayments/{id}  { allow read, write: if whitelisted(); }
+    match /hblSchedule/{id}  { allow read, write: if whitelisted(); }
+    match /hblAdStatus/{id}  { allow read, write: if whitelisted(); }
+  }
+}
