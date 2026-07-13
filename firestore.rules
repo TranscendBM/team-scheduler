@@ -10,10 +10,13 @@ service cloud.firestore {
     function whitelisted() {
       return signedIn() && exists(/databases/$(database)/documents/users/$(email()));
     }
-    function role() {
-      return get(/databases/$(database)/documents/users/$(email())).data.role;
-    }
+    function udoc() { return get(/databases/$(database)/documents/users/$(email())); }
+    function role() { return udoc().data.role; }
+    function myRegions() { return udoc().data.get('regions', []); }
     function isManager() { return whitelisted() && role() == 'manager'; }
+    function changedOnly(keys) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
+    }
 
     // 使用者名單：自己可讀自己那筆（登入時查角色用）；主管可讀寫全部
     match /users/{uid} {
@@ -25,15 +28,21 @@ service cloud.firestore {
     match /requests/{id} {
       allow read: if isManager()
         || (whitelisted() && resource.data.submittedBy == email())        // planner 看自己送的
-        || (whitelisted() && resource.data.assignedDesigner == email());  // designer 看指派給自己的
+        || (whitelisted() && resource.data.assignedDesigner == email())   // designer 看指派給自己的
+        || (whitelisted() && resource.data.region in myRegions());        // planner 看負責區域的
       allow create: if whitelisted()
         && request.resource.data.submittedBy == email()
         && request.resource.data.status == 'pending';
       allow update: if isManager()
+        // 設計師:改自己被指派任務的狀態
         || (whitelisted()
             && resource.data.assignedDesigner == email()
-            && request.resource.data.diff(resource.data).affectedKeys()
-                 .hasOnly(['status', 'startedAt', 'reviewingAt', 'completedAt']));
+            && changedOnly(['status', 'startedAt', 'reviewingAt', 'completedAt']))
+        // planner:只能把負責區域的需求「結案」
+        || (whitelisted()
+            && resource.data.region in myRegions()
+            && request.resource.data.status == 'completed'
+            && changedOnly(['status', 'completedAt']));
       allow delete: if isManager();
     }
 
@@ -41,7 +50,11 @@ service cloud.firestore {
     match /projects/{id}     { allow read, write: if whitelisted(); }
     match /people/{id}       { allow read, write: if whitelisted(); }
     match /leaves/{id}       { allow read, write: if whitelisted(); }
-    match /settings/{id}     { allow read, write: if whitelisted(); }
+    // settings/permissions 只有 manager 能寫（避免非主管改自己權限）；其餘 settings 維持白名單可寫
+    match /settings/{id} {
+      allow read: if whitelisted();
+      allow write: if isManager() || (whitelisted() && id != 'permissions');
+    }
     match /hblPayments/{id}  { allow read, write: if whitelisted(); }
     match /hblSchedule/{id}  { allow read, write: if whitelisted(); }
     match /hblAdStatus/{id}  { allow read, write: if whitelisted(); }

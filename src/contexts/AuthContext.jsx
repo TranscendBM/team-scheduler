@@ -8,6 +8,7 @@ const AuthContext = createContext(null)
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)        // Firebase user 物件
   const [role, setRole] = useState(null)        // 'manager' | 'designer' | 'planner'
+  const [regions, setRegions] = useState([])    // planner 負責的區域
   const [unauthorized, setUnauthorized] = useState(false) // 已登入但不在白名單
   const [loading, setLoading] = useState(true)
 
@@ -22,14 +23,14 @@ export function AuthProvider({ children }) {
       try {
         const snap = await getDoc(doc(db, 'users', email))
         if (snap.exists() && snap.data().active !== false) {
-          setUser(fbUser); setRole(snap.data().role); setUnauthorized(false)
+          setUser(fbUser); setRole(snap.data().role); setRegions(snap.data().regions || []); setUnauthorized(false)
         } else {
           // 不在名單或被停用 → 擋下
-          setUser(fbUser); setRole(null); setUnauthorized(true)
+          setUser(fbUser); setRole(null); setRegions([]); setUnauthorized(true)
         }
       } catch (e) {
         console.error('讀取使用者角色失敗', e)
-        setUser(fbUser); setRole(null); setUnauthorized(true)
+        setUser(fbUser); setRole(null); setRegions([]); setUnauthorized(true)
       }
       setLoading(false)
     })
@@ -39,6 +40,7 @@ export function AuthProvider({ children }) {
   const value = {
     user,
     role,
+    regions,
     email: user?.email?.toLowerCase() || null,
     isManager: role === 'manager',
     isDesigner: role === 'designer',

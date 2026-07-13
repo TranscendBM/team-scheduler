@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
+import { REGIONS } from '../utils/requestConstants'
 
 const ROLES = [
   { value: 'manager', label: '設計主管', color: 'bg-purple-100 text-purple-700' },
@@ -10,7 +11,7 @@ const ROLES = [
 ]
 const roleMeta = (r) => ROLES.find(x => x.value === r) || { label: r, color: 'bg-gray-100 text-gray-600' }
 
-const emptyForm = { email: '', displayName: '', notifyEmail: '', role: 'designer', active: true }
+const emptyForm = { email: '', displayName: '', notifyEmail: '', role: 'designer', active: true, regions: [] }
 
 export default function UsersPage() {
   const { email: myEmail } = useAuth()
@@ -30,7 +31,7 @@ export default function UsersPage() {
   function openCreate() { setEditing(null); setForm(emptyForm); setError('') }
   function openEdit(u) {
     setEditing(u.email)
-    setForm({ email: u.email, displayName: u.displayName || '', notifyEmail: u.notifyEmail || '', role: u.role, active: u.active !== false })
+    setForm({ email: u.email, displayName: u.displayName || '', notifyEmail: u.notifyEmail || '', role: u.role, active: u.active !== false, regions: u.regions || [] })
     setError('')
   }
 
@@ -46,6 +47,7 @@ export default function UsersPage() {
         notifyEmail: form.notifyEmail.trim().toLowerCase(),
         role: form.role,
         active: form.active,
+        regions: form.role === 'planner' ? form.regions : [],
       })
       setForm(emptyForm); setEditing(null)
     } catch (e) {
@@ -101,6 +103,25 @@ export default function UsersPage() {
             啟用
           </label>
         </div>
+        {form.role === 'planner' && (
+          <div className="mt-3">
+            <p className="text-xs font-medium text-gray-600 mb-1.5">負責區域(planner 可看到這些區域的需求)</p>
+            <div className="flex flex-wrap gap-1.5">
+              {REGIONS.map(r => {
+                const on = form.regions.includes(r)
+                return (
+                  <button type="button" key={r}
+                    onClick={() => setForm(f => ({ ...f, regions: on ? f.regions.filter(x => x !== r) : [...f.regions, r] }))}
+                    className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${
+                      on ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-500 hover:bg-gray-50'
+                    }`}>
+                    {r}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
         {error && <p className="text-red-500 text-xs mt-2">{error}</p>}
         <div className="flex gap-2 mt-3">
           <button onClick={handleSave} disabled={saving}
@@ -139,6 +160,9 @@ export default function UsersPage() {
                 <td className="px-4 py-3 text-gray-600">{u.notifyEmail || <span className="text-amber-500">未設定</span>}</td>
                 <td className="px-4 py-3">
                   <span className={`text-xs px-2 py-0.5 rounded-full ${roleMeta(u.role).color}`}>{roleMeta(u.role).label}</span>
+                  {u.role === 'planner' && (
+                    <div className="text-xs text-gray-400 mt-1">{u.regions?.length ? u.regions.join(', ') : '未設定區域'}</div>
+                  )}
                 </td>
                 <td className="px-4 py-3">
                   {u.active === false
