@@ -71,17 +71,31 @@ def main():
     msg['To']      = TEST_RECIPIENT
     msg.attach(MIMEText(HTML, 'html', 'utf-8'))
 
+    # 先試 465 (SSL)，逾時就改試 587 (STARTTLS)——有些網路會擋其中一個埠
+    def send_465():
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465, timeout=15) as s:
+            s.login(GMAIL_USER, GMAIL_PASS)
+            s.sendmail(GMAIL_USER, [TEST_RECIPIENT], msg.as_string())
+
+    def send_587():
+        with smtplib.SMTP('smtp.gmail.com', 587, timeout=15) as s:
+            s.starttls()
+            s.login(GMAIL_USER, GMAIL_PASS)
+            s.sendmail(GMAIL_USER, [TEST_RECIPIENT], msg.as_string())
+
     try:
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
-            server.login(GMAIL_USER, GMAIL_PASS)
-            server.sendmail(GMAIL_USER, [TEST_RECIPIENT], msg.as_string())
+        try:
+            print('   嘗試 465 (SSL) …')
+            send_465()
+        except (smtplib.SMTPServerDisconnected, TimeoutError, OSError) as e:
+            print(f'   465 連不上（{e}），改試 587 (STARTTLS) …')
+            send_587()
         print('✅  測試信已發送！請至收件匣確認。')
     except smtplib.SMTPAuthenticationError:
-        print('❌  認證失敗：請確認 GMAIL_APP_PASSWORD 是否正確。')
+        print('❌  認證失敗：請確認 GMAIL_APP_PASSWORD 是否正確、且帳號已開啟兩步驟驗證。')
         print('   （需使用 App Password，不是 Google 帳號密碼）')
-        print('   前往 https://myaccount.google.com/apppasswords 產生 App Password')
     except Exception as e:
-        print(f'❌  發送失敗：{e}')
+        print(f'❌  發送失敗：{type(e).__name__}: {e}')
 
 if __name__ == '__main__':
     main()
