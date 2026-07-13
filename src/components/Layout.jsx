@@ -1,19 +1,30 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 
+// roles: 哪些角色能看到該項；未指定 = 所有已登入者
 const navItems = [
-  { to: '/', label: '甘特圖', icon: '📊', end: true },
-  { to: '/calendar', label: '日曆', icon: '📅' },
-  { to: '/projects', label: '專案管理', icon: '📋' },
-  { to: '/leave', label: '休假預排', icon: '🏖️' },
-  { to: '/sponsor', label: '體總贊助', icon: '🏆' },
-  { to: '/people', label: '人員管理', icon: '👥' },
-  { to: '/settings', label: '里程碑設定', icon: '⚙️' },
-  { to: '/import', label: '匯入 Excel', icon: '📥' },
+  // 需求系統
+  { to: '/request/new', label: '提交需求', icon: '📝', roles: ['manager', 'planner'] },
+  { to: '/my-requests', label: '我的需求', icon: '📄', roles: ['manager', 'planner'] },
+  { to: '/review', label: '需求審核', icon: '⚖️', roles: ['manager'] },
+  { to: '/tasks', label: '我的任務', icon: '✅', roles: ['manager', 'designer'] },
+  // 設計團隊排程（planner 看不到）
+  { to: '/', label: '甘特圖', icon: '📊', end: true, roles: ['manager', 'designer'] },
+  { to: '/calendar', label: '日曆', icon: '📅', roles: ['manager', 'designer'] },
+  { to: '/projects', label: '專案管理', icon: '📋', roles: ['manager', 'designer'] },
+  { to: '/leave', label: '休假預排', icon: '🏖️', roles: ['manager', 'designer'] },
+  { to: '/sponsor', label: '體總贊助', icon: '🏆', roles: ['manager', 'designer'] },
+  { to: '/people', label: '人員管理', icon: '👥', roles: ['manager', 'designer'] },
+  { to: '/settings', label: '里程碑設定', icon: '⚙️', roles: ['manager'] },
+  { to: '/import', label: '匯入 Excel', icon: '📥', roles: ['manager'] },
+  { to: '/users', label: '使用者管理', icon: '🔑', roles: ['manager'] },
 ]
 
+const ROLE_LABELS = { manager: '設計主管', designer: '設計師', planner: 'Planner' }
+
 export default function Layout() {
-  const { user, isAdmin, logout } = useAuth()
+  const { user, role, logout } = useAuth()
+  const visibleNav = navItems.filter(item => !item.roles || item.roles.includes(role))
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -25,7 +36,7 @@ export default function Layout() {
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-1">
-          {navItems.map(({ to, label, icon, end }) => (
+          {visibleNav.map(({ to, label, icon, end }) => (
             <NavLink
               key={to}
               to={to}
@@ -67,11 +78,11 @@ export default function Layout() {
         <div className="px-4 py-3 border-t border-gray-100">
           <div className="flex items-center gap-2 mb-2">
             {user?.photoURL && (
-              <img src={user.photoURL} alt="" className="w-7 h-7 rounded-full" />
+              <img src={user.photoURL} alt="" className="w-7 h-7 rounded-full" referrerPolicy="no-referrer" />
             )}
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-gray-700 truncate">{user?.displayName}</p>
-              {isAdmin && <p className="text-xs text-blue-500">管理者</p>}
+              <p className="text-xs font-medium text-gray-700 truncate">{user?.displayName || user?.email}</p>
+              {role && <p className="text-xs text-blue-500">{ROLE_LABELS[role] || role}</p>}
             </div>
           </div>
           <button

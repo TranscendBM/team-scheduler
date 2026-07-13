@@ -1,7 +1,40 @@
+import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 
 export default function LoginPage() {
-  const { login } = useAuth()
+  const { login, logout, user, unauthorized } = useAuth()
+  const [err, setErr] = useState('')
+
+  async function handleLogin() {
+    setErr('')
+    try {
+      await login()
+    } catch (e) {
+      console.error('登入失敗', e)
+      setErr(`${e.code || ''} ${e.message || e}`.trim())
+    }
+  }
+
+  // 已登入但不在白名單 → 顯示未開通訊息
+  if (user && unauthorized) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+        <div className="bg-white rounded-2xl shadow-lg p-10 w-full max-w-sm text-center">
+          <div className="text-5xl mb-4">🔒</div>
+          <h1 className="text-xl font-bold text-gray-800 mb-2">帳號尚未開通</h1>
+          <p className="text-gray-500 text-sm mb-1">你登入的帳號</p>
+          <p className="text-gray-700 text-sm font-medium mb-6 break-all">{user.email}</p>
+          <p className="text-gray-500 text-sm mb-8">尚未被授權使用本系統,請聯絡設計主管開通權限。</p>
+          <button
+            onClick={logout}
+            className="w-full bg-gray-100 text-gray-600 py-3 px-6 rounded-xl font-medium hover:bg-gray-200 transition-all"
+          >
+            使用其他帳號登入
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
@@ -10,7 +43,7 @@ export default function LoginPage() {
         <h1 className="text-2xl font-bold text-gray-800 mb-1">Team Scheduler</h1>
         <p className="text-gray-500 text-sm mb-8">設計師 & Planner 排程管理系統</p>
         <button
-          onClick={login}
+          onClick={handleLogin}
           className="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 text-gray-700 py-3 px-6 rounded-xl font-medium hover:bg-gray-50 hover:shadow-md transition-all"
         >
           <svg className="w-5 h-5" viewBox="0 0 24 24">
@@ -21,7 +54,10 @@ export default function LoginPage() {
           </svg>
           使用 Google 帳號登入
         </button>
-        <p className="text-xs text-gray-400 mt-6">僅限公司成員使用</p>
+        {err && (
+          <p className="text-xs text-red-500 mt-4 break-words bg-red-50 rounded-lg p-2">{err}</p>
+        )}
+        <p className="text-xs text-gray-400 mt-6">僅限授權成員使用</p>
       </div>
     </div>
   )
