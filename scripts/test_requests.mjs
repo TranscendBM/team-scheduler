@@ -60,7 +60,7 @@ await expect('designer 讀未指派需求', false, async () => {
 
 // 5. manager 核准並指派給 designer
 await expect('manager 指派設計師', true, async () => {
-  await updateDoc(doc(mgr, 'requests', reqId), { status: 'assigned', assignedDesigner: DESIGNER, reviewedBy: MANAGER, reviewNote: 'ok' })
+  await updateDoc(doc(mgr, 'requests', reqId), { status: 'assigned', assignedDesigners: [DESIGNER], reviewedBy: MANAGER, reviewNote: 'ok' })
   return 'assigned'
 })
 

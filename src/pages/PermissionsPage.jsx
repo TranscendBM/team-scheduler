@@ -4,7 +4,7 @@ import { db } from '../firebase'
 import { PAGES, canAccess } from '../utils/pages'
 
 const ROLE_COLS = [
-  { key: 'manager', label: '設計主管', fixed: true },
+  { key: 'manager', label: '主管', fixed: true },
   { key: 'designer', label: '設計師' },
   { key: 'planner', label: 'Planner' },
 ]
@@ -49,7 +49,7 @@ export default function PermissionsPage() {
   return (
     <div className="p-8 max-w-3xl mx-auto">
       <h1 className="text-2xl font-bold text-gray-800 mb-1">權限設定</h1>
-      <p className="text-sm text-gray-400 mb-6">勾選每個角色能看到的頁面。設計主管永遠可看全部,不可調整。</p>
+      <p className="text-sm text-gray-400 mb-6">勾選每個角色能看到的頁面。主管永遠可看全部,不可調整。</p>
 
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <table className="w-full text-sm">
@@ -87,7 +87,7 @@ export default function PermissionsPage() {
         {saved && <span className="text-sm text-emerald-600">✓ 已儲存</span>}
       </div>
       <p className="text-xs text-gray-400 mt-4">
-        註:「使用者管理」與「權限設定」為系統管理頁,固定僅設計主管可見,不列在此矩陣。
+        註:「使用者管理」與「權限設定」為系統管理頁,固定僅主管可見,不列在此矩陣。
       </p>
     </div>
   )

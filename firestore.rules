@@ -27,22 +27,28 @@ service cloud.firestore {
     // 客製化設計需求
     match /requests/{id} {
       allow read: if isManager()
-        || (whitelisted() && resource.data.submittedBy == email())        // planner 看自己送的
-        || (whitelisted() && resource.data.assignedDesigner == email())   // designer 看指派給自己的
-        || (whitelisted() && resource.data.region in myRegions());        // planner 看負責區域的
+        || (whitelisted() && resource.data.submittedBy == email())                       // planner 看自己送的
+        || (whitelisted() && email() in resource.data.get('assignedDesigners', []))      // designer 看指派給自己的
+        || (whitelisted() && resource.data.region in myRegions());                       // planner 看負責區域的
       allow create: if whitelisted()
         && request.resource.data.submittedBy == email()
         && request.resource.data.status == 'pending';
       allow update: if isManager()
         // 設計師:改自己被指派任務的狀態
         || (whitelisted()
-            && resource.data.assignedDesigner == email()
+            && email() in resource.data.get('assignedDesigners', [])
             && changedOnly(['status', 'startedAt', 'reviewingAt', 'completedAt']))
         // planner:只能把負責區域的需求「結案」
         || (whitelisted()
             && resource.data.region in myRegions()
             && request.resource.data.status == 'completed'
-            && changedOnly(['status', 'completedAt']));
+            && changedOnly(['status', 'completedAt']))
+        // 提交人:需求仍在待審核時可編輯內容（不可改狀態/提交人）
+        || (whitelisted()
+            && resource.data.submittedBy == email()
+            && resource.data.status == 'pending'
+            && request.resource.data.status == 'pending'
+            && changedOnly(['urgent', 'region', 'projectName', 'docTypes', 'dueDate', 'description', 'attachments']));
       allow delete: if isManager();
     }
 

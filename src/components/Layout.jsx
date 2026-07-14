@@ -1,9 +1,9 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { usePermissions } from '../contexts/PermissionsContext'
-import { PAGES } from '../utils/pages'
+import { PAGES, GROUPS } from '../utils/pages'
 
-const ROLE_LABELS = { manager: '設計主管', designer: '設計師', planner: 'Planner' }
+const ROLE_LABELS = { manager: '主管', designer: '設計師', planner: 'Planner' }
 
 // 系統管理頁（固定僅 manager）
 const ADMIN_ITEMS = [
@@ -16,6 +16,9 @@ export default function Layout() {
   const { canAccess } = usePermissions()
 
   const visibleNav = PAGES.filter(p => canAccess(p.key, role))
+  const navGroups = GROUPS
+    .map(g => ({ ...g, items: visibleNav.filter(p => p.group === g.key) }))
+    .filter(g => g.items.length > 0)
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -27,22 +30,27 @@ export default function Layout() {
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {visibleNav.map(({ path, label, icon, end }) => (
-            <NavLink
-              key={path}
-              to={path}
-              end={end}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-                  isActive
-                    ? 'bg-blue-50 text-blue-700 font-medium'
-                    : 'text-gray-600 hover:bg-gray-100'
-                }`
-              }
-            >
-              <span>{icon}</span>
-              <span>{label}</span>
-            </NavLink>
+          {navGroups.map((g, gi) => (
+            <div key={g.key} className={gi > 0 ? 'pt-3 mt-2 border-t border-gray-100' : ''}>
+              <p className="px-3 pb-1 text-xs text-gray-400 font-medium">{g.label}</p>
+              {g.items.map(({ path, label, icon, end }) => (
+                <NavLink
+                  key={path}
+                  to={path}
+                  end={end}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                      isActive
+                        ? 'bg-blue-50 text-blue-700 font-medium'
+                        : 'text-gray-600 hover:bg-gray-100'
+                    }`
+                  }
+                >
+                  <span>{icon}</span>
+                  <span>{label}</span>
+                </NavLink>
+              ))}
+            </div>
           ))}
 
           {role === 'manager' && (

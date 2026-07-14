@@ -21,12 +21,33 @@ async function resolveNotifyEmail(loginEmail) {
   }
 }
 
+// 所有「主管」的通知信箱（動態抓 users collection，不寫死）
+async function getManagerEmails() {
+  try {
+    const snap = await db.collection('users').where('role', '==', 'manager').get()
+    return snap.docs
+      .map(d => d.data())
+      .filter(u => u.active !== false)
+      .map(u => (u.notifyEmail || u.email || '').trim().toLowerCase())
+      .filter(Boolean)
+  } catch (e) {
+    logger.warn('查主管名單失敗', e.message)
+    return []
+  }
+}
+
 // 寄件身份（過渡方案：個人 Gmail + App Password）
 const GMAIL_USER = 'tselvis814@gmail.com'
 const GMAIL_APP_PASSWORD = defineSecret('GMAIL_APP_PASSWORD') // firebase functions:secrets:set 設定
-const BOSS_EMAIL = process.env.BOSS_EMAIL || ''               // CC 主管（functions/.env）
 
-const SITE = 'https://team-scheduler-dc7ce.web.app'
+const SITE = 'https://transcend-design.web.app'
+
+function makeTransporter() {
+  return nodemailer.createTransport({
+    host: 'smtp.gmail.com', port: 465, secure: true,
+    auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD.value() },
+  })
+}
 
 function buildHtml(r) {
   const docTypes = (r.docTypes || []).join('、')
@@ -38,6 +59,7 @@ function buildHtml(r) {
     ['急件', r.urgent ? '🔥 是' : '否'],
     ['需求簡述', r.description || '（無）'],
     ['審核備註', r.reviewNote || '（無）'],
+    ['注意事項', r.comment || '（無）'],
     ['提交人', r.submittedByName || r.submittedBy || ''],
   ]
   const tr = rows.map(([k, v], i) =>
@@ -60,7 +82,7 @@ function buildHtml(r) {
     </div>
     <table style="width:100%;border-collapse:collapse;font-size:13px;border:1px solid #f0f0f0;border-radius:8px;overflow:hidden">${tr}</table>
     ${attHtml}
-    <a href="${SITE}/#/tasks" style="display:inline-block;margin-top:20px;background:#2563eb;color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-size:14px">前往我的任務 →</a>
+    <a href="${SITE}/#/requests" style="display:inline-block;margin-top:20px;background:#2563eb;color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-size:14px">前往需求總表 →</a>
     <p style="color:#9ca3af;font-size:12px;margin-top:24px">此信由 Team Scheduler 於需求核准發稿時自動寄出。</p>
   </div>`
 }
@@ -73,27 +95,71 @@ export const notifyOnAssign = onDocumentUpdated(
     const after = event.data?.after?.data()
     if (!before || !after) return
     if (!(before.status === 'pending' && after.status === 'assigned')) return
-    if (!after.assignedDesigner) { logger.warn('無 assignedDesigner，略過'); return }
+    const designers = after.assignedDesigners || []
+    if (designers.length === 0) { logger.warn('無 assignedDesigners，略過'); return }
 
-    const transporter = nodemailer.createTransport({
-      host: 'smtp.gmail.com', port: 465, secure: true,
-      auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD.value() },
-    })
+    const transporter = makeTransporter()
     // 收件人 / CC 都改用「公司通知信箱」（查不到才退回登入 email）
-    const toEmail = await resolveNotifyEmail(after.assignedDesigner)
+    const toEmails = await Promise.all(designers.map(resolveNotifyEmail))
     const submitterEmail = await resolveNotifyEmail(after.submittedBy)
-    const cc = [submitterEmail, BOSS_EMAIL].filter(e => e && e !== toEmail)
+    const managers = await getManagerEmails()
+    const cc = [...new Set([submitterEmail, ...managers])].filter(e => e && !toEmails.includes(e))
     try {
       await transporter.sendMail({
         from: `Team Scheduler <${GMAIL_USER}>`,
-        to: toEmail,
+        to: toEmails,
         cc,
         subject: `[設計需求] ${after.projectName || '新任務'}${after.urgent ? '（🔥急件）' : ''}`,
         html: buildHtml(after),
       })
-      logger.info('已寄信', { to: toEmail, cc })
+      logger.info('已寄信', { to: toEmails, cc })
     } catch (e) {
       logger.error('寄信失敗', e)
+      throw e
+    }
+  }
+)
+
+// status 由 pending → rejected 時，寄信通知提交人（CC 所有主管）
+export const notifyOnReject = onDocumentUpdated(
+  { document: 'requests/{id}', region: 'asia-east1', secrets: [GMAIL_APP_PASSWORD] },
+  async (event) => {
+    const before = event.data?.before?.data()
+    const after = event.data?.after?.data()
+    if (!before || !after) return
+    if (!(before.status === 'pending' && after.status === 'rejected')) return
+
+    const submitterEmail = await resolveNotifyEmail(after.submittedBy)
+    if (!submitterEmail) { logger.warn('無提交人信箱，略過'); return }
+    const managers = await getManagerEmails()
+    const cc = [...new Set(managers)].filter(e => e && e !== submitterEmail)
+
+    const html = `
+    <div style="font-family:sans-serif;color:#1f2937;max-width:560px;margin:auto;padding:24px">
+      <div style="background:#fef2f2;border-left:4px solid #ef4444;padding:14px 18px;border-radius:8px;margin-bottom:18px">
+        <h2 style="margin:0 0 4px;font-size:17px">❌ 設計需求已駁回</h2>
+        <p style="margin:0;color:#6b7280;font-size:13px">你提交的設計需求未通過審核</p>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;border:1px solid #f0f0f0;border-radius:8px;overflow:hidden">
+        <tr><td style="padding:8px 12px;color:#6b7280;width:32%">專案名稱</td><td style="padding:8px 12px;font-weight:500">${String(after.projectName || '').replace(/</g, '&lt;')}</td></tr>
+        <tr style="background:#f9fafb"><td style="padding:8px 12px;color:#6b7280">地區</td><td style="padding:8px 12px">${after.region || ''}</td></tr>
+        <tr><td style="padding:8px 12px;color:#6b7280">駁回原因</td><td style="padding:8px 12px;color:#dc2626;font-weight:500;white-space:pre-wrap">${String(after.rejectReason || '（未填寫）').replace(/</g, '&lt;')}</td></tr>
+      </table>
+      <a href="${SITE}/#/my-requests" style="display:inline-block;margin-top:20px;background:#2563eb;color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-size:14px">前往我的需求 →</a>
+      <p style="color:#9ca3af;font-size:12px;margin-top:24px">此信由 Team Scheduler 於需求駁回時自動寄出。</p>
+    </div>`
+
+    try {
+      await makeTransporter().sendMail({
+        from: `Team Scheduler <${GMAIL_USER}>`,
+        to: submitterEmail,
+        cc,
+        subject: `[設計需求駁回] ${after.projectName || ''}`,
+        html,
+      })
+      logger.info('已寄駁回通知', { to: submitterEmail, cc })
+    } catch (e) {
+      logger.error('駁回通知寄信失敗', e)
       throw e
     }
   }

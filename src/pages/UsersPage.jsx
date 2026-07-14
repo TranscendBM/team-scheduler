@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { REGIONS } from '../utils/requestConstants'
 
 const ROLES = [
-  { value: 'manager', label: '設計主管', color: 'bg-purple-100 text-purple-700' },
+  { value: 'manager', label: '主管', color: 'bg-purple-100 text-purple-700' },
   { value: 'designer', label: '設計師', color: 'bg-blue-100 text-blue-700' },
   { value: 'planner', label: 'Planner', color: 'bg-emerald-100 text-emerald-700' },
 ]

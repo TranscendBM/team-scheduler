@@ -17,7 +17,7 @@ import RequestNewPage from './pages/RequestNewPage'
 import MyRequestsPage from './pages/MyRequestsPage'
 import RequestsTablePage from './pages/RequestsTablePage'
 import ReviewPage from './pages/ReviewPage'
-import TasksPage from './pages/TasksPage'
+import RequestsDashboardPage from './pages/RequestsDashboardPage'
 import PermissionsPage from './pages/PermissionsPage'
 
 function ProtectedRoute({ children }) {
@@ -69,10 +69,11 @@ export default function App() {
         <Route path="leave" element={<PermRoute pageKey="leave"><LeavePage /></PermRoute>} />
         <Route path="sponsor" element={<PermRoute pageKey="sponsor"><SponsorPage /></PermRoute>} />
         <Route path="request/new" element={<PermRoute pageKey="request/new"><RequestNewPage /></PermRoute>} />
+        <Route path="request/edit/:id" element={<PermRoute pageKey="request/new"><RequestNewPage /></PermRoute>} />
         <Route path="my-requests" element={<PermRoute pageKey="my-requests"><MyRequestsPage /></PermRoute>} />
         <Route path="requests" element={<PermRoute pageKey="requests"><RequestsTablePage /></PermRoute>} />
         <Route path="review" element={<PermRoute pageKey="review"><ReviewPage /></PermRoute>} />
-        <Route path="tasks" element={<PermRoute pageKey="tasks"><TasksPage /></PermRoute>} />
+        <Route path="dashboard" element={<PermRoute pageKey="dashboard"><RequestsDashboardPage /></PermRoute>} />
         <Route path="users" element={<ManagerRoute><UsersPage /></ManagerRoute>} />
         <Route path="permissions" element={<ManagerRoute><PermissionsPage /></ManagerRoute>} />
       </Route>

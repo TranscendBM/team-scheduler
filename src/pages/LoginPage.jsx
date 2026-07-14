@@ -24,7 +24,7 @@ export default function LoginPage() {
           <h1 className="text-xl font-bold text-gray-800 mb-2">帳號尚未開通</h1>
           <p className="text-gray-500 text-sm mb-1">你登入的帳號</p>
           <p className="text-gray-700 text-sm font-medium mb-6 break-all">{user.email}</p>
-          <p className="text-gray-500 text-sm mb-8">尚未被授權使用本系統,請聯絡設計主管開通權限。</p>
+          <p className="text-gray-500 text-sm mb-8">尚未被授權使用本系統,請聯絡主管開通權限。</p>
           <button
             onClick={logout}
             className="w-full bg-gray-100 text-gray-600 py-3 px-6 rounded-xl font-medium hover:bg-gray-200 transition-all"

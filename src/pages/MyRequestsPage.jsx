@@ -1,15 +1,10 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { collection, query, where, onSnapshot } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
-import { STATUS, statusMeta } from '../utils/requestConstants'
-import Attachments from '../components/Attachments'
-
-function fmt(ts) {
-  if (!ts) return '—'
-  const d = ts.toDate ? ts.toDate() : new Date(ts)
-  return d.toLocaleString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
-}
+import { statusMeta } from '../utils/requestConstants'
+import RequestDetailModal from '../components/RequestDetailModal'
 
 const FILTERS = [
   { key: 'all', label: '全部' },
@@ -21,9 +16,10 @@ const FILTERS = [
 
 export default function MyRequestsPage() {
   const { email } = useAuth()
+  const navigate = useNavigate()
   const [requests, setRequests] = useState([])
   const [filter, setFilter] = useState('all')
-  const [expanded, setExpanded] = useState(null)
+  const [detail, setDetail] = useState(null)
 
   useEffect(() => {
     if (!email) return
@@ -42,10 +38,13 @@ export default function MyRequestsPage() {
     return r.status === filter
   })
 
+  // 彈窗顯示的是即時資料(讓狀態變更即時反映)
+  const detailLive = detail ? requests.find(r => r.id === detail.id) || detail : null
+
   return (
     <div className="p-8 max-w-3xl mx-auto">
       <h1 className="text-2xl font-bold text-gray-800 mb-1">我的需求</h1>
-      <p className="text-sm text-gray-400 mb-5">追蹤你送出的設計需求進度（唯讀）</p>
+      <p className="text-sm text-gray-400 mb-5">追蹤你送出的設計需求進度,點擊查看完整內容;待審核時可編輯</p>
 
       <div className="flex gap-2 mb-5 flex-wrap">
         {FILTERS.map(f => (
@@ -61,42 +60,22 @@ export default function MyRequestsPage() {
       <div className="space-y-3">
         {filtered.map(r => {
           const meta = statusMeta(r.status)
-          const open = expanded === r.id
           return (
-            <div key={r.id} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-              <button onClick={() => setExpanded(open ? null : r.id)}
-                className="w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-gray-50">
-                <span className={`w-2 h-2 rounded-full ${meta.dot}`} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-800 truncate">
-                    {r.urgent && <span className="text-red-500 mr-1">🔥</span>}
-                    {r.projectName || r.title}
-                  </p>
-                  <p className="text-xs text-gray-400 mt-0.5">
-                    {r.region ? r.region + ' · ' : ''}{(r.docTypes || []).join('、') || r.type} · 交期 {r.dueDate || '未指定'}
-                  </p>
-                </div>
-                <span className={`text-xs px-2 py-0.5 rounded-full ${meta.color}`}>{meta.label}</span>
-              </button>
-
-              {open && (
-                <div className="px-5 pb-4 pt-1 border-t border-gray-100 text-sm space-y-2">
-                  {r.description && <p className="text-gray-600 whitespace-pre-wrap">{r.description}</p>}
-                  {r.attachments?.length > 0 && (
-                    <div><p className="text-xs text-gray-400 mb-1">附件</p><Attachments items={r.attachments} /></div>
-                  )}
-                  <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs text-gray-500 mt-2">
-                    <div><dt className="inline text-gray-400">送出時間：</dt><dd className="inline text-gray-600">{fmt(r.createdAt)}</dd></div>
-                    <div><dt className="inline text-gray-400">指派設計師：</dt><dd className="inline text-gray-600">{r.assignedDesigner || '—'}</dd></div>
-                    {r.reviewNote && <div className="col-span-2"><dt className="inline text-gray-400">審核備註：</dt><dd className="inline text-gray-600">{r.reviewNote}</dd></div>}
-                    {r.status === 'rejected' && r.rejectReason && <div className="col-span-2"><dt className="inline text-red-400">駁回原因：</dt><dd className="inline text-red-600">{r.rejectReason}</dd></div>}
-                    {r.startedAt && <div><dt className="inline text-gray-400">開始設計：</dt><dd className="inline text-gray-600">{fmt(r.startedAt)}</dd></div>}
-                    {r.reviewingAt && <div><dt className="inline text-gray-400">送出確認：</dt><dd className="inline text-gray-600">{fmt(r.reviewingAt)}</dd></div>}
-                    {r.completedAt && <div><dt className="inline text-gray-400">結案時間：</dt><dd className="inline text-gray-600">{fmt(r.completedAt)}</dd></div>}
-                  </dl>
-                </div>
-              )}
-            </div>
+            <button key={r.id} onClick={() => setDetail(r)}
+              className="w-full flex items-center gap-3 px-5 py-4 text-left bg-white rounded-xl border border-gray-200 shadow-sm hover:bg-gray-50 transition-colors">
+              <span className={`w-2 h-2 rounded-full ${meta.dot}`} />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-800 truncate">
+                  {r.urgent && <span className="text-red-500 mr-1">🔥</span>}
+                  {r.projectName || r.title}
+                </p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {r.region ? r.region + ' · ' : ''}{(r.docTypes || []).join('、') || ''} · 交期 {r.dueDate || '未指定'}
+                </p>
+              </div>
+              {r.status === 'pending' && <span className="text-xs text-blue-400">可編輯</span>}
+              <span className={`text-xs px-2 py-0.5 rounded-full ${meta.color}`}>{meta.label}</span>
+            </button>
           )
         })}
         {filtered.length === 0 && (
@@ -105,6 +84,14 @@ export default function MyRequestsPage() {
           </div>
         )}
       </div>
+
+      <RequestDetailModal r={detailLive} onClose={() => setDetail(null)}
+        actions={detailLive?.status === 'pending' ? (
+          <button onClick={() => navigate(`/request/edit/${detailLive.id}`)}
+            className="bg-blue-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-blue-700">
+            ✎ 編輯需求
+          </button>
+        ) : null} />
     </div>
   )
 }
