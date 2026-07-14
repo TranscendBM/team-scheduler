@@ -1,12 +1,15 @@
-import { onDocumentUpdated } from 'firebase-functions/v2/firestore'
+import { onDocumentUpdated, onDocumentDeleted } from 'firebase-functions/v2/firestore'
+import { onSchedule } from 'firebase-functions/v2/scheduler'
 import { defineSecret } from 'firebase-functions/params'
 import * as logger from 'firebase-functions/logger'
 import { initializeApp } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
+import { getStorage } from 'firebase-admin/storage'
 import nodemailer from 'nodemailer'
 
-initializeApp()
+initializeApp({ storageBucket: 'team-scheduler-dc7ce.firebasestorage.app' })
 const db = getFirestore()
+const bucket = () => getStorage().bucket()
 
 // 依登入 email 查該使用者的公司通知信箱；沒設定就退回原本的登入 email
 async function resolveNotifyEmail(loginEmail) {
@@ -196,5 +199,43 @@ export const notifyOnReject = onDocumentUpdated(
       logger.error('駁回通知寄信失敗', e)
       throw e
     }
+  }
+)
+
+// 需求文件被刪除時,同步刪除該需求的所有附件檔案
+export const cleanupOnDelete = onDocumentDeleted(
+  { document: 'requests/{id}', region: 'asia-east1' },
+  async (event) => {
+    const id = event.params.id
+    try {
+      await bucket().deleteFiles({ prefix: `attachments/${id}/` })
+      logger.info('已刪除附件資料夾', { id })
+    } catch (e) {
+      logger.error('刪除附件失敗', { id, e: e.message })
+    }
+  }
+)
+
+// 每天 03:00(台灣時間)清理「結案超過 30 天」的需求附件(需求紀錄保留,只刪檔案)
+export const cleanupOldAttachments = onSchedule(
+  { schedule: '0 3 * * *', timeZone: 'Asia/Taipei', region: 'asia-east1' },
+  async () => {
+    const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+    const snap = await db.collection('requests').where('completedAt', '<=', cutoff).get()
+    let cleaned = 0
+    for (const d of snap.docs) {
+      const x = d.data()
+      if (x.status !== 'completed') continue
+      if (!x.attachments || x.attachments.length === 0) continue
+      try {
+        await bucket().deleteFiles({ prefix: `attachments/${d.id}/` })
+        await d.ref.update({ attachments: [], attachmentsPurgedAt: new Date() })
+        cleaned++
+        logger.info('已清理結案附件', { id: d.id, projectName: x.projectName })
+      } catch (e) {
+        logger.error('清理附件失敗', { id: d.id, e: e.message })
+      }
+    }
+    logger.info(`附件清理完成:${cleaned} 筆`)
   }
 )
