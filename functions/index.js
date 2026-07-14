@@ -120,6 +120,40 @@ export const notifyOnAssign = onDocumentUpdated(
   }
 )
 
+// 已發稿後主管「編輯指派」新增設計師時，寄信通知「新加入」的設計師（CC 提交人 + 主管）
+export const notifyOnReassign = onDocumentUpdated(
+  { document: 'requests/{id}', region: 'asia-east1', secrets: [GMAIL_APP_PASSWORD] },
+  async (event) => {
+    const before = event.data?.before?.data()
+    const after = event.data?.after?.data()
+    if (!before || !after) return
+    // 初次核准(pending→assigned)由 notifyOnAssign 處理，這裡只管「已審核後」的名單變動
+    if (before.status === 'pending' || after.status === 'rejected') return
+    const prev = before.assignedDesigners || []
+    const cur = after.assignedDesigners || []
+    const added = cur.filter(e => !prev.includes(e))
+    if (added.length === 0) return
+
+    const toEmails = await Promise.all(added.map(resolveNotifyEmail))
+    const submitterEmail = await resolveNotifyEmail(after.submittedBy)
+    const managers = await getManagerEmails()
+    const cc = [...new Set([submitterEmail, ...managers])].filter(e => e && !toEmails.includes(e))
+    try {
+      await makeTransporter().sendMail({
+        from: `Team Scheduler <${GMAIL_USER}>`,
+        to: toEmails,
+        cc,
+        subject: `[設計需求] ${after.projectName || '任務'}${after.urgent ? '（🔥急件）' : ''}（新增指派）`,
+        html: buildHtml(after),
+      })
+      logger.info('已寄新增指派通知', { to: toEmails, cc })
+    } catch (e) {
+      logger.error('新增指派通知寄信失敗', e)
+      throw e
+    }
+  }
+)
+
 // status 由 pending → rejected 時，寄信通知提交人（CC 所有主管）
 export const notifyOnReject = onDocumentUpdated(
   { document: 'requests/{id}', region: 'asia-east1', secrets: [GMAIL_APP_PASSWORD] },
