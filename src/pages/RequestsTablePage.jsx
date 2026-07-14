@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { collection, query, where, onSnapshot, doc, updateDoc, serverTimestamp } from 'firebase/firestore'
+import { collection, query, where, onSnapshot, doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
 import { STATUS, statusMeta, STATUS_TIMESTAMP } from '../utils/requestConstants'
@@ -30,6 +30,7 @@ export default function RequestsTablePage() {
   const [fDesigner, setFDesigner] = useState('all')
   const [fStatus, setFStatus] = useState('all')
   const [sort, setSort] = useState('due-asc')
+  const [deleteConfirm, setDeleteConfirm] = useState(null)
 
   useEffect(() => {
     let q
@@ -57,6 +58,15 @@ export default function RequestsTablePage() {
   }
   const plannerClose = (r) => setStatus(r, 'completed')
 
+  async function handleDelete(r) {
+    setBusy(r.id)
+    try {
+      await deleteDoc(doc(db, 'requests', r.id))
+      setDeleteConfirm(null)
+    } catch (e) { alert('刪除失敗：' + (e.code || e.message)) }
+    setBusy(null)
+  }
+
   // 篩選
   const allDesignerOpts = [...new Map(rows.flatMap(r =>
     (r.assignedDesigners || []).map((e, i) => [e, r.assignedDesignersNames?.[i] || shortEmail(e)])
@@ -80,6 +90,25 @@ export default function RequestsTablePage() {
   const done = filtered.filter(r => r.status === 'completed').sort(sortFn)
 
   function ActionCell({ r }) {
+    // 主管:刪除(兩段式確認)
+    if (role === 'manager') {
+      if (deleteConfirm === r.id) {
+        return (
+          <span onClick={e => e.stopPropagation()} className="whitespace-nowrap">
+            <button onClick={() => handleDelete(r)} disabled={busy === r.id}
+              className="text-xs bg-red-600 text-white px-2.5 py-1 rounded-lg hover:bg-red-700 disabled:opacity-50 mr-1">
+              確認刪除
+            </button>
+            <button onClick={() => setDeleteConfirm(null)}
+              className="text-xs text-gray-400 hover:text-gray-600 px-1">取消</button>
+          </span>
+        )
+      }
+      return (
+        <button onClick={e => { e.stopPropagation(); setDeleteConfirm(r.id) }}
+          className="text-xs text-red-400 hover:text-red-600 hover:underline">刪除</button>
+      )
+    }
     if (role === 'designer' && (r.assignedDesigners || []).includes(email)) {
       return (
         <select value={r.status} disabled={busy === r.id}
