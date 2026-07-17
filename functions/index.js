@@ -1,5 +1,6 @@
 import { onDocumentUpdated, onDocumentDeleted } from 'firebase-functions/v2/firestore'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
+import { onRequest } from 'firebase-functions/v2/https'
 import { defineSecret } from 'firebase-functions/params'
 import * as logger from 'firebase-functions/logger'
 import { initializeApp } from 'firebase-admin/app'
@@ -237,5 +238,35 @@ export const cleanupOldAttachments = onSchedule(
       }
     }
     logger.info(`附件清理完成:${cleaned} 筆`)
+  }
+)
+
+// 附件預覽代理:提供「無 %-編碼」的乾淨網址給 Office 線上檢視器
+// (Firebase 下載連結路徑含 %2F,Office viewer 會 file not found)
+// 路徑格式:/previewFile/{docId}/{附件index}/{token前12碼} — 逐檔驗證,非公開整個 bucket
+export const previewFile = onRequest(
+  { region: 'asia-east1' },
+  async (req, res) => {
+    try {
+      const [docId, idxStr, tok] = req.path.split('/').filter(Boolean)
+      if (!docId || !idxStr || !tok) return res.status(400).send('bad request')
+      const snap = await db.collection('requests').doc(docId).get()
+      if (!snap.exists) return res.status(404).send('not found')
+      const a = (snap.data().attachments || [])[Number(idxStr)]
+      if (!a) return res.status(404).send('not found')
+      const token = (a.url.match(/token=([\w-]+)/) || [])[1] || ''
+      if (!token || !token.startsWith(tok)) return res.status(403).send('forbidden')
+      const path = decodeURIComponent(a.url.match(/\/o\/([^?]+)/)[1])
+      const file = bucket().file(path)
+      const [exists] = await file.exists()
+      if (!exists) return res.status(404).send('file gone')
+      const [meta] = await file.getMetadata()
+      res.set('Content-Type', meta.contentType || 'application/octet-stream')
+      res.set('Cache-Control', 'public, max-age=300')
+      file.createReadStream().pipe(res)
+    } catch (e) {
+      logger.error('previewFile 失敗', e.message)
+      res.status(500).send('error')
+    }
   }
 )

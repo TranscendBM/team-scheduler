@@ -148,7 +148,7 @@ export default function RequestsTablePage() {
           </div>
           {r.attachments?.length > 0 && (
             <div className="mt-1" onClick={e => e.stopPropagation()}>
-              <Attachments items={r.attachments} />
+              <Attachments items={r.attachments} requestId={r.id} />
             </div>
           )}
         </td>

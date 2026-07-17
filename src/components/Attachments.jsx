@@ -5,12 +5,24 @@ const OFFICE_EXT = ['ppt', 'pptx', 'doc', 'docx', 'xls', 'xlsx']
 
 const ext = (name) => ((name || '').split('.').pop() || '').toLowerCase()
 
+// Office 檢視器吃不下 Firebase URL 的 %-編碼路徑 → 走 previewFile 代理(乾淨網址、逐檔驗 token)
+const PROXY = 'https://asia-east1-team-scheduler-dc7ce.cloudfunctions.net/previewFile'
+function proxyUrl(a, requestId, idx) {
+  const token = (a.url.match(/token=([\w-]+)/) || [])[1] || ''
+  if (!requestId || !token) return null
+  return `${PROXY}/${requestId}/${idx}/${token.slice(0, 12)}`
+}
+
 // 依副檔名決定預覽方式:image / pdf 原生、office 走 MS 線上檢視器、其他下載
-function previewInfo(a) {
+function previewInfo(a, requestId, idx) {
   const e = ext(a.name)
   if (IMG_EXT.includes(e)) return { kind: 'image', src: a.url }
   if (e === 'pdf') return { kind: 'iframe', src: a.url }
-  if (OFFICE_EXT.includes(e)) return { kind: 'iframe', src: `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(a.url)}` }
+  if (OFFICE_EXT.includes(e)) {
+    const clean = proxyUrl(a, requestId, idx)
+    if (!clean) return { kind: 'download' }
+    return { kind: 'iframe', src: `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(clean)}` }
+  }
   return { kind: 'download' }
 }
 
@@ -25,14 +37,15 @@ const icon = (name) => {
 }
 
 // 顯示需求附件:點擊站內預覽(圖片/PDF/Office),不支援的類型直接下載
-export default function Attachments({ items }) {
+// requestId:附件所屬需求 id(Office 預覽代理需要)
+export default function Attachments({ items, requestId }) {
   const [preview, setPreview] = useState(null) // { a, info }
 
   if (!items || items.length === 0) return null
 
-  function open(e, a) {
+  function open(e, a, idx) {
     e.stopPropagation()
-    const info = previewInfo(a)
+    const info = previewInfo(a, requestId, idx)
     if (info.kind === 'download') {
       window.open(a.url, '_blank')
       return
@@ -43,8 +56,8 @@ export default function Attachments({ items }) {
   return (
     <>
       <div className="flex flex-wrap gap-2">
-        {items.map(a => (
-          <button key={a.url} type="button" onClick={e => open(e, a)}
+        {items.map((a, idx) => (
+          <button key={a.url} type="button" onClick={e => open(e, a, idx)}
             className="inline-flex items-center gap-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg px-2.5 py-1 transition-colors">
             {icon(a.name)} <span className="truncate max-w-[180px]">{a.name}</span>
           </button>

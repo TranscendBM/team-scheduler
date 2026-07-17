@@ -158,7 +158,7 @@ export default function ReviewPage() {
                   </p>
                   <p className="text-xs text-gray-400 mt-0.5">提交：{r.submittedByName || r.submittedBy} · {fmt(r.createdAt)}</p>
                   {r.description && <p className="text-sm text-gray-600 mt-2 whitespace-pre-wrap bg-gray-50 rounded-lg p-2">{r.description}</p>}
-                  {r.attachments?.length > 0 && <div className="mt-2"><Attachments items={r.attachments} /></div>}
+                  {r.attachments?.length > 0 && <div className="mt-2"><Attachments items={r.attachments} requestId={r.id} /></div>}
                 </div>
                 <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${meta.color}`}>{meta.label}</span>
               </div>

@@ -43,7 +43,7 @@ export default function RequestDetailModal({ r, onClose, actions }) {
           <Row label="稿件類型">{(r.docTypes || []).join('、')}</Row>
           <Row label="交期">{r.dueDate}</Row>
           <Row label="需求簡述">{r.description}</Row>
-          <Row label="附件">{r.attachments?.length > 0 ? <Attachments items={r.attachments} /> : null}</Row>
+          <Row label="附件">{r.attachments?.length > 0 ? <Attachments items={r.attachments} requestId={r.id} /> : null}</Row>
           <Row label="指派設計師">{(r.assignedDesignersNames?.length ? r.assignedDesignersNames : (r.assignedDesigners || [])).join('、') || null}</Row>
           <Row label="審核備註">{r.reviewNote}</Row>
           <Row label="注意事項" highlight>{r.comment}</Row>

@@ -4,8 +4,7 @@ import { db } from '../firebase'
 import { useAuth } from './AuthContext'
 
 // 新任務提示:
-// - designer / planner:localStorage 記錄「看過」的需求 id,沒看過的進行中需求顯示 NEW(側邊欄+總表列)
-//   第一次使用時把現有需求全部視為已讀(避免一上線滿版 NEW)
+// - designer / planner:localStorage 記錄「看過」的需求 id,沒點開過的進行中需求顯示 NEW(側邊欄+總表列)
 // - manager:側邊欄「需求審核」顯示待審核數量
 const NotificationsContext = createContext(null)
 
@@ -14,7 +13,6 @@ const loadSeen = (email) => {
   try { return new Set(JSON.parse(localStorage.getItem(storeKey(email)) || 'null') || []) }
   catch { return new Set() }
 }
-const hasBaseline = (email) => localStorage.getItem(storeKey(email)) !== null
 const persistSeen = (email, set) => {
   try { localStorage.setItem(storeKey(email), JSON.stringify([...set].slice(-2000))) } catch { /* 忽略 */ }
 }
@@ -39,16 +37,7 @@ export function NotificationsProvider({ children }) {
     } else { setRows([]); return }
 
     setSeen(loadSeen(email))
-    const unsub = onSnapshot(q, snap => {
-      const list = snap.docs.map(d => ({ id: d.id, ...d.data() }))
-      setRows(list)
-      // 第一次使用:把目前所有 id 當作已讀基準
-      if (role !== 'manager' && !hasBaseline(email)) {
-        const base = new Set(list.map(r => r.id))
-        persistSeen(email, base)
-        setSeen(base)
-      }
-    })
+    const unsub = onSnapshot(q, snap => setRows(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
     return unsub
   }, [role, email, regions, unauthorized])
 
