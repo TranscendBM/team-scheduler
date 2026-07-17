@@ -66,14 +66,23 @@ export default function RequestNewPage() {
   const removeFile = (name) => setFiles(prev => prev.filter(f => f.name !== name))
   const removeExisting = (name) => setExistingAtts(prev => prev.filter(a => a.name !== name))
 
+  // 儲存檔名一律轉成安全 ASCII(Office 線上檢視器對空格/中文等 %-編碼字元會 file not found)
+  // 顯示名稱仍保留原檔名,使用者無感
+  function safeFileName(name, idx) {
+    const dot = name.lastIndexOf('.')
+    const base = dot > 0 ? name.slice(0, dot) : name
+    const ext = dot > 0 ? name.slice(dot).toLowerCase().replace(/[^a-z0-9.]/g, '') : ''
+    const safe = base.normalize('NFKD').replace(/[^A-Za-z0-9_-]+/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '')
+    const uniq = Date.now().toString(36) + idx
+    return `${safe || 'file'}-${uniq}${ext}`
+  }
+
   async function uploadFiles(requestId) {
     const uploaded = []
     for (let i = 0; i < files.length; i++) {
       const file = files[i]
       setUploadMsg(`上傳附件 ${i + 1}/${files.length}：${file.name}`)
-      // 儲存路徑去空白(Office 線上檢視器對 %20 雙重編碼會 file not found);顯示名稱保留原名
-      const safeName = file.name.replace(/\s+/g, '_')
-      const storageRef = ref(storage, `attachments/${requestId}/${safeName}`)
+      const storageRef = ref(storage, `attachments/${requestId}/${safeFileName(file.name, i)}`)
       await uploadBytes(storageRef, file)
       const url = await getDownloadURL(storageRef)
       uploaded.push({ name: file.name, url, size: file.size })

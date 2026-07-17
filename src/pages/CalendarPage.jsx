@@ -172,7 +172,7 @@ export default function CalendarPage() {
         {/* Weekday headers */}
         <div className="grid grid-cols-7 mb-1">
           {WEEKDAYS.map(d => (
-            <div key={d} className="text-center text-xs font-medium text-gray-400 py-2">{d}</div>
+            <div key={d} className="text-center text-sm font-medium text-gray-400 py-2">{d}</div>
           ))}
         </div>
 
@@ -192,13 +192,13 @@ export default function CalendarPage() {
             return (
               <div key={day}
                 className={`min-h-24 rounded-lg p-1.5 border ${isToday(day) ? 'border-blue-400 bg-blue-50' : 'border-gray-100 bg-white hover:border-gray-300'}`}>
-                <p className={`text-sm font-medium mb-1 ${isToday(day) ? 'text-blue-600' : 'text-gray-700'}`}>
+                <p className={`text-base font-medium mb-1 ${isToday(day) ? 'text-blue-600' : 'text-gray-700'}`}>
                   {day}
                 </p>
                 <div className="space-y-0.5">
                   {shownMs.map(ev => (
                     <div key={ev.key}
-                      className="text-xs px-1.5 py-0.5 rounded flex items-center gap-1 min-w-0"
+                      className="text-sm px-1.5 py-0.5 rounded flex items-center gap-1 min-w-0"
                       style={{ backgroundColor: ev.color + '18', borderLeft: `2.5px solid ${ev.color}` }}
                       title={`${ev.label}・${ev.sub}`}>
                       <span className="flex-shrink-0" style={{ fontSize: 9 }}>{ev.dot}</span>
@@ -212,7 +212,7 @@ export default function CalendarPage() {
                   ))}
                   {shownLeaves.map(l => (
                     <div key={l.id}
-                      className="text-xs px-1.5 py-0.5 rounded truncate text-white font-medium"
+                      className="text-sm px-1.5 py-0.5 rounded truncate text-white font-medium"
                       style={{
                         backgroundColor: LEAVE_COLORS[l.type] || '#d1d5db',
                         backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(255,255,255,0.25) 2px, rgba(255,255,255,0.25) 4px)',
@@ -222,7 +222,7 @@ export default function CalendarPage() {
                     </div>
                   ))}
                   {overflow > 0 && (
-                    <p className="text-xs text-gray-400 pl-1">+{overflow} 更多</p>
+                    <p className="text-sm text-gray-400 pl-1">+{overflow} 更多</p>
                   )}
                 </div>
               </div>
@@ -234,25 +234,25 @@ export default function CalendarPage() {
         <div className="mt-5 space-y-2">
           <p className="text-xs font-medium text-gray-500">里程碑圖例</p>
           <div className="flex flex-wrap gap-x-5 gap-y-1.5">
-            <div className="flex items-center gap-1.5 text-xs text-gray-500">
+            <div className="flex items-center gap-1.5 text-sm text-gray-500">
               <span>✏</span><span>設計師/設計開始</span>
             </div>
-            <div className="flex items-center gap-1.5 text-xs text-gray-500">
+            <div className="flex items-center gap-1.5 text-sm text-gray-500">
               <span>📋</span><span>Planner開始</span>
             </div>
-            <div className="flex items-center gap-1.5 text-xs text-gray-500">
+            <div className="flex items-center gap-1.5 text-sm text-gray-500">
               <span>◆</span><span>邀請函・新聞稿・LinkedIn・KV里程碑</span>
             </div>
-            <div className="flex items-center gap-1.5 text-xs text-gray-500">
+            <div className="flex items-center gap-1.5 text-sm text-gray-500">
               <span>🚀</span><span>展覽開始</span>
             </div>
-            <div className="flex items-center gap-1.5 text-xs text-gray-500">
+            <div className="flex items-center gap-1.5 text-sm text-gray-500">
               <span>🎯</span><span>活動</span>
             </div>
-            <div className="flex items-center gap-1.5 text-xs text-gray-500">
+            <div className="flex items-center gap-1.5 text-sm text-gray-500">
               <span>🏆</span><span>報獎截止</span>
             </div>
-            <div className="flex items-center gap-1.5 text-xs text-gray-500">
+            <div className="flex items-center gap-1.5 text-sm text-gray-500">
               <span>🏖</span><span>休假</span>
             </div>
           </div>
@@ -262,7 +262,7 @@ export default function CalendarPage() {
             {Object.entries(TYPE_LABELS).map(([type, label]) => (
               <div key={type} className="flex items-center gap-1.5">
                 <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: TYPE_COLORS[type] }} />
-                <span className="text-xs text-gray-500">{label}</span>
+                <span className="text-sm text-gray-500">{label}</span>
               </div>
             ))}
           </div>

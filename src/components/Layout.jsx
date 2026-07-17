@@ -1,6 +1,7 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { usePermissions } from '../contexts/PermissionsContext'
+import { useNotifications } from '../contexts/NotificationsContext'
 import { PAGES, GROUPS } from '../utils/pages'
 
 const ROLE_LABELS = { manager: '主管', designer: '設計師', planner: 'Planner' }
@@ -14,6 +15,14 @@ const ADMIN_ITEMS = [
 export default function Layout() {
   const { user, role, logout } = useAuth()
   const { canAccess } = usePermissions()
+  const { newCount, pendingCount } = useNotifications()
+
+  // 每個頁面的提示數量:總表=未讀新任務、審核=待審核件數
+  const badgeFor = (key) => {
+    if (key === 'requests' && newCount > 0) return newCount
+    if (key === 'review' && pendingCount > 0) return pendingCount
+    return 0
+  }
 
   const visibleNav = PAGES.filter(p => canAccess(p.key, role))
   const navGroups = GROUPS
@@ -33,23 +42,31 @@ export default function Layout() {
           {navGroups.map((g, gi) => (
             <div key={g.key} className={gi > 0 ? 'pt-3 mt-2 border-t border-gray-100' : ''}>
               <p className="px-3 pb-1 text-xs text-gray-400 font-medium">{g.label}</p>
-              {g.items.map(({ path, label, icon, end }) => (
-                <NavLink
-                  key={path}
-                  to={path}
-                  end={end}
-                  className={({ isActive }) =>
-                    `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
-                      isActive
-                        ? 'bg-blue-50 text-blue-700 font-medium'
-                        : 'text-gray-600 hover:bg-gray-100'
-                    }`
-                  }
-                >
-                  <span>{icon}</span>
-                  <span>{label}</span>
-                </NavLink>
-              ))}
+              {g.items.map(({ key, path, label, icon, end }) => {
+                const badge = badgeFor(key)
+                return (
+                  <NavLink
+                    key={path}
+                    to={path}
+                    end={end}
+                    className={({ isActive }) =>
+                      `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+                        isActive
+                          ? 'bg-blue-50 text-blue-700 font-medium'
+                          : 'text-gray-600 hover:bg-gray-100'
+                      }`
+                    }
+                  >
+                    <span>{icon}</span>
+                    <span className="flex-1">{label}</span>
+                    {badge > 0 && (
+                      <span className="text-[10px] font-bold bg-red-500 text-white rounded-full px-1.5 py-0.5 min-w-[18px] text-center leading-none">
+                        {badge > 99 ? '99+' : badge}
+                      </span>
+                    )}
+                  </NavLink>
+                )
+              })}
             </div>
           ))}
 

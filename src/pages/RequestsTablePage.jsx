@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { collection, query, where, onSnapshot, doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
+import { useNotifications } from '../contexts/NotificationsContext'
 import { STATUS, statusMeta, STATUS_TIMESTAMP } from '../utils/requestConstants'
 import RequestDetailModal from '../components/RequestDetailModal'
 import Attachments from '../components/Attachments'
@@ -23,6 +24,7 @@ const SORTS = [
 
 export default function RequestsTablePage() {
   const { role, email, regions } = useAuth()
+  const { newIds, markSeen } = useNotifications()
   const [rows, setRows] = useState([])
   const [busy, setBusy] = useState(null)
   const [noRegion, setNoRegion] = useState(false)
@@ -132,11 +134,15 @@ export default function RequestsTablePage() {
 
   function Row({ r, faded }) {
     const meta = statusMeta(r.status)
+    const isNew = newIds.has(r.id)
     return (
-      <tr onClick={() => setDetail(r)}
-        className={`border-t border-gray-100 cursor-pointer ${faded ? 'text-gray-400 hover:bg-gray-50/50' : 'hover:bg-gray-50'}`}>
+      <tr onClick={() => { setDetail(r); markSeen(r.id) }}
+        className={`border-t border-gray-100 cursor-pointer ${faded ? 'text-gray-400 hover:bg-gray-50/50' : 'hover:bg-gray-50'} ${isNew ? 'bg-blue-50/40' : ''}`}>
         <td className="px-3 py-2.5">
           <div className={`text-sm ${faded ? '' : 'text-gray-800 font-medium'}`}>
+            {isNew && (
+              <span className="inline-block text-[10px] font-bold bg-red-500 text-white rounded px-1 py-0.5 mr-1.5 align-middle leading-none">NEW</span>
+            )}
             {r.urgent && !faded && <span className="text-red-500 mr-1">🔥</span>}
             {r.projectName || r.title}
           </div>
