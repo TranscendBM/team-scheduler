@@ -2,7 +2,7 @@
 import { readFileSync } from 'node:fs'
 import { initializeApp as ai, cert } from 'firebase-admin/app'
 import { getAuth as aa } from 'firebase-admin/auth'
-import { getFirestore as adb, FieldValue } from 'firebase-admin/firestore'
+import { getFirestore as adb } from 'firebase-admin/firestore'
 import { initializeApp } from 'firebase/app'
 import { getAuth, signInWithCustomToken } from 'firebase/auth'
 import { getFirestore, doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore'

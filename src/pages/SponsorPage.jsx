@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { collection, onSnapshot, doc, setDoc, addDoc, updateDoc, deleteDoc, query, where } from 'firebase/firestore'
 import { db } from '../firebase'
+import { useAuth } from '../contexts/AuthContext'
 
 // ── Payment schedule ──────────────────────────────────────────────────────────
 const PAYMENT_SCHEDULE = [
@@ -114,6 +115,7 @@ const emptyForm = { name: '', code: '', startDate: '', endDate: '', note: '' }
 
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function SponsorPage() {
+  const { isManager } = useAuth()
   const [paymentStatus, setPaymentStatus] = useState({})
   const [adStatus, setAdStatus]           = useState({})  // { ad01: { submitted, date } }
   const [events, setEvents]               = useState([])
@@ -144,13 +146,15 @@ export default function SponsorPage() {
     return () => { u1(); u2(); u3() }
   }, [filterYear])
 
-  // ── Payment handlers ──
+  // ── Payment handlers ── (Firestore rules 也擋非 manager 寫入，這裡是防禦性檢查，避免前端誤觸發出 permission-denied)
   async function togglePaid(id, cur) {
+    if (!isManager) return
     await setDoc(doc(db, 'hblPayments', id), { paid: !cur, paidDate: !cur ? new Date().toISOString().split('T')[0] : '' }, { merge: true })
   }
 
   // ── Ad submission handlers ──
   async function toggleSubmitted(adId, cur) {
+    if (!isManager) return
     await setDoc(doc(db, 'hblAdStatus', adId), {
       submitted: !cur,
       submittedDate: !cur ? new Date().toISOString().split('T')[0] : '',
@@ -159,21 +163,27 @@ export default function SponsorPage() {
 
   // ── Events CRUD ──
   async function handleAdd() {
-    if (!addForm.name) return
+    if (!isManager || !addForm.name) return
     setSaving(true)
     await addDoc(collection(db, 'hblSchedule'), { year: filterYear, name: addForm.name.trim(), code: addForm.code.trim().toUpperCase(), startDate: addForm.startDate, endDate: addForm.endDate || addForm.startDate, note: addForm.note.trim(), createdAt: new Date().toISOString() })
     setAddForm(emptyForm); setShowAdd(false); setSaving(false)
   }
   function startEdit(ev) {
+    if (!isManager) return
     setEditingId(ev.id); setEditForm({ name: ev.name, code: ev.code || '', startDate: ev.startDate || '', endDate: ev.endDate || '', note: ev.note || '' }); setShowAdd(false)
   }
   async function saveEdit() {
+    if (!isManager) return
     setSaving(true)
     await updateDoc(doc(db, 'hblSchedule', editingId), { name: editForm.name.trim(), code: editForm.code.trim().toUpperCase(), startDate: editForm.startDate, endDate: editForm.endDate || editForm.startDate, note: editForm.note.trim(), updatedAt: new Date().toISOString() })
     setEditingId(null); setSaving(false)
   }
-  async function handleDelete(id) { await deleteDoc(doc(db, 'hblSchedule', id)); setDeleteConfirm(null) }
+  async function handleDelete(id) {
+    if (!isManager) return
+    await deleteDoc(doc(db, 'hblSchedule', id)); setDeleteConfirm(null)
+  }
   async function importPreset() {
+    if (!isManager) return
     setImporting(true)
     await Promise.all(EVENTS_2026.map(e => addDoc(collection(db, 'hblSchedule'), { year: 2026, ...e, createdAt: new Date().toISOString() })))
     setImporting(false)
@@ -198,7 +208,7 @@ export default function SponsorPage() {
   })).filter(g => g.items.length > 0)
 
   // ── Event form row ──
-  function FormRow({ form, setForm, onSave, onCancel, isNew }) {
+  function formRow({ form, setForm, onSave, onCancel, isNew }) {
     return (
       <div className={`px-4 py-3 border-b ${isNew ? 'bg-blue-50/40' : 'bg-yellow-50/40'}`}>
         <div className="grid gap-2 mb-2" style={{ gridTemplateColumns: '1fr 72px 110px 110px 1fr' }}>
@@ -329,10 +339,16 @@ export default function SponsorPage() {
                       return (
                         <div key={payment.id} className={`flex items-center justify-between px-5 py-3.5 ${isPaid ? 'bg-emerald-50/20' : ''}`}>
                           <div className="flex items-center gap-4">
-                            <button onClick={() => togglePaid(payment.id, isPaid)}
-                              className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${isPaid ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-gray-300 hover:border-emerald-400'}`}>
-                              {isPaid && <span className="text-xs font-bold">✓</span>}
-                            </button>
+                            {isManager ? (
+                              <button onClick={() => togglePaid(payment.id, isPaid)}
+                                className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-colors ${isPaid ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-gray-300 hover:border-emerald-400'}`}>
+                                {isPaid && <span className="text-xs font-bold">✓</span>}
+                              </button>
+                            ) : (
+                              <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${isPaid ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-gray-300'}`}>
+                                {isPaid && <span className="text-xs font-bold">✓</span>}
+                              </div>
+                            )}
                             <div>
                               <p className={`text-sm font-medium ${isPaid ? 'text-gray-400 line-through' : 'text-gray-800'}`}>{payment.label}</p>
                               <p className="text-xs text-gray-400">到期日：{payment.dueDate}</p>
@@ -375,28 +391,30 @@ export default function SponsorPage() {
                 ))}
               </div>
               <span className="text-sm text-gray-400">{events.length} 筆賽事</span>
-              {filterYear === 2026 && events.length === 0 && (
+              {isManager && filterYear === 2026 && events.length === 0 && (
                 <button onClick={importPreset} disabled={importing}
                   className="text-sm bg-emerald-600 text-white px-3 py-1.5 rounded-lg hover:bg-emerald-700 disabled:opacity-50">
                   {importing ? '匯入中…' : '⬇ 匯入 2026 賽程'}
                 </button>
               )}
-              <button onClick={() => { setShowAdd(v => !v); setEditingId(null); setAddForm(emptyForm) }}
-                className="ml-auto text-sm bg-blue-600 text-white px-4 py-1.5 rounded-lg hover:bg-blue-700">
-                {showAdd ? '✕ 取消' : '+ 新增賽事'}
-              </button>
+              {isManager && (
+                <button onClick={() => { setShowAdd(v => !v); setEditingId(null); setAddForm(emptyForm) }}
+                  className="ml-auto text-sm bg-blue-600 text-white px-4 py-1.5 rounded-lg hover:bg-blue-700">
+                  {showAdd ? '✕ 取消' : '+ 新增賽事'}
+                </button>
+              )}
             </div>
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               <div className="hidden sm:grid px-4 py-2 border-b bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wide"
                 style={{ gridTemplateColumns: '1fr 72px 130px 110px 100px 72px' }}>
                 <div>賽事名稱</div><div>代碼</div><div>賽事日期</div><div>備註</div><div>狀態</div><div className="text-right">操作</div>
               </div>
-              {showAdd && <FormRow form={addForm} setForm={setAddForm} onSave={handleAdd} onCancel={() => setShowAdd(false)} isNew={true} />}
+              {isManager && showAdd && formRow({ form: addForm, setForm: setAddForm, onSave: handleAdd, onCancel: () => setShowAdd(false), isNew: true })}
               {events.length === 0 && !showAdd && (
                 <div className="py-16 text-center text-gray-400">
                   <div className="text-3xl mb-2">🏅</div>
                   <p className="text-sm">尚無賽程資料</p>
-                  {filterYear === 2026 && <button onClick={importPreset} disabled={importing} className="mt-3 text-sm text-blue-500 hover:underline">{importing ? '匯入中…' : '一鍵匯入 2026 賽程'}</button>}
+                  {isManager && filterYear === 2026 && <button onClick={importPreset} disabled={importing} className="mt-3 text-sm text-blue-500 hover:underline">{importing ? '匯入中…' : '一鍵匯入 2026 賽程'}</button>}
                 </div>
               )}
               {events.map(ev => {
@@ -404,8 +422,8 @@ export default function SponsorPage() {
                 const range  = fmtRange(ev.startDate, ev.endDate)
                 return (
                   <div key={ev.id} className="border-b last:border-0">
-                    {editingId === ev.id ? (
-                      <FormRow form={editForm} setForm={setEditForm} onSave={saveEdit} onCancel={() => setEditingId(null)} isNew={false} />
+                    {isManager && editingId === ev.id ? (
+                      formRow({ form: editForm, setForm: setEditForm, onSave: saveEdit, onCancel: () => setEditingId(null), isNew: false })
                     ) : (
                       <div className="sm:grid px-4 py-3 items-center gap-3 hover:bg-gray-50/60"
                         style={{ gridTemplateColumns: '1fr 72px 130px 110px 100px 72px' }}>
@@ -430,8 +448,8 @@ export default function SponsorPage() {
                           )}
                         </div>
                         <div className="flex items-center justify-end gap-1">
-                          <button onClick={() => startEdit(ev)} className="text-xs text-blue-500 hover:text-blue-700 px-1.5 py-1 rounded hover:bg-blue-50">編輯</button>
-                          <button onClick={() => setDeleteConfirm(ev.id)} className="text-xs text-red-400 hover:text-red-600 px-1.5 py-1 rounded hover:bg-red-50">刪除</button>
+                          {isManager && <button onClick={() => startEdit(ev)} className="text-xs text-blue-500 hover:text-blue-700 px-1.5 py-1 rounded hover:bg-blue-50">編輯</button>}
+                          {isManager && <button onClick={() => setDeleteConfirm(ev.id)} className="text-xs text-red-400 hover:text-red-600 px-1.5 py-1 rounded hover:bg-red-50">刪除</button>}
                         </div>
                       </div>
                     )}
@@ -514,11 +532,17 @@ export default function SponsorPage() {
                             style={{ gridTemplateColumns: '28px 1fr 130px 150px 80px 130px' }}>
 
                             {/* Checkbox */}
-                            <button onClick={() => toggleSubmitted(item.id, isSubmitted)}
-                              title={isSubmitted ? '取消標記' : '標記已交稿'}
-                              className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${isSubmitted ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-gray-300 hover:border-emerald-400'}`}>
-                              {isSubmitted && <span className="text-xs font-bold leading-none">✓</span>}
-                            </button>
+                            {isManager ? (
+                              <button onClick={() => toggleSubmitted(item.id, isSubmitted)}
+                                title={isSubmitted ? '取消標記' : '標記已交稿'}
+                                className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${isSubmitted ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-gray-300 hover:border-emerald-400'}`}>
+                                {isSubmitted && <span className="text-xs font-bold leading-none">✓</span>}
+                              </button>
+                            ) : (
+                              <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 ${isSubmitted ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-gray-300'}`}>
+                                {isSubmitted && <span className="text-xs font-bold leading-none">✓</span>}
+                              </div>
+                            )}
 
                             {/* Item name */}
                             <div>

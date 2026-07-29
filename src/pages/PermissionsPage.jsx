@@ -87,7 +87,7 @@ export default function PermissionsPage() {
         {saved && <span className="text-sm text-emerald-600">✓ 已儲存</span>}
       </div>
       <p className="text-xs text-gray-400 mt-4">
-        註:「使用者管理」「權限設定」「需求審核」「設計師儀表板」固定僅主管可用,不列在此矩陣。
+        註:「使用者管理」「權限設定」「需求審核」「設計師儀表板」「負責人與設計師管理」固定僅主管可用,不列在此矩陣。
       </p>
     </div>
   )

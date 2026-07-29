@@ -121,6 +121,67 @@ describe('requests create — 必要欄位/型別/允許欄位驗證', () => {
   it('attachments 型別錯誤（不是 list）會被擋', async () => {
     await assertFails(addDoc(collection(dbAs(PLANNER_SD1), 'requests'), { ...base, submittedBy: PLANNER_SD1, attachments: 'not-a-list' }))
   })
+
+  it('attachments 合法(name/url/size 齊全且型別正確)成功', async () => {
+    await assertSucceeds(addDoc(collection(dbAs(PLANNER_SD1), 'requests'), {
+      ...base, submittedBy: PLANNER_SD1,
+      attachments: [{ name: 'a.pdf', url: 'https://example.com/a.pdf', size: 1024 }],
+    }))
+  })
+
+  it('attachments 元素夾帶允許清單以外的欄位會被擋', async () => {
+    await assertFails(addDoc(collection(dbAs(PLANNER_SD1), 'requests'), {
+      ...base, submittedBy: PLANNER_SD1,
+      attachments: [{ name: 'a.pdf', url: 'https://example.com/a.pdf', size: 1024, evil: 'x' }],
+    }))
+  })
+
+  it('attachments 元素缺少必要欄位(沒有 size)會被擋', async () => {
+    await assertFails(addDoc(collection(dbAs(PLANNER_SD1), 'requests'), {
+      ...base, submittedBy: PLANNER_SD1,
+      attachments: [{ name: 'a.pdf', url: 'https://example.com/a.pdf' }],
+    }))
+  })
+
+  it('attachments 元素 size 型別錯誤(字串而非數字)會被擋', async () => {
+    await assertFails(addDoc(collection(dbAs(PLANNER_SD1), 'requests'), {
+      ...base, submittedBy: PLANNER_SD1,
+      attachments: [{ name: 'a.pdf', url: 'https://example.com/a.pdf', size: '1024' }],
+    }))
+  })
+
+  it('attachments 元素 size 超過合理範圍(> 10MB)會被擋', async () => {
+    await assertFails(addDoc(collection(dbAs(PLANNER_SD1), 'requests'), {
+      ...base, submittedBy: PLANNER_SD1,
+      attachments: [{ name: 'a.pdf', url: 'https://example.com/a.pdf', size: 20 * 1024 * 1024 }],
+    }))
+  })
+
+  it('attachments 超過 10 筆上限會被擋', async () => {
+    const attachments = Array.from({ length: 11 }, (_, i) => ({ name: `f${i}.pdf`, url: 'https://example.com/f.pdf', size: 100 }))
+    await assertFails(addDoc(collection(dbAs(PLANNER_SD1), 'requests'), { ...base, submittedBy: PLANNER_SD1, attachments }))
+  })
+
+  it('attachments 剛好 10 筆(上限)成功', async () => {
+    const attachments = Array.from({ length: 10 }, (_, i) => ({ name: `f${i}.pdf`, url: 'https://example.com/f.pdf', size: 100 }))
+    await assertSucceeds(addDoc(collection(dbAs(PLANNER_SD1), 'requests'), { ...base, submittedBy: PLANNER_SD1, attachments }))
+  })
+
+  // storagePath 是選填欄位，測試它跟「這個 request 的 id」的對應關係時要用已知的 doc id(setDoc)，
+  // 不能用 addDoc(建立前不知道自動產生的 id，無法組出應該相符的 storagePath)
+  it('attachments storagePath 符合 attachments/{這個 request 的 id}/{檔名} 成功', async () => {
+    await assertSucceeds(setDoc(doc(dbAs(PLANNER_SD1), 'requests', 'req-known-1'), {
+      ...base, submittedBy: PLANNER_SD1,
+      attachments: [{ name: 'a.pdf', url: 'https://example.com/a.pdf', size: 1024, storagePath: 'attachments/req-known-1/a-123.pdf' }],
+    }))
+  })
+
+  it('attachments storagePath 指向別的 requestId 會被擋', async () => {
+    await assertFails(setDoc(doc(dbAs(PLANNER_SD1), 'requests', 'req-known-2'), {
+      ...base, submittedBy: PLANNER_SD1,
+      attachments: [{ name: 'a.pdf', url: 'https://example.com/a.pdf', size: 1024, storagePath: 'attachments/some-other-request/a-123.pdf' }],
+    }))
+  })
 })
 
 describe('requests 狀態機 — designer 只能單步推進', () => {
@@ -256,10 +317,37 @@ describe('requests 狀態機 — manager 核准/駁回', () => {
     }))
   })
 
-  it('manager 可刪除需求；其他角色不行', async () => {
-    await seedRequest('to-delete', { submittedBy: PLANNER_SD1, region: 'SD1', status: 'pending', projectName: 'x' })
-    await assertFails(deleteDoc(doc(dbAs(PLANNER_SD1), 'requests', 'to-delete')))
+  it('manager 可刪除需求；跟這筆需求無關的角色不行', async () => {
+    await seedRequest('to-delete', { submittedBy: PLANNER_SD1, region: 'SD1', status: 'pending', projectName: 'x', attachments: [] })
+    await assertFails(deleteDoc(doc(dbAs(DESIGNER_A), 'requests', 'to-delete'))) // 不是提交人、也不是 manager
     await assertSucceeds(deleteDoc(doc(dbAs(MANAGER), 'requests', 'to-delete')))
+  })
+
+  // 提交人自刪權限只給 RequestNewPage「建立需求失敗後回滾半成品文件」這個場景用，
+  // 範圍刻意收得很窄:只有自己、pending、且完全沒有附件的需求才能自己刪
+  describe('提交人自刪半成品需求(僅供建立失敗回滾，範圍極窄)', () => {
+    it('提交人可以刪除自己「pending 且沒有附件」的需求(回滾場景)', async () => {
+      await seedRequest('own-empty-pending', { submittedBy: PLANNER_SD1, region: 'SD1', status: 'pending', projectName: 'x', attachments: [] })
+      await assertSucceeds(deleteDoc(doc(dbAs(PLANNER_SD1), 'requests', 'own-empty-pending')))
+    })
+
+    it('提交人不能刪除自己「已經有附件」的需求', async () => {
+      await seedRequest('own-with-attachment', {
+        submittedBy: PLANNER_SD1, region: 'SD1', status: 'pending', projectName: 'x',
+        attachments: [{ name: 'a.pdf', url: 'https://example.com/a.pdf', size: 100 }],
+      })
+      await assertFails(deleteDoc(doc(dbAs(PLANNER_SD1), 'requests', 'own-with-attachment')))
+    })
+
+    it('提交人不能刪除自己「已審核(非 pending)」的需求，即使沒有附件', async () => {
+      await seedRequest('own-assigned-empty', { submittedBy: PLANNER_SD1, region: 'SD1', status: 'assigned', projectName: 'x', attachments: [] })
+      await assertFails(deleteDoc(doc(dbAs(PLANNER_SD1), 'requests', 'own-assigned-empty')))
+    })
+
+    it('提交人不能刪除「別人的」pending、沒有附件的需求', async () => {
+      await seedRequest('other-empty-pending', { submittedBy: PLANNER_SD2, region: 'SD2', status: 'pending', projectName: 'x', attachments: [] })
+      await assertFails(deleteDoc(doc(dbAs(PLANNER_SD1), 'requests', 'other-empty-pending')))
+    })
   })
 })
 

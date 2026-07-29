@@ -48,8 +48,9 @@ function formFromProject(p) {
 const hasBudgetData = (p) => !!p && (NUMBER_FIELDS.some(k => p[k] !== undefined && p[k] !== null && p[k] !== '') || !!p.boothFormat)
 
 // 秀展新增/編輯彈窗（獨立於一般專案，供秀展相關頁面共用）。
-// props: project（編輯目標，null=新增）、people、rules、onClose、onSaved（儲存後回呼，傳回最新 doc id）
-export default function TradeshowEditModal({ project, people, rules, onClose, onSaved }) {
+// props: project（編輯目標，null=新增）、people、rules、onClose、onSaved（儲存後回呼，傳回最新 doc id）、
+//   readOnly（非 manager 檢視:所有欄位唯讀、不顯示儲存鈕 —— Firestore 規則本來就只允許 manager 寫 projects，這裡只是配合的唯讀 UI)
+export default function TradeshowEditModal({ project, people, rules, onClose, onSaved, readOnly = false }) {
   const [form, setForm] = useState(formFromProject(project))
   const [showBudget, setShowBudget] = useState(hasBudgetData(project))
   const [saving, setSaving] = useState(false)
@@ -105,7 +106,7 @@ export default function TradeshowEditModal({ project, people, rules, onClose, on
   }
 
   async function handleSave() {
-    if (!canSave) return
+    if (readOnly || !canSave) return
     setSaving(true)
     const data = {
       name: form.name, type: 'tradeshow', subtype: '', status: form.status,
@@ -143,10 +144,10 @@ export default function TradeshowEditModal({ project, people, rules, onClose, on
       onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
         <div className="px-6 py-4 border-b flex items-center justify-between sticky top-0 bg-white z-10">
-          <h3 className="text-lg font-semibold text-gray-800">{project ? '編輯秀展' : '新增秀展'}</h3>
+          <h3 className="text-lg font-semibold text-gray-800">{readOnly ? '檢視秀展' : project ? '編輯秀展' : '新增秀展'}</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">×</button>
         </div>
-        <div className="px-6 py-5 space-y-4">
+        <fieldset disabled={readOnly} className="px-6 py-5 space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">秀展名稱 *</label>
             <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
@@ -367,13 +368,17 @@ export default function TradeshowEditModal({ project, people, rules, onClose, on
               })}
             </div>
           )}
-        </div>
+        </fieldset>
         <div className="px-6 py-4 border-t flex gap-3 justify-end sticky bottom-0 bg-white">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">取消</button>
-          <button onClick={handleSave} disabled={saving || !canSave}
-            className="px-5 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 font-medium">
-            {saving ? '儲存中…' : '儲存'}
+          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">
+            {readOnly ? '關閉' : '取消'}
           </button>
+          {!readOnly && (
+            <button onClick={handleSave} disabled={saving || !canSave}
+              className="px-5 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 font-medium">
+              {saving ? '儲存中…' : '儲存'}
+            </button>
+          )}
         </div>
       </div>
     </div>

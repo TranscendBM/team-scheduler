@@ -49,15 +49,28 @@ service firebase.storage {
       // 停用/移除白名單的帳號無法再讀取任何附件。
       allow read: if whitelisted();
 
-      // 寫入（上傳／覆蓋／刪除）：
+      // 新增／覆蓋：
       // - manager 可管理任何需求的附件
       // - 提交人只能在「該需求仍是 pending」時，上傳/覆蓋「自己那筆需求」的附件
       //   （需求一經審核，內容即鎖定，附件也不再能由提交人變動 —— 與 firestore.rules
       //   對 requests 的 pending-only 編輯規則一致）
-      allow write: if whitelisted()
+      // create/update 才有 request.resource（新檔案的中繼資料），delete 沒有，所以跟刪除規則分開寫，
+      // 避免原本合併寫成 `allow write` 時，delete 也要求 request.resource.size 而永遠被擋。
+      allow create, update: if whitelisted()
         && request.resource.size < 10 * 1024 * 1024
         && fileName.matches('^[A-Za-z0-9._-]{1,200}$')
         && safeContentType()
+        && (
+          isManager()
+          || (requestExists(requestId)
+              && requestDoc(requestId).data.submittedBy == email()
+              && requestDoc(requestId).data.status == 'pending')
+        );
+
+      // 刪除：跟新增／覆蓋同一套身分/狀態邏輯，但不檢查 size/contentType(delete 沒有 request.resource 可檢查)。
+      // manager 可刪除任何需求的附件；提交人只能刪除「仍是 pending」的自己那筆需求的附件
+      // （需求一旦被審核，附件即鎖定，連原提交人也不能再刪；非提交人、未登入、停用帳號一律被擋）
+      allow delete: if whitelisted()
         && (
           isManager()
           || (requestExists(requestId)

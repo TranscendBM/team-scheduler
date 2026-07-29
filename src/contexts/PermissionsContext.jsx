@@ -9,19 +9,19 @@ const PermissionsContext = createContext(null)
 export function PermissionsProvider({ children }) {
   const { user, unauthorized } = useAuth()
   const [perms, setPerms] = useState({})
-  const [loading, setLoading] = useState(true)
+  const [fetched, setFetched] = useState(false)
 
   useEffect(() => {
-    if (!user || unauthorized) { setPerms({}); setLoading(false); return }
+    if (!user || unauthorized) return
     const unsub = onSnapshot(doc(db, 'settings', 'permissions'),
-      snap => { setPerms(snap.exists() ? (snap.data().pages || {}) : {}); setLoading(false) },
-      () => setLoading(false))
-    return unsub
+      snap => { setPerms(snap.exists() ? (snap.data().pages || {}) : {}); setFetched(true) },
+      () => setFetched(true))
+    return () => { unsub(); setPerms({}); setFetched(false) }
   }, [user, unauthorized])
 
   const value = {
     perms,
-    loading,
+    loading: !!user && !unauthorized && !fetched,
     canAccess: (pageKey, role) => canAccessFn(perms, pageKey, role),
   }
   return <PermissionsContext.Provider value={value}>{children}</PermissionsContext.Provider>

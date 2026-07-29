@@ -57,6 +57,7 @@ export default function DesignPage() {
   ]
 
   async function saveCustomSubtype() {
+    if (!isManager) return
     const val = newSubtypeInput.trim()
     if (!val || allDesignSubtypes.includes(val)) { setNewSubtypeInput(''); setAddingSubtype(false); return }
     const updated = [...customDesignSubtypes, val]
@@ -67,6 +68,7 @@ export default function DesignPage() {
   }
 
   async function deleteCustomSubtype(sub) {
+    if (!isManager) return
     const updated = customDesignSubtypes.filter(s => s !== sub)
     await setDoc(doc(db, 'settings', 'designSubtypes'), { subtypes: updated })
     setCustomDesignSubtypes(updated)
@@ -94,7 +96,7 @@ export default function DesignPage() {
   }
 
   async function handleSave() {
-    if (!form.name) return
+    if (!isManager || !form.name) return
     const isKV = form.designSubtype === '季節KV'
     if (isKV && !form.kvEventDate) return
     if (!isKV && (!form.startDate || !form.endDate)) return
@@ -132,11 +134,13 @@ export default function DesignPage() {
   }
 
   async function handleDelete(id) {
+    if (!isManager) return
     await deleteDoc(doc(db, 'projects', id))
     setDeleteConfirm(null)
   }
 
   function toggleAssignment(personId, role) {
+    if (!isManager) return
     const existing = form.assignments.findIndex(a => a.personId === personId)
     if (existing >= 0) {
       setForm(f => ({ ...f, assignments: f.assignments.filter((_, i) => i !== existing) }))
@@ -259,7 +263,9 @@ export default function DesignPage() {
           onClick={e => e.target === e.currentTarget && setShowModal(false)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="px-6 py-4 border-b flex items-center justify-between sticky top-0 bg-white z-10">
-              <h3 className="text-lg font-semibold text-gray-800">{editProject ? '編輯設計專案' : '新增設計專案'}</h3>
+              <h3 className="text-lg font-semibold text-gray-800">
+                {!isManager ? '檢視設計專案' : editProject ? '編輯設計專案' : '新增設計專案'}
+              </h3>
               <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600 text-xl">×</button>
             </div>
             <div className="px-6 py-5 space-y-4">
@@ -269,8 +275,8 @@ export default function DesignPage() {
                 <div className="flex flex-wrap gap-2">
                   {allDesignSubtypes.map(sub => (
                     <div key={sub} className="relative group">
-                      <button onClick={() => setForm(f => ({ ...f, designSubtype: sub }))}
-                        className={`px-3 py-1.5 text-sm rounded-lg border-2 font-medium transition-colors ${form.designSubtype === sub ? 'border-indigo-500 bg-indigo-600 text-white' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                      <button type="button" disabled={!isManager} onClick={() => setForm(f => ({ ...f, designSubtype: sub }))}
+                        className={`px-3 py-1.5 text-sm rounded-lg border-2 font-medium transition-colors disabled:cursor-default ${form.designSubtype === sub ? 'border-indigo-500 bg-indigo-600 text-white' : 'border-gray-200 text-gray-600 hover:enabled:bg-gray-50'}`}>
                         {sub}
                       </button>
                       {!DEFAULT_DESIGN_SUBTYPES.includes(sub) && isManager && (
@@ -303,18 +309,18 @@ export default function DesignPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">專案名稱 *</label>
-                <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                <input value={form.name} disabled={!isManager} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                   placeholder={isKV ? '例：農曆新年 2026' : '例：2026 型錄'}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500" />
               </div>
 
               {isKV ? (
                 <>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">節慶日期 *</label>
-                    <input type="date" value={form.kvEventDate}
+                    <input type="date" value={form.kvEventDate} disabled={!isManager}
                       onChange={e => setForm(f => ({ ...f, kvEventDate: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-500" />
                     <p className="text-xs text-gray-400 mt-1">KV 發稿與發佈日期依里程碑設定自動計算</p>
                   </div>
                   {kvPreviewKickoff && (
@@ -328,25 +334,25 @@ export default function DesignPage() {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">類別</label>
-                      <select value={form.kvCategory} onChange={e => setForm(f => ({ ...f, kvCategory: e.target.value }))}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                      <select value={form.kvCategory} disabled={!isManager} onChange={e => setForm(f => ({ ...f, kvCategory: e.target.value }))}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm disabled:bg-gray-50 disabled:text-gray-500">
                         <option value="">請選擇</option>
                         {KV_CATEGORIES.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Region</label>
-                      <select value={form.kvRegion} onChange={e => setForm(f => ({ ...f, kvRegion: e.target.value }))}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                      <select value={form.kvRegion} disabled={!isManager} onChange={e => setForm(f => ({ ...f, kvRegion: e.target.value }))}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm disabled:bg-gray-50 disabled:text-gray-500">
                         {KV_REGIONS.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
                     </div>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">備註</label>
-                    <input value={form.kvNote} onChange={e => setForm(f => ({ ...f, kvNote: e.target.value }))}
+                    <input value={form.kvNote} disabled={!isManager} onChange={e => setForm(f => ({ ...f, kvNote: e.target.value }))}
                       placeholder="例：eCard、全球版本"
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-500" />
                   </div>
                 </>
               ) : (
@@ -354,28 +360,28 @@ export default function DesignPage() {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">開始日期 *</label>
-                      <input type="date" value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                      <input type="date" value={form.startDate} disabled={!isManager} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-500" />
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">結束日期 *</label>
-                      <input type="date" value={form.endDate} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                      <input type="date" value={form.endDate} disabled={!isManager} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-500" />
                     </div>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">備註（選填）</label>
-                    <input value={form.kvNote} onChange={e => setForm(f => ({ ...f, kvNote: e.target.value }))}
+                    <input value={form.kvNote} disabled={!isManager} onChange={e => setForm(f => ({ ...f, kvNote: e.target.value }))}
                       placeholder="例：版本說明"
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-500" />
                   </div>
                 </>
               )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">年份</label>
-                <input type="number" value={form.year} onChange={e => setForm(f => ({ ...f, year: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input type="number" value={form.year} disabled={!isManager} onChange={e => setForm(f => ({ ...f, year: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500" />
               </div>
 
               <div>
@@ -387,8 +393,8 @@ export default function DesignPage() {
                       {designers.map(p => {
                         const selected = form.assignments.some(a => a.personId === p.id)
                         return (
-                          <button key={p.id} onClick={() => toggleAssignment(p.id, 'designer')}
-                            className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${selected ? 'bg-purple-600 text-white border-purple-600' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                          <button key={p.id} type="button" disabled={!isManager} onClick={() => toggleAssignment(p.id, 'designer')}
+                            className={`px-3 py-1.5 text-sm rounded-lg border transition-colors disabled:cursor-default ${selected ? 'bg-purple-600 text-white border-purple-600' : 'border-gray-200 text-gray-600 hover:enabled:bg-gray-50'}`}>
                             {p.name}
                           </button>
                         )
@@ -403,8 +409,8 @@ export default function DesignPage() {
                       {planners.map(p => {
                         const selected = form.assignments.some(a => a.personId === p.id)
                         return (
-                          <button key={p.id} onClick={() => toggleAssignment(p.id, 'planner')}
-                            className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${selected ? 'bg-teal-600 text-white border-teal-600' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                          <button key={p.id} type="button" disabled={!isManager} onClick={() => toggleAssignment(p.id, 'planner')}
+                            className={`px-3 py-1.5 text-sm rounded-lg border transition-colors disabled:cursor-default ${selected ? 'bg-teal-600 text-white border-teal-600' : 'border-gray-200 text-gray-600 hover:enabled:bg-gray-50'}`}>
                             {p.name}
                           </button>
                         )
@@ -417,11 +423,15 @@ export default function DesignPage() {
 
             </div>
             <div className="px-6 py-4 border-t flex gap-3 justify-end sticky bottom-0 bg-white">
-              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">取消</button>
-              <button onClick={handleSave} disabled={saving || !canSave}
-                className="px-5 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 font-medium">
-                {saving ? '儲存中…' : '儲存'}
+              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">
+                {isManager ? '取消' : '關閉'}
               </button>
+              {isManager && (
+                <button onClick={handleSave} disabled={saving || !canSave}
+                  className="px-5 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 font-medium">
+                  {saving ? '儲存中…' : '儲存'}
+                </button>
+              )}
             </div>
           </div>
         </div>

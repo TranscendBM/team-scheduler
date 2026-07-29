@@ -4,14 +4,12 @@ import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationsContext'
 import { STATUS, statusMeta, STATUS_TIMESTAMP } from '../utils/requestConstants'
+import { getRequestAction } from '../utils/requestActions'
 import RequestDetailModal from '../components/RequestDetailModal'
 import Attachments from '../components/Attachments'
 
 const shortEmail = (e) => (e || '—').split('@')[0]
 const submitterName = (r) => r.submittedByName || shortEmail(r.submittedBy)
-
-// 設計師可切換的狀態
-const DESIGNER_STATUSES = ['assigned', 'in_progress', 'reviewing', 'completed']
 
 const SORTS = [
   { key: 'due-asc', label: '交期 舊→新' },
@@ -48,7 +46,6 @@ export default function RequestsTablePage() {
   const { newIds, markSeen } = useNotifications()
   const [rows, setRows] = useState([])
   const [busy, setBusy] = useState(null)
-  const [noRegion, setNoRegion] = useState(false)
   const [detail, setDetail] = useState(null)
   const [fDesigners, setFDesigners] = useState([])   // 空陣列 = 不篩選
   const [fStatuses, setFStatuses] = useState([])
@@ -63,12 +60,14 @@ export default function RequestsTablePage() {
     } else if (role === 'designer') {
       q = query(collection(db, 'requests'), where('assignedDesigners', 'array-contains', email))
     } else if (role === 'planner') {
-      if (!regions || regions.length === 0) { setNoRegion(true); setRows([]); return }
+      if (!regions || regions.length === 0) return
       q = query(collection(db, 'requests'), where('region', 'in', regions.slice(0, 30)))
     } else { return }
     const unsub = onSnapshot(q, snap => setRows(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
-    return unsub
+    return () => { unsub(); setRows([]) }
   }, [role, email, regions])
+
+  const noRegion = role === 'planner' && (!regions || regions.length === 0)
 
   async function setStatus(r, next) {
     setBusy(r.id)
@@ -130,34 +129,28 @@ export default function RequestsTablePage() {
   const showAction = role !== 'manager'
   const colCount = showAction ? 6 : 5
 
-  function ActionCell({ r }) {
-    // 主管:刪除已移到需求詳情視窗內，點進去才會出現，避免列表上誤觸
-    if (role === 'designer' && (r.assignedDesigners || []).includes(email)) {
-      return (
-        <select value={r.status} disabled={busy === r.id}
-          onClick={e => e.stopPropagation()}
-          onChange={e => setStatus(r, e.target.value)}
-          className="text-xs border border-gray-300 rounded-lg px-2 py-1">
-          {DESIGNER_STATUSES.map(s => <option key={s} value={s}>{statusMeta(s).label}</option>)}
-        </select>
-      )
+  // 動作欄:可用動作一律由 getRequestAction()(純函式，見 utils/requestActions.js)決定，
+  // 跟 Firestore 規則的狀態機保持一致 —— 不會出現規則不允許的跳階/倒退選項。
+  // 主管:刪除已移到需求詳情視窗內，點進去才會出現，避免列表上誤觸
+  function actionCell(r) {
+    const action = getRequestAction(r, role, email)
+    if (!action) return <span className="text-xs text-gray-300">—</span>
+    const onClick = e => {
+      e.stopPropagation()
+      if (action.type === 'advance') setStatus(r, action.next)
+      else plannerClose(r)
     }
-    if (role === 'planner' && r.status !== 'completed' && r.status !== 'rejected') {
-      return (
-        <button onClick={e => { e.stopPropagation(); plannerClose(r) }} disabled={busy === r.id}
-          className="text-xs bg-emerald-600 text-white px-3 py-1 rounded-lg hover:bg-emerald-700 disabled:opacity-50">
-          ✓ 結案
-        </button>
-      )
-    }
-    return <span className="text-xs text-gray-300">—</span>
+    const cls = action.type === 'advance'
+      ? 'text-xs bg-blue-600 text-white px-3 py-1 rounded-lg hover:bg-blue-700 disabled:opacity-50'
+      : 'text-xs bg-emerald-600 text-white px-3 py-1 rounded-lg hover:bg-emerald-700 disabled:opacity-50'
+    return <button onClick={onClick} disabled={busy === r.id} className={cls}>{action.label}</button>
   }
 
-  function Row({ r, faded }) {
+  function row(r, faded) {
     const meta = statusMeta(r.status)
     const isNew = newIds.has(r.id)
     return (
-      <tr onClick={() => openDetail(r)}
+      <tr key={r.id} onClick={() => openDetail(r)}
         className={`border-t border-gray-100 cursor-pointer ${faded ? 'text-gray-400 hover:bg-gray-50/50' : 'hover:bg-gray-50'} ${isNew ? 'bg-blue-50/40' : ''}`}>
         <td className="px-3 py-2.5 overflow-hidden">
           <div className={`text-sm truncate ${faded ? '' : 'text-gray-800 font-medium'}`}>
@@ -179,14 +172,14 @@ export default function RequestsTablePage() {
         <td className="px-3 py-2.5">
           <span className={`text-xs px-2 py-0.5 rounded-full ${faded ? 'bg-gray-100 text-gray-400' : meta.color}`}>{meta.label}</span>
         </td>
-        {showAction && <td className="px-3 py-2.5 text-right"><ActionCell r={r} /></td>}
+        {showAction && <td className="px-3 py-2.5 text-right">{actionCell(r)}</td>}
       </tr>
     )
   }
 
   // 固定欄寬（table-layout: fixed + 同一組 colgroup），讓每個設計師分組的表格欄位對得齊，不會因為內容長短各自伸縮
   // 設計師欄位已隱藏（分組標題已顯示設計師名稱，欄位重複）；動作欄只有 designer/planner 有按鈕才顯示
-  function Table({ data, faded, empty }) {
+  function table(data, faded, empty) {
     return (
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto">
         <table className="w-full" style={{ tableLayout: 'fixed', minWidth: 640 }}>
@@ -221,7 +214,7 @@ export default function RequestsTablePage() {
             </tr>
           </thead>
           <tbody>
-            {data.map(r => <Row key={r.id} r={r} faded={faded} />)}
+            {data.map(r => row(r, faded))}
             {data.length === 0 && (
               <tr><td colSpan={colCount} className="px-3 py-8 text-center text-gray-400 text-sm">{empty}</td></tr>
             )}
@@ -296,12 +289,12 @@ export default function RequestsTablePage() {
       ) : (
         <>
           {active.length === 0 ? (
-            <Table data={[]} empty="目前沒有進行中的需求" />
+            table([], false, '目前沒有進行中的需求')
           ) : (
             groupByDesigner(active).map(([designer, list]) => (
               <div key={designer} className="mb-6">
                 <h2 className="text-sm font-semibold text-gray-600 mb-2">{designer}（{list.length}）</h2>
-                <Table data={list} empty="" />
+                {table(list, false, '')}
               </div>
             ))
           )}
@@ -312,7 +305,7 @@ export default function RequestsTablePage() {
               {groupByDesigner(done).map(([designer, list]) => (
                 <div key={designer} className="mb-4">
                   <h3 className="text-xs font-medium text-gray-400 mb-2">{designer}（{list.length}）</h3>
-                  <Table data={list} faded empty="" />
+                  {table(list, true, '')}
                 </div>
               ))}
             </>

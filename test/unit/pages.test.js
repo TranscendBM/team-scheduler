@@ -8,9 +8,9 @@ describe('canAccess', () => {
     }
   })
 
-  it('fixed 頁面（review/dashboard）designer/planner 永遠看不到，即使 perms 硬要覆蓋成 true', () => {
+  it('fixed 頁面（review/dashboard/tradeshow-assignments）designer/planner 永遠看不到，即使 perms 硬要覆蓋成 true', () => {
     const fixedKeys = PAGES.filter((p) => p.fixed).map((p) => p.key)
-    expect(fixedKeys).toEqual(expect.arrayContaining(['review', 'dashboard']))
+    expect(fixedKeys).toEqual(expect.arrayContaining(['review', 'dashboard', 'tradeshow-assignments']))
     for (const key of fixedKeys) {
       const perms = { [key]: { designer: true, planner: true } }
       expect(canAccess(perms, key, 'designer')).toBe(false)
@@ -18,10 +18,17 @@ describe('canAccess', () => {
     }
   })
 
-  it('review/dashboard 不應出現在可調整矩陣中', () => {
+  it('review/dashboard/tradeshow-assignments 不應出現在可調整矩陣中', () => {
     const adjustableKeys = ADJUSTABLE_PAGES.map((p) => p.key)
     expect(adjustableKeys).not.toContain('review')
     expect(adjustableKeys).not.toContain('dashboard')
+    expect(adjustableKeys).not.toContain('tradeshow-assignments')
+  })
+
+  it('tradeshow-assignments 業務規則本來就是 manager-only：元件本身也硬性鎖定(TradeshowAssignmentsPage 對非 manager 顯示鎖定畫面)，矩陣與元件不會互相矛盾', () => {
+    expect(canAccess({}, 'tradeshow-assignments', 'manager')).toBe(true)
+    expect(canAccess({}, 'tradeshow-assignments', 'designer')).toBe(false)
+    expect(canAccess({}, 'tradeshow-assignments', 'planner')).toBe(false)
   })
 
   it('未知頁面一律回傳 false', () => {

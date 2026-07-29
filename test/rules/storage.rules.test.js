@@ -7,7 +7,7 @@ import { readFileSync } from 'node:fs'
 import { afterAll, beforeAll, beforeEach, describe, it } from 'vitest'
 import { initializeTestEnvironment, assertSucceeds, assertFails } from '@firebase/rules-unit-testing'
 import { doc, setDoc } from 'firebase/firestore'
-import { ref, uploadBytes } from 'firebase/storage'
+import { ref, uploadBytes, deleteObject } from 'firebase/storage'
 
 const PROJECT_ID = 'team-scheduler-storage-rules-test'
 const FIRESTORE_RULES = readFileSync(new URL('../../firestore.rules', import.meta.url), 'utf8')
@@ -110,5 +110,48 @@ describe('Storage attachments 規則', () => {
       const { getDownloadURL } = await import('firebase/storage')
       return getDownloadURL(ref(storageAs(OTHER_USER), 'attachments/req-pending/seed.pdf'))
     })())
+  })
+})
+
+// delete 沒有 request.resource(新檔案的中繼資料)，跟 create/update 分開驗證，
+// 確保 delete 沒有被 create/update 專用的 size/contentType 檢查誤擋(這正是修的那個 bug)。
+describe('Storage attachments 刪除規則', () => {
+  async function seedFile(path) {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await uploadBytes(ref(ctx.storage(), path), SMALL_FILE)
+    })
+  }
+
+  it('manager 可以刪除任何需求的附件(含非 pending)', async () => {
+    await seedFile('attachments/req-assigned/a.pdf')
+    await assertSucceeds(deleteObject(ref(storageAs(MANAGER), 'attachments/req-assigned/a.pdf')))
+  })
+
+  it('提交人可以刪除自己那筆「仍是 pending」需求的附件', async () => {
+    await seedFile('attachments/req-pending/a.pdf')
+    await assertSucceeds(deleteObject(ref(storageAs(SUBMITTER), 'attachments/req-pending/a.pdf')))
+  })
+
+  it('提交人不能刪除自己那筆已審核(非 pending)需求的附件', async () => {
+    await seedFile('attachments/req-assigned/a.pdf')
+    await assertFails(deleteObject(ref(storageAs(SUBMITTER), 'attachments/req-assigned/a.pdf')))
+  })
+
+  it('非提交人、非 manager 不能刪除別人需求的附件', async () => {
+    await seedFile('attachments/req-pending/a.pdf')
+    await assertFails(deleteObject(ref(storageAs(OTHER_USER), 'attachments/req-pending/a.pdf')))
+  })
+
+  it('未登入不能刪除任何附件', async () => {
+    await seedFile('attachments/req-pending/a.pdf')
+    await assertFails(deleteObject(ref(storageAnon(), 'attachments/req-pending/a.pdf')))
+  })
+
+  it('已停用帳號即使原本是提交人也不能刪除', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'requests', 'req-by-deactivated'), { submittedBy: DEACTIVATED, region: 'SD1', status: 'pending', projectName: 'x' })
+    })
+    await seedFile('attachments/req-by-deactivated/a.pdf')
+    await assertFails(deleteObject(ref(storageAs(DEACTIVATED), 'attachments/req-by-deactivated/a.pdf')))
   })
 })

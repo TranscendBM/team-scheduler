@@ -81,6 +81,7 @@ export default function TradeshowListPage() {
     .sort((a, b) => (a.startDate || '').localeCompare(b.startDate || ''))
 
   async function handleDelete(id) {
+    if (!isManager) return
     await deleteDoc(doc(db, 'projects', id))
     setDeleteConfirm(null)
   }
@@ -216,9 +217,9 @@ export default function TradeshowListPage() {
       </div>
 
       {editing && (
-        <TradeshowEditModal project={editing} people={people} onClose={() => setEditing(null)} onSaved={() => setEditing(null)} />
+        <TradeshowEditModal project={editing} people={people} onClose={() => setEditing(null)} onSaved={() => setEditing(null)} readOnly={!isManager} />
       )}
-      {creating && (
+      {creating && isManager && (
         <TradeshowEditModal project={null} people={people} onClose={() => setCreating(false)} onSaved={() => setCreating(false)} />
       )}
     </div>

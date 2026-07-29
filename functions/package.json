@@ -8,12 +8,17 @@
   "main": "index.js",
   "scripts": {
     "lint": "node --check index.js",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/buildHtml.test.js test/previewFile.test.js",
+    "test:integration": "node --test test/renameUserLogin.test.js"
   },
   "dependencies": {
     "firebase-admin": "^14.2.0",
     "firebase-functions": "^7.3.0",
     "nodemailer": "^9.0.3"
+  },
+  "overrides": {
+    "brace-expansion": "^5.0.8",
+    "uuid": "^11.1.1"
   },
   "private": true
 }

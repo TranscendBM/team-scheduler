@@ -73,8 +73,40 @@ service cloud.firestore {
               && changedOnly(['status', 'completedAt']) && request.resource.data.completedAt == request.time);
     }
 
+    // 附件結構驗證：只能有 name/url/size/storagePath 四個欄位、型別正確、size 落在合理範圍
+    // (對應前端 MAX_ATTACHMENT_MB=10)。URL 本身合不合法(host/bucket/路徑)規則語言無法完整驗證
+    // (不支援字串正則比對網域結構)，交給 Cloud Function 在組信件內容/提供預覽下載時再次驗證
+    // (見 functions/index.js 的 safeAttachmentUrl / resolveAttachmentPath)，這裡只負責把好「結構」這一關、
+    // 並限制筆數上限。storagePath 若存在，至少要求「看起來」屬於這個 request(attachments/{requestId}/...)，
+    // 但這只是盡力而為的字串比對防線 —— 規則語言沒辦法像 Cloud Function 那樣完整解析/驗證 URL，
+    // 真正的最終防線一定要靠 Cloud Function 端 resolveAttachmentPath 那組完整一致性驗證。
+    function isValidAttachment(a, requestId) {
+      return a.keys().hasOnly(['name', 'url', 'size', 'storagePath'])
+        && a.name is string && a.name.size() > 0 && a.name.size() <= 300
+        && a.url is string && a.url.size() > 0 && a.url.size() <= 2000
+        && a.size is number && a.size > 0 && a.size <= 10485760
+        && (!('storagePath' in a) || (
+             a.storagePath is string && a.storagePath.size() > 0 && a.storagePath.size() <= 500
+             && a.storagePath.matches('^attachments/' + requestId + '/[A-Za-z0-9._-]{1,300}$')
+           ));
+    }
+    // Firestore 規則語言不支援對 list 做逐一元素的迴圈驗證，只能在已知上限(10 筆)內逐一 index 檢查
+    function isValidAttachments(atts, requestId) {
+      return atts is list && atts.size() <= 10
+        && (atts.size() < 1  || isValidAttachment(atts[0], requestId))
+        && (atts.size() < 2  || isValidAttachment(atts[1], requestId))
+        && (atts.size() < 3  || isValidAttachment(atts[2], requestId))
+        && (atts.size() < 4  || isValidAttachment(atts[3], requestId))
+        && (atts.size() < 5  || isValidAttachment(atts[4], requestId))
+        && (atts.size() < 6  || isValidAttachment(atts[5], requestId))
+        && (atts.size() < 7  || isValidAttachment(atts[6], requestId))
+        && (atts.size() < 8  || isValidAttachment(atts[7], requestId))
+        && (atts.size() < 9  || isValidAttachment(atts[8], requestId))
+        && (atts.size() < 10 || isValidAttachment(atts[9], requestId));
+    }
+
     // 建立需求時的必要欄位／型別／允許欄位驗證
-    function isValidRequestCreate() {
+    function isValidRequestCreate(requestId) {
       let d = request.resource.data;
       return d.keys().hasOnly([
                'urgent', 'region', 'projectName', 'docTypes', 'dueDate', 'description',
@@ -86,7 +118,7 @@ service cloud.firestore {
         && d.dueDate is string
         && d.description is string
         && d.urgent is bool
-        && d.attachments is list && d.attachments.size() <= 10
+        && isValidAttachments(d.attachments, requestId)
         && d.submittedBy == email()
         && d.submittedByName is string
         && d.status == 'pending'
@@ -106,7 +138,7 @@ service cloud.firestore {
         || (whitelisted() && email() in resource.data.get('assignedDesigners', []))      // designer 看指派給自己的
         || (whitelisted() && resource.data.region in myRegions());                       // planner 看負責區域的
 
-      allow create: if whitelisted() && isValidRequestCreate();
+      allow create: if whitelisted() && isValidRequestCreate(id);
 
       allow update: if
           // manager：核准 / 駁回 / 事後編輯，且 status 必須落在既定 enum 內
@@ -130,9 +162,19 @@ service cloud.firestore {
               && request.resource.data.projectName is string && request.resource.data.projectName.size() > 0
               && request.resource.data.region is string && request.resource.data.region.size() > 0
               && request.resource.data.docTypes is list
-              && request.resource.data.attachments is list && request.resource.data.attachments.size() <= 10);
+              && isValidAttachments(request.resource.data.attachments, id));
 
-      allow delete: if isManager();
+      // manager 可刪任何需求；提交人只能刪自己「剛建立、還沒有任何附件」的 pending 需求 ——
+      // 這只是給 RequestNewPage 建立需求失敗時的回滾用(見該檔案 handleSubmit 的錯誤處理):
+      // addDoc 先建立 attachments:[] 的需求文件，若後續上傳/寫入附件失敗就要能刪掉這個半成品，
+      // 不然使用者重試會產生重複的空需求。attachments.size()==0 這個條件精確對應「回滾當下」
+      // 這個文件唯一可能的狀態(還沒成功寫過任何附件)，同時擋掉刪除「已經有附件、已審核、
+      // 或別人送出」的需求 —— 這些情況一律只有 manager 能刪。
+      allow delete: if isManager()
+        || (whitelisted()
+            && resource.data.submittedBy == email()
+            && resource.data.status == 'pending'
+            && resource.data.attachments.size() == 0);
     }
 
     // 既有 team-scheduler 資料：讀取開放白名單，寫入收斂為僅 manager
@@ -151,5 +193,13 @@ service cloud.firestore {
     match /hblPayments/{id}  { allow read: if whitelisted(); allow write: if isManager(); }
     match /hblSchedule/{id}  { allow read: if whitelisted(); allow write: if isManager(); }
     match /hblAdStatus/{id}  { allow read: if whitelisted(); allow write: if isManager(); }
+
+    // Gmail 改名操作的 durable 紀錄(見 functions/index.js renameUserLogin)：
+    // 只有 Cloud Function 用 Admin SDK 寫(Admin SDK 本來就不受這份規則限制)，
+    // 客戶端一律不可寫；開放 manager 讀取方便需要時查操作狀態/除錯。
+    match /userRenameOperations/{oldEmail} {
+      allow read: if isManager();
+      allow write: if false;
+    }
   }
 }

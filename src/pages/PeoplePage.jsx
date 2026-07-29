@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react'
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc, query, where, getDocs } from 'firebase/firestore'
-import { db } from '../firebase'
+import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, setDoc } from 'firebase/firestore'
+import { httpsCallable } from 'firebase/functions'
+import { db, functions } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
 import { REGIONS } from '../utils/requestConstants'
+
+const renameUserLoginFn = httpsCallable(functions, 'renameUserLogin')
 
 // 整合「人員管理」（people：可指派專案的設計師/Planner 名冊）與「使用者管理」
 // （users：登入白名單，doc id 是登入用的 Gmail）成同一頁。兩個 Firestore collection 仍分開存放
@@ -83,22 +86,8 @@ export default function PeoplePage() {
     setShowModal(true)
   }
 
-  // 換 Gmail 登入信箱後，把既有 requests 裡引用舊信箱的地方（指派設計師、提交人）都同步改成新信箱，
-  // 不然換過帳號的人會查不到自己原本被指派/送出的需求（assignedDesigners、submittedBy 存的是登入 email）
-  async function cascadeEmailRename(oldEmail, newEmail) {
-    const asDesigner = await getDocs(query(collection(db, 'requests'), where('assignedDesigners', 'array-contains', oldEmail)))
-    for (const d of asDesigner.docs) {
-      const next = (d.data().assignedDesigners || []).map(e => e === oldEmail ? newEmail : e)
-      await updateDoc(d.ref, { assignedDesigners: next })
-    }
-    const asSubmitter = await getDocs(query(collection(db, 'requests'), where('submittedBy', '==', oldEmail)))
-    for (const d of asSubmitter.docs) {
-      await updateDoc(d.ref, { submittedBy: newEmail })
-    }
-  }
-
   async function handleSave() {
-    if (!form.name) return
+    if (!isManager || !form.name) return
     const email = form.email.trim().toLowerCase()
 
     let newLoginEmail = null
@@ -108,7 +97,8 @@ export default function PeoplePage() {
         setError('請輸入有效的 Gmail 登入信箱')
         return
       }
-      // 換過 Gmail 時檢查新信箱有沒有被別人用掉（同一個人自己原本的帳號不算衝突）
+      // 換過 Gmail 時先做一次前端檢查有沒有被別人用掉，給即時錯誤訊息；
+      // 真正保證不會撞名額的是 Cloud Function 那邊在伺服器端重新檢查一次(見下方 renameUserLoginFn)
       const conflict = users.find(u => u.email === newLoginEmail && u.email !== matchedLogin?.email)
       if (conflict) {
         setError(`這個 Gmail 已經被「${conflict.displayName || conflict.email}」使用中`)
@@ -132,11 +122,11 @@ export default function PeoplePage() {
       }
 
       if (matchedLogin && newLoginEmail !== matchedLogin.email) {
-        // 換了登入用的 Gmail：doc id 不可變更，用「新建＋刪舊」達到改信箱的效果，
-        // 同時要把舊信箱同步改成新信箱到所有既有需求，不然換過帳號的人會看不到自己原本的需求
-        await setDoc(doc(db, 'users', newLoginEmail), { ...userData, email: newLoginEmail })
-        await deleteDoc(doc(db, 'users', matchedLogin.email))
-        await cascadeEmailRename(matchedLogin.email, newLoginEmail)
+        // 換過 Gmail 登入信箱：交給受保護的 Cloud Function(renameUserLogin，見 functions/index.js)
+        // 在後端一次做完「建立新帳號 → 搬遷 requests 裡所有引用舊信箱的地方 → 確認搬完才刪舊帳號」，
+        // 不再由前端分好幾步各自寫、寫到一半失敗就留下不一致資料；只有後端完全成功後，畫面才會更新。
+        await renameUserLoginFn({ oldEmail: matchedLogin.email, newEmail: newLoginEmail })
+        await updateDoc(doc(db, 'users', newLoginEmail), userData)
       } else if (matchedLogin) {
         await updateDoc(doc(db, 'users', matchedLogin.email), userData)
       } else if (newLoginEmail) {
@@ -145,13 +135,13 @@ export default function PeoplePage() {
 
       setShowModal(false)
     } catch (e) {
-      setError('儲存失敗：' + e.message)
+      setError('儲存失敗：' + (e.message || e.code))
     }
     setSaving(false)
   }
 
   async function handleRevokeLogin() {
-    if (!matchedLogin) return
+    if (!isManager || !matchedLogin) return
     await deleteDoc(doc(db, 'users', matchedLogin.email))
     setMatchedLogin(null)
     setForm(f => ({ ...f, grantLogin: false }))
@@ -159,6 +149,7 @@ export default function PeoplePage() {
   }
 
   async function handleDelete(id) {
+    if (!isManager) return
     const p = people.find(x => x.id === id)
     await deleteDoc(doc(db, 'people', id))
     const u = p ? findLoginForPerson(p.email) : null
@@ -180,6 +171,7 @@ export default function PeoplePage() {
     setShowManagerModal(true)
   }
   async function handleManagerSave() {
+    if (!isManager) return
     const email = managerForm.email.trim().toLowerCase()
     if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { setManagerError('請輸入有效的 email'); return }
     if (!editManagerEmail && users.some(u => u.email === email)) { setManagerError('此 email 已存在'); return }
@@ -196,6 +188,7 @@ export default function PeoplePage() {
     setManagerSaving(false)
   }
   async function handleManagerDelete(email) {
+    if (!isManager) return
     await deleteDoc(doc(db, 'users', email))
     setDeleteManagerConfirm(null)
   }

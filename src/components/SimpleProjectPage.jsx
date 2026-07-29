@@ -50,7 +50,7 @@ export default function SimpleProjectPage({ type, typeLabel, subtypeOptions, sub
   }
 
   async function handleSave() {
-    if (!form.name || !form.startDate || !form.endDate) return
+    if (!isManager || !form.name || !form.startDate || !form.endDate) return
     setSaving(true)
     const data = {
       name: form.name, type, subtype: form.subtype,
@@ -72,11 +72,13 @@ export default function SimpleProjectPage({ type, typeLabel, subtypeOptions, sub
   }
 
   async function handleDelete(id) {
+    if (!isManager) return
     await deleteDoc(doc(db, 'projects', id))
     setDeleteConfirm(null)
   }
 
   function toggleAssignment(personId, role) {
+    if (!isManager) return
     const existing = form.assignments.findIndex(a => a.personId === personId)
     if (existing >= 0) {
       setForm(f => ({ ...f, assignments: f.assignments.filter((_, i) => i !== existing) }))
@@ -186,14 +188,16 @@ export default function SimpleProjectPage({ type, typeLabel, subtypeOptions, sub
           onClick={e => e.target === e.currentTarget && setShowModal(false)}>
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
             <div className="px-6 py-4 border-b flex items-center justify-between sticky top-0 bg-white z-10">
-              <h3 className="text-lg font-semibold text-gray-800">{editProject ? `編輯${typeLabel}` : `新增${typeLabel}`}</h3>
+              <h3 className="text-lg font-semibold text-gray-800">
+                {!isManager ? `檢視${typeLabel}` : editProject ? `編輯${typeLabel}` : `新增${typeLabel}`}
+              </h3>
               <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600 text-xl">×</button>
             </div>
             <div className="px-6 py-5 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{subtypeFieldLabel}</label>
-                <select value={form.subtype} onChange={e => setForm(f => ({ ...f, subtype: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <select value={form.subtype} disabled={!isManager} onChange={e => setForm(f => ({ ...f, subtype: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm disabled:bg-gray-50 disabled:text-gray-500">
                   <option value="">請選擇</option>
                   {subtypeOptions.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
@@ -201,34 +205,34 @@ export default function SimpleProjectPage({ type, typeLabel, subtypeOptions, sub
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">名稱 *</label>
-                <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input value={form.name} disabled={!isManager} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500" />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">開始日期 *</label>
-                  <input type="date" value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  <input type="date" value={form.startDate} disabled={!isManager} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">結束日期 *</label>
-                  <input type="date" value={form.endDate} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  <input type="date" value={form.endDate} disabled={!isManager} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500" />
                 </div>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">地點</label>
-                <input value={form.location} onChange={e => setForm(f => ({ ...f, location: e.target.value }))}
+                <input value={form.location} disabled={!isManager} onChange={e => setForm(f => ({ ...f, location: e.target.value }))}
                   placeholder="例：Taipei, TW"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500" />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">年份</label>
-                <input type="number" value={form.year} onChange={e => setForm(f => ({ ...f, year: e.target.value }))}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <input type="number" value={form.year} disabled={!isManager} onChange={e => setForm(f => ({ ...f, year: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500" />
               </div>
 
               <div>
@@ -240,8 +244,8 @@ export default function SimpleProjectPage({ type, typeLabel, subtypeOptions, sub
                       {designers.map(p => {
                         const selected = form.assignments.some(a => a.personId === p.id)
                         return (
-                          <button key={p.id} onClick={() => toggleAssignment(p.id, 'designer')}
-                            className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${selected ? 'bg-purple-600 text-white border-purple-600' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                          <button key={p.id} type="button" disabled={!isManager} onClick={() => toggleAssignment(p.id, 'designer')}
+                            className={`px-3 py-1.5 text-sm rounded-lg border transition-colors disabled:cursor-default ${selected ? 'bg-purple-600 text-white border-purple-600' : 'border-gray-200 text-gray-600 hover:enabled:bg-gray-50'}`}>
                             {p.name}
                           </button>
                         )
@@ -256,8 +260,8 @@ export default function SimpleProjectPage({ type, typeLabel, subtypeOptions, sub
                       {planners.map(p => {
                         const selected = form.assignments.some(a => a.personId === p.id)
                         return (
-                          <button key={p.id} onClick={() => toggleAssignment(p.id, 'planner')}
-                            className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${selected ? 'bg-teal-600 text-white border-teal-600' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                          <button key={p.id} type="button" disabled={!isManager} onClick={() => toggleAssignment(p.id, 'planner')}
+                            className={`px-3 py-1.5 text-sm rounded-lg border transition-colors disabled:cursor-default ${selected ? 'bg-teal-600 text-white border-teal-600' : 'border-gray-200 text-gray-600 hover:enabled:bg-gray-50'}`}>
                             {p.name}
                           </button>
                         )
@@ -269,11 +273,15 @@ export default function SimpleProjectPage({ type, typeLabel, subtypeOptions, sub
               </div>
             </div>
             <div className="px-6 py-4 border-t flex gap-3 justify-end sticky bottom-0 bg-white">
-              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">取消</button>
-              <button onClick={handleSave} disabled={saving || !canSave}
-                className="px-5 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 font-medium">
-                {saving ? '儲存中…' : '儲存'}
+              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">
+                {isManager ? '取消' : '關閉'}
               </button>
+              {isManager && (
+                <button onClick={handleSave} disabled={saving || !canSave}
+                  className="px-5 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 font-medium">
+                  {saving ? '儲存中…' : '儲存'}
+                </button>
+              )}
             </div>
           </div>
         </div>

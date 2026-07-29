@@ -22,23 +22,30 @@ const ACTIVE = ['pending', 'assigned', 'in_progress', 'reviewing']
 export function NotificationsProvider({ children }) {
   const { role, email, regions, unauthorized } = useAuth()
   const [rows, setRows] = useState([])
-  const [seen, setSeen] = useState(new Set())
+  const [seen, setSeen] = useState(() => loadSeen(email))
+  const [seenForEmail, setSeenForEmail] = useState(email)
+
+  // email 變動(登入/切換帳號)時，改讀新帳號在 localStorage 記錄的「已看過」清單。
+  // 在 render 期間直接比對調整 state(而非另開 effect)，避免多一次非同步的 setState 級聯渲染。
+  if (email !== seenForEmail) {
+    setSeenForEmail(email)
+    setSeen(loadSeen(email))
+  }
 
   useEffect(() => {
-    if (!email || unauthorized || !role) { setRows([]); return }
+    if (!email || unauthorized || !role) return
     let q
     if (role === 'manager') {
       q = query(collection(db, 'requests'), where('status', '==', 'pending'))
     } else if (role === 'designer') {
       q = query(collection(db, 'requests'), where('assignedDesigners', 'array-contains', email))
     } else if (role === 'planner') {
-      if (!regions || regions.length === 0) { setRows([]); return }
+      if (!regions || regions.length === 0) return
       q = query(collection(db, 'requests'), where('region', 'in', regions.slice(0, 30)))
-    } else { setRows([]); return }
+    } else { return }
 
-    setSeen(loadSeen(email))
     const unsub = onSnapshot(q, snap => setRows(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
-    return unsub
+    return () => { unsub(); setRows([]) }
   }, [role, email, regions, unauthorized])
 
   function markSeen(id) {

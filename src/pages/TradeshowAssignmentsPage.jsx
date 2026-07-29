@@ -2,6 +2,16 @@ import { useEffect, useState } from 'react'
 import { collection, onSnapshot, doc, updateDoc } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
+import { sortByOfficeOrder } from '../utils/officeCurrency'
+
+// 結束日期一過，狀態自動視為「已結束」（畫面顯示用，不覆蓋原本手動填的狀態文字）—— 跟展覽列表頁一致
+function effectiveStatus(p) {
+  const today = new Date().toISOString().slice(0, 10)
+  if (p.endDate && p.endDate < today) return '已結束'
+  return p.status || ''
+}
+
+const STATUSES = ['提案通過', '進行中', '已結束']
 
 export default function TradeshowAssignmentsPage() {
   const { isManager } = useAuth()
@@ -9,6 +19,8 @@ export default function TradeshowAssignmentsPage() {
   const [people, setPeople] = useState([])
   const [year, setYear] = useState(new Date().getFullYear())
   const [busy, setBusy] = useState(null)
+  const [officeFilters, setOfficeFilters] = useState([])   // 空陣列 = 不篩選（全部）
+  const [statusFilters, setStatusFilters] = useState([])
 
   useEffect(() => {
     const u1 = onSnapshot(collection(db, 'projects'), snap =>
@@ -25,8 +37,16 @@ export default function TradeshowAssignmentsPage() {
   if (!years.includes(year)) years.push(year)
   years.sort()
 
+  const offices = sortByOfficeOrder([...new Set(projects.filter(p => p.year === year).map(p => p.office).filter(Boolean))])
+
+  function toggleFilter(setFn, value) {
+    setFn(cur => cur.includes(value) ? cur.filter(v => v !== value) : [...cur, value])
+  }
+
   const filtered = projects
     .filter(p => p.year === year)
+    .filter(p => officeFilters.length === 0 || officeFilters.includes(p.office))
+    .filter(p => statusFilters.length === 0 || statusFilters.includes(effectiveStatus(p)))
     .sort((a, b) => (a.startDate || '').localeCompare(b.startDate || ''))
 
   async function toggle(p, personId, role) {
@@ -60,7 +80,36 @@ export default function TradeshowAssignmentsPage() {
           {years.map(y => <option key={y} value={y}>{y}</option>)}
         </select>
       </div>
-      <p className="text-sm text-gray-400 mb-6">一次檢視每場秀展的指派，點擊姓名直接切換，不用逐場開編輯視窗</p>
+      <p className="text-sm text-gray-400 mb-3">一次檢視每場秀展的指派，點擊姓名直接切換，不用逐場開編輯視窗</p>
+
+      <div className="mb-4">
+        {(officeFilters.length > 0 || statusFilters.length > 0) && (
+          <button onClick={() => { setOfficeFilters([]); setStatusFilters([]) }}
+            className="text-xs text-gray-400 hover:text-gray-600 mb-1.5">✕ 清除篩選</button>
+        )}
+        <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
+          <span className="text-xs text-gray-400 mr-1">分公司</span>
+          {offices.map(o => (
+            <button key={o} onClick={() => toggleFilter(setOfficeFilters, o)}
+              className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                officeFilters.includes(o) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+              }`}>
+              {o}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-xs text-gray-400 mr-1">狀態</span>
+          {STATUSES.map(s => (
+            <button key={s} onClick={() => toggleFilter(setStatusFilters, s)}
+              className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                statusFilters.includes(s) ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+              }`}>
+              {s}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto">
         <table className="w-full text-sm">
@@ -73,10 +122,12 @@ export default function TradeshowAssignmentsPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {filtered.map(p => (
+            {filtered.map(p => {
+              const ended = effectiveStatus(p) === '已結束'
+              return (
               <tr key={p.id} className="hover:bg-gray-50/60 align-top">
-                <td className="px-4 py-3 font-medium text-gray-800">{p.name}</td>
-                <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{p.startDate || '—'}</td>
+                <td className={`px-4 py-3 font-medium ${ended ? 'text-gray-400' : 'text-gray-800'}`}>{p.name}</td>
+                <td className={`px-4 py-3 whitespace-nowrap ${ended ? 'text-gray-300' : 'text-gray-500'}`}>{p.startDate || '—'}</td>
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap gap-1.5">
                     {designers.map(d => {
@@ -112,7 +163,8 @@ export default function TradeshowAssignmentsPage() {
                   </div>
                 </td>
               </tr>
-            ))}
+              )
+            })}
             {filtered.length === 0 && (
               <tr><td colSpan={4} className="px-4 py-8 text-center text-gray-400 text-sm">此年度沒有秀展資料</td></tr>
             )}

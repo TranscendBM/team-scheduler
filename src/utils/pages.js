@@ -23,7 +23,7 @@ export const PAGES = [
   { key: 'tradeshow-analysis',    path: '/tradeshow-analysis',    label: '秀展分析',       icon: '📈', group: 'tradeshow', defaults: { designer: true,  planner: false } },
   { key: 'tradeshow-list',        path: '/tradeshow-list',        label: '展覽列表',       icon: '📋', group: 'tradeshow', defaults: { designer: true,  planner: true } },
   { key: 'tradeshow-targets',     path: '/tradeshow-targets',     label: '年度目標',       icon: '🎯', group: 'tradeshow', defaults: { designer: false, planner: false } },
-  { key: 'tradeshow-assignments', path: '/tradeshow-assignments', label: '負責人與設計師管理', icon: '👥', group: 'tradeshow', defaults: { designer: false, planner: false } },
+  { key: 'tradeshow-assignments', path: '/tradeshow-assignments', label: '負責人與設計師管理', icon: '👥', group: 'tradeshow', fixed: 'manager' },
   { key: 'tradeshow-gantt',       path: '/tradeshow-gantt',       label: '秀展甘特圖',     icon: '📊', group: 'tradeshow', defaults: { designer: true,  planner: false } },
 
   { key: 'request/new', path: '/request/new', label: '提交需求', icon: '📝', group: 'requests', defaults: { designer: false, planner: true } },

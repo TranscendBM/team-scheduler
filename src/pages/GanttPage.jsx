@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { collection, onSnapshot, doc, getDoc } from 'firebase/firestore'
 import { db } from '../firebase'
-import { buildBarsForPerson, TYPE_COLORS, TYPE_LABELS, DEFAULT_RULES, LOADING_COLORS } from '../utils/milestoneUtils'
+import { buildBarsForPerson, TYPE_LABELS, DEFAULT_RULES, LOADING_COLORS } from '../utils/milestoneUtils'
 
 const LEAVE_COLORS = {
   '特休': '#8b5cf6',
@@ -118,9 +118,12 @@ export default function GanttPage() {
 
   useEffect(() => {
     if (scrollRef.current) {
-      const todayOff = dayOffset(new Date())
+      // 自成一套計算(不依賴外層 dayOffset/totalDays 閉包)，只需要 year，避免每次 render 都要把它們列入 deps 而重跑
+      const vs = new Date(year, 0, 1)
+      const days = Math.round((new Date(year, 11, 31) - vs) / 86400000) + 1
+      const todayOff = Math.round((new Date() - vs) / 86400000)
       const cw = scrollRef.current.clientWidth - LEFT_WIDTH
-      const todayPx = (todayOff / totalDays) * (scrollRef.current.scrollWidth - LEFT_WIDTH)
+      const todayPx = (todayOff / days) * (scrollRef.current.scrollWidth - LEFT_WIDTH)
       scrollRef.current.scrollLeft = Math.max(0, todayPx - cw / 2)
     }
   }, [year, people.length])
@@ -232,7 +235,7 @@ export default function GanttPage() {
               </div>
 
               {/* People rows */}
-              {personData.map(({ person, bars, barLane, numLanes, rowH, busyWeeks, personLeaves }, pi) => (
+              {personData.map(({ person, bars, barLane, rowH, busyWeeks, personLeaves }, pi) => (
                 <div key={person.id} className={`flex border-b ${pi % 2 === 0 ? 'bg-white' : 'bg-gray-50/60'}`}
                   style={{ height: rowH }}>
 
@@ -280,7 +283,7 @@ export default function GanttPage() {
                     )}
 
                     {/* Leave bars strip */}
-                    {personLeaves.map((leave, li) => {
+                    {personLeaves.map((leave) => {
                       const clampedStart = new Date(Math.max(new Date(leave.startDate), viewStart))
                       const clampedEnd = new Date(Math.min(new Date(leave.endDate), viewEnd))
                       const leftPct = pct(dayOffset(clampedStart))

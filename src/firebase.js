@@ -2,6 +2,7 @@ import { initializeApp } from 'firebase/app'
 import { getAuth, GoogleAuthProvider } from 'firebase/auth'
 import { getFirestore } from 'firebase/firestore'
 import { getStorage } from 'firebase/storage'
+import { getFunctions } from 'firebase/functions'
 
 // 設定一律讀環境變數（本機用 .env、CI/正式 build 用 secrets 注入）。
 // 刻意「不」提供任何舊專案 fallback：一旦缺少必要變數，寧可讓 build/啟動直接失敗，
@@ -42,4 +43,5 @@ const app = initializeApp(firebaseConfig)
 export const auth = getAuth(app)
 export const db = getFirestore(app)
 export const storage = getStorage(app)
+export const functions = getFunctions(app, 'asia-east1')
 export const googleProvider = new GoogleAuthProvider()

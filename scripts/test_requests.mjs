@@ -6,7 +6,7 @@ import { getFirestore as adminDb } from 'firebase-admin/firestore'
 import { initializeApp } from 'firebase/app'
 import { getAuth, signInWithCustomToken } from 'firebase/auth'
 import {
-  getFirestore, doc, getDoc, setDoc, updateDoc, addDoc, collection, query, where, getDocs,
+  getFirestore, doc, getDoc, updateDoc, addDoc, collection, query, where, getDocs,
 } from 'firebase/firestore'
 
 const SA = process.env.SA
@@ -20,7 +20,7 @@ const webConfig = { apiKey: 'AIzaSyD4EPsYv0QDVjtV7zrgGkiwAiVDvMbBd1c', authDomai
 async function clientFor(email, name) {
   const token = await adminAuth().createCustomToken('t-' + email, { email })
   const app = initializeApp(webConfig, name)
-  const uc = await signInWithCustomToken(getAuth(app), token)
+  await signInWithCustomToken(getAuth(app), token)
   return getFirestore(app)
 }
 

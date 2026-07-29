@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { collection, addDoc, updateDoc, getDoc, doc, serverTimestamp } from 'firebase/firestore'
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage'
+import { collection, addDoc, updateDoc, getDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore'
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'
 import { db, storage } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
 import { REGIONS, DOC_TYPES, MAX_ATTACHMENT_MB } from '../utils/requestConstants'
+import { attachmentKey, markRemoved, unmarkRemoved, keptAttachments, removedAttachments, commitWithDeferredDeletion } from '../utils/attachmentDraft'
 
 const MAX_BYTES = MAX_ATTACHMENT_MB * 1024 * 1024
 const empty = { urgent: false, region: '', projectName: '', docTypes: [], dueDate: '', description: '' }
@@ -15,7 +16,8 @@ export default function RequestNewPage() {
   const { id: editId } = useParams() // /request/edit/:id 進來時有值
   const [form, setForm] = useState(empty)
   const [files, setFiles] = useState([])                 // 新選的檔案
-  const [existingAtts, setExistingAtts] = useState([])   // 編輯模式:既有附件
+  const [existingAtts, setExistingAtts] = useState([])   // 編輯模式:既有附件(這份清單本身不會因為使用者按「移除」而變動)
+  const [removedKeys, setRemovedKeys] = useState([])     // 使用者標記要移除的既有附件(storagePath/url) —— 只是草稿狀態，還沒真的刪檔
   const [loading, setLoading] = useState(!!editId)
   const [blocked, setBlocked] = useState('')             // 編輯被拒原因
   const [saving, setSaving] = useState(false)
@@ -36,6 +38,7 @@ export default function RequestNewPage() {
         docTypes: r.docTypes || [], dueDate: r.dueDate || '', description: r.description || '',
       })
       setExistingAtts(r.attachments || [])
+      setRemovedKeys([])
       setLoading(false)
     }).catch(e => { setBlocked('讀取失敗：' + (e.code || e.message)); setLoading(false) })
   }, [editId, email])
@@ -57,14 +60,43 @@ export default function RequestNewPage() {
       return
     }
     setFiles(prev => {
-      const names = new Set([...prev.map(f => f.name), ...existingAtts.map(a => a.name)])
+      const names = new Set([...prev.map(f => f.name), ...keptAttachments(existingAtts, removedKeys).map(a => a.name)])
       return [...prev, ...picked.filter(f => !names.has(f.name))]
     })
     e.target.value = ''
   }
 
   const removeFile = (name) => setFiles(prev => prev.filter(f => f.name !== name))
-  const removeExisting = (name) => setExistingAtts(prev => prev.filter(a => a.name !== name))
+
+  // 點「移除」只是標記草稿狀態，不會立刻刪 Storage 檔案 —— 使用者可能接著按「取消」離開頁面、
+  // 或送出時 Firestore 更新失敗，這兩種情況都不該把檔案刪掉(Firestore 那邊還在引用它)。
+  // 真正的刪除動作留到 handleSubmit 裡 Firestore 更新成功「之後」才做。
+  const removeExisting = (att) => setRemovedKeys(prev => markRemoved(prev, att))
+  // 使用者反悔，把標記移除的附件加回來
+  const restoreExisting = (att) => setRemovedKeys(prev => unmarkRemoved(prev, att))
+
+  // 舊資料可能沒有 storagePath(改版前上傳的附件)，退回用 download URL 反推路徑當備援
+  function derivePathFromUrl(url) {
+    try {
+      const m = String(url).match(/\/o\/([^?]+)/)
+      return m ? decodeURIComponent(m[1]) : null
+    } catch { return null }
+  }
+
+  // Firestore 已經成功寫入、不再引用這些附件之後才呼叫:真的刪除 Storage 上的檔案。
+  // 單一檔案刪除失敗只記錄錯誤、不擋流程 —— 這時 Firestore 已經沒有引用了，
+  // 寧可留下孤兒檔案(之後可再清)，也不要反過來讓 metadata 壞掉或擋住使用者送出。
+  async function deleteAttachmentFiles(atts) {
+    await Promise.allSettled(atts.map(async (att) => {
+      const path = att.storagePath || derivePathFromUrl(att.url)
+      if (!path) return
+      try {
+        await deleteObject(ref(storage, path))
+      } catch (e) {
+        console.error('刪除附件檔案失敗(metadata 已不再引用，留下孤兒檔案)', att.name, e)
+      }
+    }))
+  }
 
   // 儲存檔名一律轉成安全 ASCII(Office 線上檢視器對空格/中文等 %-編碼字元會 file not found)
   // 顯示名稱仍保留原檔名,使用者無感
@@ -79,15 +111,22 @@ export default function RequestNewPage() {
 
   async function uploadFiles(requestId) {
     const uploaded = []
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i]
-      setUploadMsg(`上傳附件 ${i + 1}/${files.length}：${file.name}`)
-      const storageRef = ref(storage, `attachments/${requestId}/${safeFileName(file.name, i)}`)
-      await uploadBytes(storageRef, file)
-      const url = await getDownloadURL(storageRef)
-      uploaded.push({ name: file.name, url, size: file.size })
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i]
+        setUploadMsg(`上傳附件 ${i + 1}/${files.length}：${file.name}`)
+        const storagePath = `attachments/${requestId}/${safeFileName(file.name, i)}`
+        const storageRef = ref(storage, storagePath)
+        await uploadBytes(storageRef, file)
+        const url = await getDownloadURL(storageRef)
+        uploaded.push({ name: file.name, url, size: file.size, storagePath })
+      }
+      return uploaded
+    } catch (e) {
+      // 上傳到一半失敗:清掉這次已經成功上傳的檔案，不留下孤兒檔案
+      await Promise.allSettled(uploaded.map(a => deleteObject(ref(storage, a.storagePath))))
+      throw e
     }
-    return uploaded
   }
 
   async function handleSubmit(e) {
@@ -98,20 +137,30 @@ export default function RequestNewPage() {
     if (form.docTypes.length === 0) { setError('請至少勾選一個稿件類型'); return }
     if (!form.dueDate) { setError('請選擇交期'); return }
     setSaving(true)
+    const fields = {
+      urgent: form.urgent,
+      region: form.region,
+      projectName: form.projectName.trim(),
+      docTypes: form.docTypes,
+      dueDate: form.dueDate,
+      description: form.description.trim(),
+    }
+    let uploaded = []
+    let createdRequestId = null
+    const toRemove = editId ? removedAttachments(existingAtts, removedKeys) : []
     try {
-      const fields = {
-        urgent: form.urgent,
-        region: form.region,
-        projectName: form.projectName.trim(),
-        docTypes: form.docTypes,
-        dueDate: form.dueDate,
-        description: form.description.trim(),
-      }
       if (editId) {
-        // 編輯:上傳新附件 + 合併既有(可能有移除)
-        const uploaded = await uploadFiles(editId)
+        // 編輯:上傳新附件 + 合併既有「保留」的附件(草稿裡標記移除的先不動 Storage)。
+        // commitWithDeferredDeletion 保證:Firestore 寫入沒成功，絕不會進到刪檔那一步。
+        uploaded = await uploadFiles(editId)
         setUploadMsg('儲存中…')
-        await updateDoc(doc(db, 'requests', editId), { ...fields, attachments: [...existingAtts, ...uploaded] })
+        await commitWithDeferredDeletion(
+          () => updateDoc(doc(db, 'requests', editId), {
+            ...fields,
+            attachments: [...keptAttachments(existingAtts, removedKeys), ...uploaded],
+          }),
+          () => deleteAttachmentFiles(toRemove)
+        )
       } else {
         const docRef = await addDoc(collection(db, 'requests'), {
           ...fields,
@@ -121,16 +170,39 @@ export default function RequestNewPage() {
           status: 'pending',
           createdAt: serverTimestamp(),
         })
-        const uploaded = await uploadFiles(docRef.id)
+        createdRequestId = docRef.id
+        uploaded = await uploadFiles(docRef.id)
         if (uploaded.length) {
           setUploadMsg('儲存中…')
           await updateDoc(doc(db, 'requests', docRef.id), { attachments: uploaded })
         }
+        createdRequestId = null // 全部成功，不需要回滾
       }
+
       setDone(true)
       setTimeout(() => navigate('/my-requests'), 1200)
     } catch (e) {
       console.error(e)
+      // 檔案已經上傳成功、但後面寫 Firestore 失敗:清掉這次剛上傳的檔案，避免孤兒檔案。
+      // 使用者標記移除的「舊」附件則完全不動 —— Firestore 更新失敗代表它們仍然被引用中。
+      //
+      // 順序很重要，一定要先清 Storage、再刪 Firestore 文件、不能反過來:storage.rules 的刪除規則
+      // 要靠 firestore.get(requests/{requestId}) 去驗證「呼叫者是不是這筆需求的提交人、且狀態還是
+      // pending」才放行；如果先把 Firestore 文件刪了，Storage 規則就再也讀不到這筆需求，
+      // 之後任何人(包含這裡的清理)都無法通過擁有者驗證，會白白留下真正的孤兒檔案。
+      if (uploaded.length) {
+        await Promise.allSettled(uploaded.map(a => deleteObject(ref(storage, a.storagePath))))
+      }
+      // 新需求的情況:request 文件已經建立、但後續步驟(上傳/寫入附件)失敗，把這個半成品文件刪掉，
+      // 避免使用者重試後在「我的需求」看到重複的空需求。firestore.rules 只允許提交人刪除
+      // 「自己、pending、attachments 為空」的需求 —— 這正是這個半成品文件在回滾當下唯一可能的狀態。
+      if (createdRequestId) {
+        try {
+          await deleteDoc(doc(db, 'requests', createdRequestId))
+        } catch (cleanupErr) {
+          console.error('清理失敗的半成品需求文件失敗', cleanupErr)
+        }
+      }
       setError((editId ? '更新' : '送出') + '失敗：' + (e.code || e.message))
       setSaving(false)
       setUploadMsg('')
@@ -246,12 +318,24 @@ export default function RequestNewPage() {
           <p className="text-xs text-gray-400 mt-1">簡報 / 試算表 / Word / PDF，單檔上限 {MAX_ATTACHMENT_MB}MB</p>
           {(existingAtts.length > 0 || files.length > 0) && (
             <ul className="mt-2 space-y-1">
-              {existingAtts.map(a => (
-                <li key={a.name} className="flex items-center justify-between text-xs bg-gray-100 text-gray-600 rounded-lg px-3 py-1.5">
-                  <a href={a.url} target="_blank" rel="noreferrer" className="truncate hover:underline">📄 {a.name}（已上傳）</a>
-                  <button type="button" onClick={() => removeExisting(a.name)} className="text-gray-400 hover:text-red-500 ml-2">移除</button>
-                </li>
-              ))}
+              {existingAtts.map(a => {
+                const isRemoved = removedKeys.includes(attachmentKey(a))
+                return (
+                  <li key={attachmentKey(a)}
+                    className={`flex items-center justify-between text-xs rounded-lg px-3 py-1.5 ${isRemoved ? 'bg-red-50 text-red-300' : 'bg-gray-100 text-gray-600'}`}>
+                    {isRemoved ? (
+                      <span className="truncate line-through">📄 {a.name}（將於儲存後移除）</span>
+                    ) : (
+                      <a href={a.url} target="_blank" rel="noreferrer" className="truncate hover:underline">📄 {a.name}（已上傳）</a>
+                    )}
+                    {isRemoved ? (
+                      <button type="button" onClick={() => restoreExisting(a)} className="text-blue-400 hover:text-blue-600 ml-2">復原</button>
+                    ) : (
+                      <button type="button" onClick={() => removeExisting(a)} className="text-gray-400 hover:text-red-500 ml-2">移除</button>
+                    )}
+                  </li>
+                )
+              })}
               {files.map(f => (
                 <li key={f.name} className="flex items-center justify-between text-xs bg-blue-50 text-blue-700 rounded-lg px-3 py-1.5">
                   <span className="truncate">📄 {f.name}（{(f.size / 1024 / 1024).toFixed(2)}MB）</span>
