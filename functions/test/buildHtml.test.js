@@ -2,7 +2,7 @@
 // 執行：npm test（functions 目錄下）
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildHtml, escapeHtml, safeAttachmentUrl } from '../index.js'
+import { buildHtml, escapeHtml, safeAttachmentUrl, buildCcList } from '../index.js'
 
 const LEGIT_URL = 'https://firebasestorage.googleapis.com/v0/b/team-scheduler-dc7ce.firebasestorage.app/o/attachments%2Freq123%2Ffile-abc.pdf?alt=media&token=xyz'
 
@@ -14,6 +14,26 @@ test('escapeHtml 涵蓋 & < > " \' 五種特殊字元，且順序正確(先跳�
 test('escapeHtml 對 null/undefined 安全，不會噴錯', () => {
   assert.equal(escapeHtml(null), '')
   assert.equal(escapeHtml(undefined), '')
+})
+
+test('buildCcList：多組來源(提交人/主管/勾選的 planner)攤平合併去重', () => {
+  const cc = buildCcList(['designer@x.com'], ['submitter@x.com'], ['manager1@x.com', 'manager2@x.com'], ['planner1@x.com'])
+  assert.deepEqual([...cc].sort(), ['manager1@x.com', 'manager2@x.com', 'planner1@x.com', 'submitter@x.com'])
+})
+
+test('buildCcList：已經在收件人(to)裡的信箱不重複出現在 cc', () => {
+  const cc = buildCcList(['designer@x.com', 'planner1@x.com'], ['submitter@x.com'], [], ['planner1@x.com'])
+  assert.deepEqual(cc, ['submitter@x.com'])
+})
+
+test('buildCcList：拿掉空字串/undefined，並且同一個信箱在不同來源重複出現只留一個', () => {
+  const cc = buildCcList([], ['submitter@x.com'], ['submitter@x.com', '', undefined], ['submitter@x.com'])
+  assert.deepEqual(cc, ['submitter@x.com'])
+})
+
+test('buildCcList：沒有勾選任何 planner(空陣列)也能正常運作', () => {
+  const cc = buildCcList(['designer@x.com'], ['submitter@x.com'], ['manager@x.com'], [])
+  assert.deepEqual([...cc].sort(), ['manager@x.com', 'submitter@x.com'])
 })
 
 test('buildHtml 對 HTML 特殊字元做完整逸出，避免郵件內容被注入標籤', () => {

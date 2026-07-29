@@ -291,6 +291,15 @@ describe('requests 狀態機 — manager 核准/駁回', () => {
     }))
   })
 
+  it('核准時一併帶 ccPlanners(選填的 CC 名單)成功', async () => {
+    await seedRequest('to-approve-cc', { submittedBy: PLANNER_SD1, region: 'SD1', status: 'pending', projectName: 'x' })
+    await assertSucceeds(updateDoc(doc(dbAs(MANAGER), 'requests', 'to-approve-cc'), {
+      status: 'assigned', assignedDesigners: [DESIGNER_A], assignedDesignersNames: ['Designer A'],
+      reviewedBy: MANAGER, reviewedAt: serverTimestamp(), reviewNote: '', comment: '', dueDate: '2026-08-01',
+      ccPlanners: [PLANNER_SD1, PLANNER_SD2],
+    }))
+  })
+
   it('核准卻沒有指派任何設計師 → 擋', async () => {
     await seedRequest('to-approve2', { submittedBy: PLANNER_SD1, region: 'SD1', status: 'pending', projectName: 'x' })
     await assertFails(updateDoc(doc(dbAs(MANAGER), 'requests', 'to-approve2'), {
@@ -314,6 +323,22 @@ describe('requests 狀態機 — manager 核准/駁回', () => {
     await seedRequest('to-edit', { submittedBy: PLANNER_SD1, region: 'SD1', status: 'assigned', projectName: 'x', assignedDesigners: [DESIGNER_A] })
     await assertSucceeds(updateDoc(doc(dbAs(MANAGER), 'requests', 'to-edit'), {
       assignedDesigners: [DESIGNER_A, DESIGNER_B], assignedDesignersNames: ['A', 'B'], dueDate: '2026-09-01', comment: 'hi', reviewNote: '',
+    }))
+  })
+
+  it('manager 事後編輯時可以調整 ccPlanners 成功', async () => {
+    await seedRequest('to-edit-cc', { submittedBy: PLANNER_SD1, region: 'SD1', status: 'assigned', projectName: 'x', assignedDesigners: [DESIGNER_A] })
+    await assertSucceeds(updateDoc(doc(dbAs(MANAGER), 'requests', 'to-edit-cc'), {
+      assignedDesigners: [DESIGNER_A], assignedDesignersNames: ['A'], dueDate: '2026-09-01', comment: '', reviewNote: '',
+      ccPlanners: [PLANNER_SD2],
+    }))
+  })
+
+  it('manager 事後編輯時 ccPlanners 型別錯誤（不是 list）→ 擋', async () => {
+    await seedRequest('to-edit-cc-bad', { submittedBy: PLANNER_SD1, region: 'SD1', status: 'assigned', projectName: 'x', assignedDesigners: [DESIGNER_A] })
+    await assertFails(updateDoc(doc(dbAs(MANAGER), 'requests', 'to-edit-cc-bad'), {
+      assignedDesigners: [DESIGNER_A], assignedDesignersNames: ['A'], dueDate: '2026-09-01', comment: '', reviewNote: '',
+      ccPlanners: 'not-a-list',
     }))
   })
 

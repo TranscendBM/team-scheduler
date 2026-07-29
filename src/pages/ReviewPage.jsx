@@ -15,6 +15,7 @@ export default function ReviewPage() {
   const { email } = useAuth()
   const [requests, setRequests] = useState([])
   const [designers, setDesigners] = useState([])
+  const [planners, setPlanners] = useState([])
   const [tab, setTab] = useState('pending')
   const [drafts, setDrafts] = useState({})
   const [busy, setBusy] = useState(null)
@@ -26,8 +27,11 @@ export default function ReviewPage() {
       rows.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))
       setRequests(rows)
     })
-    const u2 = onSnapshot(collection(db, 'users'), snap =>
-      setDesigners(snap.docs.map(d => d.data()).filter(u => u.role === 'designer' && u.active !== false)))
+    const u2 = onSnapshot(collection(db, 'users'), snap => {
+      const users = snap.docs.map(d => d.data())
+      setDesigners(users.filter(u => u.role === 'designer' && u.active !== false))
+      setPlanners(users.filter(u => u.role === 'planner' && u.active !== false))
+    })
     return () => { u1(); u2() }
   }, [])
 
@@ -36,6 +40,7 @@ export default function ReviewPage() {
     const d = drafts[r.id] || {}
     return {
       designers: d.designers ?? (r.assignedDesigners || []),
+      ccPlanners: d.ccPlanners ?? (r.ccPlanners || []),
       note: d.note ?? (r.reviewNote || ''),
       comment: d.comment ?? (r.comment || ''),
       dueDate: d.dueDate ?? (r.dueDate || ''),
@@ -47,9 +52,14 @@ export default function ReviewPage() {
   const setDraft = (id, patch) => setDrafts(d => ({ ...d, [id]: { ...d[id], ...patch } }))
   // email → 顯示名稱(存進需求,讓各頁顯示名字而非帳號)
   const namesOf = (emails) => emails.map(e => designers.find(x => x.email === e)?.displayName || e)
+  const plannerNamesOf = (emails) => emails.map(e => planners.find(x => x.email === e)?.displayName || e)
   function toggleDesigner(r, dEmail) {
     const cur = eff(r).designers
     setDraft(r.id, { designers: cur.includes(dEmail) ? cur.filter(x => x !== dEmail) : [...cur, dEmail], err: '' })
+  }
+  function togglePlannerCc(r, pEmail) {
+    const cur = eff(r).ccPlanners
+    setDraft(r.id, { ccPlanners: cur.includes(pEmail) ? cur.filter(x => x !== pEmail) : [...cur, pEmail] })
   }
 
   async function approve(r) {
@@ -61,6 +71,7 @@ export default function ReviewPage() {
         status: 'assigned',
         assignedDesigners: d.designers,
         assignedDesignersNames: namesOf(d.designers),
+        ccPlanners: d.ccPlanners,
         reviewedBy: email,
         reviewedAt: serverTimestamp(),
         reviewNote: d.note.trim(),
@@ -92,6 +103,7 @@ export default function ReviewPage() {
       await updateDoc(doc(db, 'requests', r.id), {
         assignedDesigners: d.designers,
         assignedDesignersNames: namesOf(d.designers),
+        ccPlanners: d.ccPlanners,
         dueDate: d.dueDate,
         comment: d.comment.trim(),
         reviewNote: d.note.trim(),
@@ -120,6 +132,26 @@ export default function ReviewPage() {
           )
         })}
         {designers.length === 0 && <span className="text-xs text-gray-400">尚無設計師,請先到使用者管理新增</span>}
+      </div>
+    )
+  }
+
+  function PlannerCcPicker({ r }) {
+    const d = eff(r)
+    return (
+      <div className="flex flex-wrap gap-1.5">
+        {planners.map(pz => {
+          const on = d.ccPlanners.includes(pz.email)
+          return (
+            <button type="button" key={pz.email} onClick={() => togglePlannerCc(r, pz.email)}
+              className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${
+                on ? 'border-teal-400 bg-teal-50 text-teal-700' : 'border-gray-200 text-gray-500 hover:bg-gray-50'
+              }`}>
+              {on ? '✓ ' : ''}{pz.displayName || pz.email}
+            </button>
+          )
+        })}
+        {planners.length === 0 && <span className="text-xs text-gray-400">尚無 Planner</span>}
       </div>
     )
   }
@@ -172,6 +204,10 @@ export default function ReviewPage() {
                         <p className="text-xs font-medium text-gray-600 mb-1.5">指派設計師(可多位)</p>
                         <DesignerPicker r={r} />
                       </div>
+                      <div>
+                        <p className="text-xs font-medium text-gray-600 mb-1.5">CC 給 Planner(選填，通知信會額外副本給勾選的人)</p>
+                        <PlannerCcPicker r={r} />
+                      </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                           <p className="text-xs font-medium text-gray-600 mb-1">交期</p>
@@ -221,6 +257,7 @@ export default function ReviewPage() {
                         <span>交期：<b className="text-gray-700">{r.dueDate || '未指定'}</b></span>
                         {r.completedAt && <span>結案：{fmt(r.completedAt)}</span>}
                       </div>
+                      {(r.ccPlanners?.length > 0) && <div>CC：{plannerNamesOf(r.ccPlanners).join('、')}</div>}
                       {r.reviewNote && <div>審核備註：{r.reviewNote}</div>}
                       {r.comment && <div className="text-amber-700 bg-amber-50 rounded px-2 py-1 inline-block">📌 注意事項：{r.comment}</div>}
                       {r.rejectReason && <div className="text-red-500">駁回原因：{r.rejectReason}</div>}
@@ -234,6 +271,10 @@ export default function ReviewPage() {
                       <div>
                         <p className="text-xs font-medium text-gray-600 mb-1.5">指派設計師(可多位)</p>
                         <DesignerPicker r={r} />
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-gray-600 mb-1.5">CC 給 Planner(選填)</p>
+                        <PlannerCcPicker r={r} />
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>

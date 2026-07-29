@@ -13,6 +13,13 @@ initializeApp({ storageBucket: STORAGE_BUCKET })
 const db = getFirestore()
 const bucket = () => getStorage().bucket()
 
+// 組出寄信用的 CC 名單：去重、拿掉空值、拿掉已經在收件人(to)裡的信箱(不必重複收兩次)。
+// extraGroups 可以傳多組陣列(例如 [提交人], 主管清單, 主管另外勾選的 CC planner)，這裡統一攤平處理。
+export function buildCcList(toEmails, ...extraGroups) {
+  const merged = extraGroups.flat().filter(Boolean)
+  return [...new Set(merged)].filter((e) => !toEmails.includes(e))
+}
+
 // 逸出 HTML 特殊字元(& < > " ')，所有插進郵件 HTML 的使用者資料都要先過這一層，避免任何欄位(專案名稱、備註、
 // 檔名、地區…)被拿來注入標籤或跳脫既有屬性。順序很重要：一定要先跳脫 & ，否則後面產生的 &lt; 等實體會被重複跳脫成 &amp;lt;
 export function escapeHtml(str) {
@@ -346,7 +353,7 @@ export function buildHtml(r) {
   </div>`
 }
 
-// status 由 pending → assigned 時，寄信通知指派的設計師（CC 提交人 + 主管）
+// status 由 pending → assigned 時，寄信通知指派的設計師（CC 提交人 + 主管 + 主管核准時另外勾選的 planner）
 export const notifyOnAssign = onDocumentUpdated(
   { document: 'requests/{id}', region: 'asia-east1', secrets: [SMTP_PASS] },
   async (event) => {
@@ -362,7 +369,8 @@ export const notifyOnAssign = onDocumentUpdated(
     const toEmails = await Promise.all(designers.map(resolveNotifyEmail))
     const submitterEmail = await resolveNotifyEmail(after.submittedBy)
     const managers = await getManagerEmails()
-    const cc = [...new Set([submitterEmail, ...managers])].filter(e => e && !toEmails.includes(e))
+    const ccPlanners = await Promise.all((after.ccPlanners || []).map(resolveNotifyEmail))
+    const cc = buildCcList(toEmails, [submitterEmail], managers, ccPlanners)
     try {
       await mailer.send({
         to: toEmails,
@@ -380,7 +388,7 @@ export const notifyOnAssign = onDocumentUpdated(
   }
 )
 
-// 已發稿後主管「編輯指派」新增設計師時，寄信通知「新加入」的設計師（CC 提交人 + 主管）
+// 已發稿後主管「編輯指派」新增設計師時，寄信通知「新加入」的設計師（CC 提交人 + 主管 + 勾選的 planner）
 export const notifyOnReassign = onDocumentUpdated(
   { document: 'requests/{id}', region: 'asia-east1', secrets: [SMTP_PASS] },
   async (event) => {
@@ -397,7 +405,8 @@ export const notifyOnReassign = onDocumentUpdated(
     const toEmails = await Promise.all(added.map(resolveNotifyEmail))
     const submitterEmail = await resolveNotifyEmail(after.submittedBy)
     const managers = await getManagerEmails()
-    const cc = [...new Set([submitterEmail, ...managers])].filter(e => e && !toEmails.includes(e))
+    const ccPlanners = await Promise.all((after.ccPlanners || []).map(resolveNotifyEmail))
+    const cc = buildCcList(toEmails, [submitterEmail], managers, ccPlanners)
     const mailer = getMailer()
     try {
       await mailer.send({

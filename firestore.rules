@@ -35,12 +35,15 @@ service cloud.firestore {
     }
 
     // manager 核准：pending → assigned
+    // ccPlanners 是選填欄位(核准時可另外勾選要 CC 通知的 planner，寄信邏輯見 functions/index.js
+    // notifyOnAssign)，用 .get(key, []) 才不會因為舊資料/沒勾選而擋掉整個核准動作
     function isApproveTransition() {
       return resource.data.status == 'pending'
         && request.resource.data.status == 'assigned'
-        && changedOnly(['status', 'assignedDesigners', 'assignedDesignersNames', 'reviewedBy', 'reviewedAt', 'reviewNote', 'comment', 'dueDate'])
+        && changedOnly(['status', 'assignedDesigners', 'assignedDesignersNames', 'reviewedBy', 'reviewedAt', 'reviewNote', 'comment', 'dueDate', 'ccPlanners'])
         && request.resource.data.assignedDesigners is list
         && request.resource.data.assignedDesigners.size() > 0
+        && request.resource.data.get('ccPlanners', []) is list
         && request.resource.data.reviewedBy == email()
         && request.resource.data.reviewedAt == request.time;
     }
@@ -59,8 +62,9 @@ service cloud.firestore {
     function isManagerMetaEdit() {
       return resource.data.status == request.resource.data.status
         && resource.data.status in ['assigned', 'in_progress', 'reviewing', 'completed']
-        && changedOnly(['assignedDesigners', 'assignedDesignersNames', 'dueDate', 'comment', 'reviewNote'])
-        && request.resource.data.assignedDesigners is list;
+        && changedOnly(['assignedDesigners', 'assignedDesignersNames', 'dueDate', 'comment', 'reviewNote', 'ccPlanners'])
+        && request.resource.data.assignedDesigners is list
+        && request.resource.data.get('ccPlanners', []) is list;
     }
 
     // 設計師：只能依序單步推進，不可跳階、倒退，且時間戳須對應正確欄位
