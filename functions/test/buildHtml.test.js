@@ -36,6 +36,30 @@ test('buildCcList：沒有勾選任何 planner(空陣列)也能正常運作', ()
   assert.deepEqual([...cc].sort(), ['manager@x.com', 'submitter@x.com'])
 })
 
+test('buildHtml：所有文字元素都明寫微軟正黑體字型，不是只放在最外層靠繼承', () => {
+  const html = buildHtml({
+    projectName: 'x', attachments: [{ name: 'a.pdf', url: 'https://firebasestorage.googleapis.com/v0/b/team-scheduler-dc7ce.firebasestorage.app/o/attachments%2Fr1%2Fa.pdf?alt=media&token=t' }],
+  })
+  const styledTags = html.match(/<(h2|p|table|td|a|span)\b[^>]*style="[^"]*"/g) || []
+  assert.ok(styledTags.length > 0, '應該至少有一些帶 style 的文字元素可供檢查')
+  for (const tag of styledTags) {
+    assert.ok(tag.includes("font-family:'Microsoft JhengHei'"), `每個文字元素都應明寫微軟正黑體字型: ${tag}`)
+  }
+})
+
+test('buildHtml：所有 font-size 都不小於 12px', () => {
+  const html = buildHtml({ projectName: 'x' })
+  const sizes = [...html.matchAll(/font-size:(\d+)px/g)].map((m) => Number(m[1]))
+  assert.ok(sizes.length > 0)
+  for (const size of sizes) assert.ok(size >= 12, `font-size 不應小於 12px，實際是 ${size}px`)
+})
+
+test('buildHtml：結尾會附上創見 logo(固定路徑的圖檔，不是會變動的 hash 路徑)', () => {
+  const html = buildHtml({ projectName: 'x' })
+  assert.ok(html.includes('<img src="https://transcend-design.web.app/transcend-logo.svg"'))
+  assert.ok(html.includes('alt="Transcend"'))
+})
+
 test('buildHtml 對 HTML 特殊字元做完整逸出，避免郵件內容被注入標籤', () => {
   const html = buildHtml({ projectName: '<script>alert(1)</script>', submittedBy: 'x@example.com' })
   assert.ok(!html.includes('<script>alert(1)</script>'), '原始未逸出的 <script> 標籤不應出現在輸出中')

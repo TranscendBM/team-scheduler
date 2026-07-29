@@ -303,6 +303,19 @@ const SMTP_PASS = defineSecret('SMTP_PASS') // firebase functions:secrets:set SM
 
 const SITE = 'https://transcend-design.web.app'
 
+// 郵件統一字體:微軟正黑體優先，其餘是非 Windows 裝置(Mac/行動裝置)收信時的退回選項，
+// 不會影響「優先用微軟正黑體」這個需求。email client 對 CSS 繼承支援不一(尤其 Outlook)，
+// 所以每個有文字的元素都要各自明寫 font-family，不能只靠外層 div 繼承。
+const FONT = "'Microsoft JhengHei','微軟正黑體','PingFang TC','Heiti TC',sans-serif"
+
+// 信件結尾的創見 logo。放在 public/ 底下(不像 src/assets 會被 Vite 加上 hash)，
+// 部署後網址固定不變，Cloud Function 才能穩定引用同一個網址。
+const LOGO_URL = `${SITE}/transcend-logo.svg`
+const LOGO_HTML = `
+    <div style="margin-top:20px;padding-top:16px;border-top:1px solid #f0f0f0;text-align:center">
+      <img src="${LOGO_URL}" alt="Transcend" width="120" style="display:inline-block;width:120px;height:auto;max-width:120px" />
+    </div>`
+
 // 每次呼叫建立新的 mailer（pool 連線交給 mailer.cjs 內部管理，用完呼叫 .close()）
 function getMailer() {
   return createMailer({ user: SMTP_USER, pass: SMTP_PASS.value(), fromName: 'Team Scheduler' })
@@ -324,32 +337,33 @@ export function buildHtml(r) {
   ]
   const tr = rows.map(([k, v], i) =>
     `<tr style="background:${i % 2 ? '#f9fafb' : '#fff'}">
-       <td style="padding:8px 12px;color:#6b7280;width:32%;vertical-align:top">${escapeHtml(k)}</td>
-       <td style="padding:8px 12px;font-weight:500;white-space:pre-wrap">${escapeHtml(v)}</td>
+       <td style="font-family:${FONT};padding:8px 12px;color:#6b7280;width:32%;vertical-align:top;font-size:13px">${escapeHtml(k)}</td>
+       <td style="font-family:${FONT};padding:8px 12px;font-weight:500;white-space:pre-wrap;font-size:13px">${escapeHtml(v)}</td>
      </tr>`).join('')
   const atts = (r.attachments || [])
   const attHtml = atts.length
     ? `<div style="margin-top:16px">
-         <p style="font-size:13px;color:#6b7280;margin:0 0 6px">附件</p>
+         <p style="font-family:${FONT};font-size:13px;color:#6b7280;margin:0 0 6px">附件</p>
          ${atts.map(a => {
            const label = `📄 ${escapeHtml(a.name)}`
            const safeUrl = safeAttachmentUrl(a.url)
            return safeUrl
-             ? `<a href="${escapeHtml(safeUrl)}" style="display:inline-block;margin:0 6px 6px 0;background:#f3f4f6;color:#374151;text-decoration:none;padding:6px 12px;border-radius:6px;font-size:12px">${label}</a>`
-             : `<span style="display:inline-block;margin:0 6px 6px 0;background:#f3f4f6;color:#9ca3af;padding:6px 12px;border-radius:6px;font-size:12px">${label}（連結無效）</span>`
+             ? `<a href="${escapeHtml(safeUrl)}" style="font-family:${FONT};display:inline-block;margin:0 6px 6px 0;background:#f3f4f6;color:#374151;text-decoration:none;padding:6px 12px;border-radius:6px;font-size:12px">${label}</a>`
+             : `<span style="font-family:${FONT};display:inline-block;margin:0 6px 6px 0;background:#f3f4f6;color:#9ca3af;padding:6px 12px;border-radius:6px;font-size:12px">${label}（連結無效）</span>`
          }).join('')}
        </div>`
     : ''
   return `
-  <div style="font-family:'Microsoft JhengHei','微軟正黑體','PingFang TC','Heiti TC',sans-serif;color:#1f2937;max-width:560px;margin:auto;padding:24px">
+  <div style="font-family:${FONT};color:#1f2937;max-width:560px;margin:auto;padding:24px">
     <div style="background:#eff6ff;border-left:4px solid #3b82f6;padding:14px 18px;border-radius:8px;margin-bottom:18px">
-      <h2 style="margin:0 0 4px;font-size:17px">📌 新設計任務已發稿</h2>
-      <p style="margin:0;color:#6b7280;font-size:13px">你被指派了一項設計需求，詳情如下</p>
+      <h2 style="font-family:${FONT};margin:0 0 4px;font-size:17px">📌 新設計任務已發稿</h2>
+      <p style="font-family:${FONT};margin:0;color:#6b7280;font-size:13px">你被指派了一項設計需求，詳情如下</p>
     </div>
-    <table style="width:100%;border-collapse:collapse;font-size:13px;border:1px solid #f0f0f0;border-radius:8px;overflow:hidden">${tr}</table>
+    <table style="font-family:${FONT};width:100%;border-collapse:collapse;font-size:13px;border:1px solid #f0f0f0;border-radius:8px;overflow:hidden">${tr}</table>
     ${attHtml}
-    <a href="${SITE}/#/requests" style="display:inline-block;margin-top:20px;background:#2563eb;color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-size:14px">前往需求總表 →</a>
-    <p style="color:#9ca3af;font-size:12px;margin-top:24px">此信由 Team Scheduler 於需求核准發稿時自動寄出。</p>
+    <a href="${SITE}/#/requests" style="font-family:${FONT};display:inline-block;margin-top:20px;background:#2563eb;color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-size:14px">前往需求總表 →</a>
+    <p style="font-family:${FONT};color:#9ca3af;font-size:12px;margin-top:24px">此信由 Team Scheduler 於需求核准發稿時自動寄出。</p>
+    ${LOGO_HTML}
   </div>`
 }
 
@@ -440,18 +454,19 @@ export const notifyOnReject = onDocumentUpdated(
     const cc = [...new Set(managers)].filter(e => e && e !== submitterEmail)
 
     const html = `
-    <div style="font-family:'Microsoft JhengHei','微軟正黑體','PingFang TC','Heiti TC',sans-serif;color:#1f2937;max-width:560px;margin:auto;padding:24px">
+    <div style="font-family:${FONT};color:#1f2937;max-width:560px;margin:auto;padding:24px">
       <div style="background:#fef2f2;border-left:4px solid #ef4444;padding:14px 18px;border-radius:8px;margin-bottom:18px">
-        <h2 style="margin:0 0 4px;font-size:17px">❌ 設計需求已駁回</h2>
-        <p style="margin:0;color:#6b7280;font-size:13px">你提交的設計需求未通過審核</p>
+        <h2 style="font-family:${FONT};margin:0 0 4px;font-size:17px">❌ 設計需求已駁回</h2>
+        <p style="font-family:${FONT};margin:0;color:#6b7280;font-size:13px">你提交的設計需求未通過審核</p>
       </div>
-      <table style="width:100%;border-collapse:collapse;font-size:13px;border:1px solid #f0f0f0;border-radius:8px;overflow:hidden">
-        <tr><td style="padding:8px 12px;color:#6b7280;width:32%">專案名稱</td><td style="padding:8px 12px;font-weight:500">${escapeHtml(after.projectName)}</td></tr>
-        <tr style="background:#f9fafb"><td style="padding:8px 12px;color:#6b7280">地區</td><td style="padding:8px 12px">${escapeHtml(after.region)}</td></tr>
-        <tr><td style="padding:8px 12px;color:#6b7280">駁回原因</td><td style="padding:8px 12px;color:#dc2626;font-weight:500;white-space:pre-wrap">${escapeHtml(after.rejectReason || '（未填寫）')}</td></tr>
+      <table style="font-family:${FONT};width:100%;border-collapse:collapse;font-size:13px;border:1px solid #f0f0f0;border-radius:8px;overflow:hidden">
+        <tr><td style="font-family:${FONT};padding:8px 12px;color:#6b7280;width:32%;font-size:13px">專案名稱</td><td style="font-family:${FONT};padding:8px 12px;font-weight:500;font-size:13px">${escapeHtml(after.projectName)}</td></tr>
+        <tr style="background:#f9fafb"><td style="font-family:${FONT};padding:8px 12px;color:#6b7280;font-size:13px">地區</td><td style="font-family:${FONT};padding:8px 12px;font-size:13px">${escapeHtml(after.region)}</td></tr>
+        <tr><td style="font-family:${FONT};padding:8px 12px;color:#6b7280;font-size:13px">駁回原因</td><td style="font-family:${FONT};padding:8px 12px;color:#dc2626;font-weight:500;white-space:pre-wrap;font-size:13px">${escapeHtml(after.rejectReason || '（未填寫）')}</td></tr>
       </table>
-      <a href="${SITE}/#/my-requests" style="display:inline-block;margin-top:20px;background:#2563eb;color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-size:14px">前往我的需求 →</a>
-      <p style="color:#9ca3af;font-size:12px;margin-top:24px">此信由 Team Scheduler 於需求駁回時自動寄出。</p>
+      <a href="${SITE}/#/my-requests" style="font-family:${FONT};display:inline-block;margin-top:20px;background:#2563eb;color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-size:14px">前往我的需求 →</a>
+      <p style="font-family:${FONT};color:#9ca3af;font-size:12px;margin-top:24px">此信由 Team Scheduler 於需求駁回時自動寄出。</p>
+      ${LOGO_HTML}
     </div>`
 
     const mailer = getMailer()
