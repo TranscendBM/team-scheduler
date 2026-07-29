@@ -5,6 +5,12 @@ import { statusMeta, ACTIVE_STATUSES } from '../utils/requestConstants'
 import RequestDetailModal from '../components/RequestDetailModal'
 
 const DAY = 24 * 60 * 60 * 1000
+// 設計師固定顯示順序，清單外的設計師依字母序排在後面
+const DESIGNER_ORDER = ['Sherry', 'Tingwei', 'Yuna', 'Abby', 'Elvis-Designer', 'Elvis']
+function designerRank(name) {
+  const i = DESIGNER_ORDER.indexOf(name)
+  return i === -1 ? 999 : i
+}
 const BAR_COLORS = {
   assigned: 'bg-blue-400',
   in_progress: 'bg-indigo-500',
@@ -35,7 +41,12 @@ export default function RequestsDashboardPage() {
 
   useEffect(() => {
     const u1 = onSnapshot(collection(db, 'users'), snap =>
-      setDesigners(snap.docs.map(d => d.data()).filter(u => u.role === 'designer' && u.active !== false)))
+      setDesigners(snap.docs.map(d => d.data())
+        .filter(u => u.role === 'designer' && u.active !== false)
+        .sort((a, b) => {
+          const ra = designerRank(a.displayName), rb = designerRank(b.displayName)
+          return ra !== rb ? ra - rb : (a.displayName || '').localeCompare(b.displayName || '')
+        })))
     const u2 = onSnapshot(collection(db, 'requests'), snap =>
       setRequests(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
     return () => { u1(); u2() }

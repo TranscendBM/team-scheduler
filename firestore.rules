@@ -1,21 +1,96 @@
 rules_version = '2';
 
 // 角色由 users collection 決定（白名單制，不綁公司網域）。
-// doc id = 小寫 email。只有列在 users 裡的帳號能存取任何資料。
+// doc id = 小寫 email。只有列在 users 裡、且 active != false 的帳號能存取任何資料。
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // ── 基礎工具函式 ──────────────────────────────────────────────
     function signedIn() { return request.auth != null; }
-    function email() { return request.auth.token.email.lower(); }
+
+    // 防禦性處理：某些登入方式（自訂 token 等）可能沒有 email claim，
+    // 直接對 null 呼叫 .lower() 會讓整條規則式求值出錯；改用 get() 給預設值。
+    function email() { return request.auth.token.get('email', '').lower(); }
+
+    // 白名單 + 帳號啟用中，才算「whitelisted」。
+    // exists() 先擋掉「使用者文件不存在」（含已被刪除的情況），
+    // 再檢查 active 欄位（未設定視為啟用，維持既有資料相容）。
     function whitelisted() {
-      return signedIn() && exists(/databases/$(database)/documents/users/$(email()));
+      return signedIn() && email() != ''
+        && exists(/databases/$(database)/documents/users/$(email()))
+        && get(/databases/$(database)/documents/users/$(email())).data.get('active', true) != false;
     }
     function udoc() { return get(/databases/$(database)/documents/users/$(email())); }
     function role() { return udoc().data.role; }
     function myRegions() { return udoc().data.get('regions', []); }
     function isManager() { return whitelisted() && role() == 'manager'; }
+
     function changedOnly(keys) {
       return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
+    }
+
+    // ── requests 狀態機 ──────────────────────────────────────────
+    function isValidStatus(s) {
+      return s in ['pending', 'rejected', 'assigned', 'in_progress', 'reviewing', 'completed'];
+    }
+
+    // manager 核准：pending → assigned
+    function isApproveTransition() {
+      return resource.data.status == 'pending'
+        && request.resource.data.status == 'assigned'
+        && changedOnly(['status', 'assignedDesigners', 'assignedDesignersNames', 'reviewedBy', 'reviewedAt', 'reviewNote', 'comment', 'dueDate'])
+        && request.resource.data.assignedDesigners is list
+        && request.resource.data.assignedDesigners.size() > 0
+        && request.resource.data.reviewedBy == email()
+        && request.resource.data.reviewedAt == request.time;
+    }
+
+    // manager 駁回：pending → rejected
+    function isRejectTransition() {
+      return resource.data.status == 'pending'
+        && request.resource.data.status == 'rejected'
+        && changedOnly(['status', 'reviewedBy', 'reviewedAt', 'rejectReason'])
+        && request.resource.data.rejectReason is string
+        && request.resource.data.rejectReason.size() > 0
+        && request.resource.data.reviewedBy == email();
+    }
+
+    // manager 事後編輯已審核需求的指派/交期/備註（不可改變 status）
+    function isManagerMetaEdit() {
+      return resource.data.status == request.resource.data.status
+        && resource.data.status in ['assigned', 'in_progress', 'reviewing', 'completed']
+        && changedOnly(['assignedDesigners', 'assignedDesignersNames', 'dueDate', 'comment', 'reviewNote'])
+        && request.resource.data.assignedDesigners is list;
+    }
+
+    // 設計師：只能依序單步推進，不可跳階、倒退，且時間戳須對應正確欄位
+    function isDesignerTransition() {
+      return (resource.data.status == 'assigned' && request.resource.data.status == 'in_progress'
+              && changedOnly(['status', 'startedAt']) && request.resource.data.startedAt == request.time)
+          || (resource.data.status == 'in_progress' && request.resource.data.status == 'reviewing'
+              && changedOnly(['status', 'reviewingAt']) && request.resource.data.reviewingAt == request.time)
+          || (resource.data.status == 'reviewing' && request.resource.data.status == 'completed'
+              && changedOnly(['status', 'completedAt']) && request.resource.data.completedAt == request.time);
+    }
+
+    // 建立需求時的必要欄位／型別／允許欄位驗證
+    function isValidRequestCreate() {
+      let d = request.resource.data;
+      return d.keys().hasOnly([
+               'urgent', 'region', 'projectName', 'docTypes', 'dueDate', 'description',
+               'attachments', 'submittedBy', 'submittedByName', 'status', 'createdAt'
+             ])
+        && d.projectName is string && d.projectName.size() > 0 && d.projectName.size() <= 200
+        && d.region is string && d.region.size() > 0
+        && d.docTypes is list
+        && d.dueDate is string
+        && d.description is string
+        && d.urgent is bool
+        && d.attachments is list && d.attachments.size() <= 10
+        && d.submittedBy == email()
+        && d.submittedByName is string
+        && d.status == 'pending'
+        && d.createdAt == request.time;
     }
 
     // 使用者名單：自己可讀自己那筆（登入時查角色用）；主管可讀寫全部
@@ -30,39 +105,51 @@ service cloud.firestore {
         || (whitelisted() && resource.data.submittedBy == email())                       // planner 看自己送的
         || (whitelisted() && email() in resource.data.get('assignedDesigners', []))      // designer 看指派給自己的
         || (whitelisted() && resource.data.region in myRegions());                       // planner 看負責區域的
-      allow create: if whitelisted()
-        && request.resource.data.submittedBy == email()
-        && request.resource.data.status == 'pending';
-      allow update: if isManager()
-        // 設計師:改自己被指派任務的狀態
-        || (whitelisted()
-            && email() in resource.data.get('assignedDesigners', [])
-            && changedOnly(['status', 'startedAt', 'reviewingAt', 'completedAt']))
-        // planner:只能把負責區域的需求「結案」
-        || (whitelisted()
-            && resource.data.region in myRegions()
-            && request.resource.data.status == 'completed'
-            && changedOnly(['status', 'completedAt']))
-        // 提交人:需求仍在待審核時可編輯內容（不可改狀態/提交人）
-        || (whitelisted()
-            && resource.data.submittedBy == email()
-            && resource.data.status == 'pending'
-            && request.resource.data.status == 'pending'
-            && changedOnly(['urgent', 'region', 'projectName', 'docTypes', 'dueDate', 'description', 'attachments']));
+
+      allow create: if whitelisted() && isValidRequestCreate();
+
+      allow update: if
+          // manager：核准 / 駁回 / 事後編輯，且 status 必須落在既定 enum 內
+          (isManager() && isValidStatus(request.resource.data.status)
+            && (isApproveTransition() || isRejectTransition() || isManagerMetaEdit()))
+          // 設計師：改自己被指派任務的狀態，只能依合法流程單步推進
+          || (whitelisted() && email() in resource.data.get('assignedDesigners', []) && isDesignerTransition())
+          // planner：只能把「負責區域」且「非 pending/rejected」的需求改成 completed
+          || (whitelisted()
+              && resource.data.region in myRegions()
+              && resource.data.status in ['assigned', 'in_progress', 'reviewing']
+              && request.resource.data.status == 'completed'
+              && changedOnly(['status', 'completedAt'])
+              && request.resource.data.completedAt == request.time)
+          // 提交人：需求仍在待審核時可編輯內容（不可改狀態/提交人），並驗證型別
+          || (whitelisted()
+              && resource.data.submittedBy == email()
+              && resource.data.status == 'pending'
+              && request.resource.data.status == 'pending'
+              && changedOnly(['urgent', 'region', 'projectName', 'docTypes', 'dueDate', 'description', 'attachments'])
+              && request.resource.data.projectName is string && request.resource.data.projectName.size() > 0
+              && request.resource.data.region is string && request.resource.data.region.size() > 0
+              && request.resource.data.docTypes is list
+              && request.resource.data.attachments is list && request.resource.data.attachments.size() <= 10);
+
       allow delete: if isManager();
     }
 
-    // 既有 team-scheduler 資料：開放給已登入白名單使用者讀寫（維持原功能，之後可再依角色收斂）
-    match /projects/{id}     { allow read, write: if whitelisted(); }
-    match /people/{id}       { allow read, write: if whitelisted(); }
-    match /leaves/{id}       { allow read, write: if whitelisted(); }
-    // settings/permissions 只有 manager 能寫（避免非主管改自己權限）；其餘 settings 維持白名單可寫
+    // 既有 team-scheduler 資料：讀取開放白名單，寫入收斂為僅 manager
+    // （前端本來就以 isManager 隱藏這些頁面的新增/編輯/刪除按鈕，這裡讓後端規則與前端一致，
+    //   不再讓「隱藏按鈕」變成唯一防線）
+    match /projects/{id}     { allow read: if whitelisted(); allow write: if isManager(); }
+    match /people/{id}       { allow read: if whitelisted(); allow write: if isManager(); }
+    match /leaves/{id}       { allow read: if whitelisted(); allow write: if isManager(); }
+
+    // settings/permissions 只有 manager 能寫；其餘 settings（里程碑規則、設計類別）也收斂為 manager 可寫
     match /settings/{id} {
       allow read: if whitelisted();
-      allow write: if isManager() || (whitelisted() && id != 'permissions');
+      allow write: if isManager();
     }
-    match /hblPayments/{id}  { allow read, write: if whitelisted(); }
-    match /hblSchedule/{id}  { allow read, write: if whitelisted(); }
-    match /hblAdStatus/{id}  { allow read, write: if whitelisted(); }
+
+    match /hblPayments/{id}  { allow read: if whitelisted(); allow write: if isManager(); }
+    match /hblSchedule/{id}  { allow read: if whitelisted(); allow write: if isManager(); }
+    match /hblAdStatus/{id}  { allow read: if whitelisted(); allow write: if isManager(); }
   }
 }

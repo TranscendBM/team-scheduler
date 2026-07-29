@@ -19,7 +19,7 @@
       ]
     },
     {
-      "site": "team-scheduler-dc7ce",
+      "site": "ts-mkd",
       "public": "dist",
       "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
       "rewrites": [
@@ -47,5 +47,10 @@
   "functions": {
     "source": "functions",
     "runtime": "nodejs20"
+  },
+  "emulators": {
+    "firestore": { "port": 8080 },
+    "storage": { "port": 9199 },
+    "ui": { "enabled": false }
   }
 }

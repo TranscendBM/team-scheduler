@@ -6,7 +6,7 @@ import * as logger from 'firebase-functions/logger'
 import { initializeApp } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
 import { getStorage } from 'firebase-admin/storage'
-import nodemailer from 'nodemailer'
+import { createMailer } from './mailer.cjs'
 
 initializeApp({ storageBucket: 'team-scheduler-dc7ce.firebasestorage.app' })
 const db = getFirestore()
@@ -40,20 +40,22 @@ async function getManagerEmails() {
   }
 }
 
-// 寄件身份（過渡方案：個人 Gmail + App Password）
-const GMAIL_USER = 'tselvis814@gmail.com'
-const GMAIL_APP_PASSWORD = defineSecret('GMAIL_APP_PASSWORD') // firebase functions:secrets:set 設定
+// 寄件身份：改用公司 mail2000 信箱（email.transcend-info.com），不再用個人 Gmail 過渡方案。
+// 用公司網域寄信對公司內部收件者而言天生比外部 Gmail 更不容易被判 spam
+// （SPF 已涵蓋這台主機，詳見 MAIL2000_README.md）。
+// 連線細節（port 587 STARTTLS、中介憑證、限速）全部封裝在 mailer.cjs，不要重新試錯。
+const SMTP_USER = 'elvis_cheng@transcend-info.com'
+const SMTP_PASS = defineSecret('SMTP_PASS') // firebase functions:secrets:set SMTP_PASS 設定，半年會過期需更新
 
 const SITE = 'https://transcend-design.web.app'
 
-function makeTransporter() {
-  return nodemailer.createTransport({
-    host: 'smtp.gmail.com', port: 465, secure: true,
-    auth: { user: GMAIL_USER, pass: GMAIL_APP_PASSWORD.value() },
-  })
+// 每次呼叫建立新的 mailer（pool 連線交給 mailer.cjs 內部管理，用完呼叫 .close()）
+function getMailer() {
+  return createMailer({ user: SMTP_USER, pass: SMTP_PASS.value(), fromName: 'Team Scheduler' })
 }
 
-function buildHtml(r) {
+// export 供 test/buildHtml.test.js 做純函式測試（不連任何 Firebase 服務）
+export function buildHtml(r) {
   const docTypes = (r.docTypes || []).join('、')
   const rows = [
     ['專案名稱', r.projectName || r.title || ''],
@@ -79,7 +81,7 @@ function buildHtml(r) {
        </div>`
     : ''
   return `
-  <div style="font-family:sans-serif;color:#1f2937;max-width:560px;margin:auto;padding:24px">
+  <div style="font-family:'Microsoft JhengHei','微軟正黑體','PingFang TC','Heiti TC',sans-serif;color:#1f2937;max-width:560px;margin:auto;padding:24px">
     <div style="background:#eff6ff;border-left:4px solid #3b82f6;padding:14px 18px;border-radius:8px;margin-bottom:18px">
       <h2 style="margin:0 0 4px;font-size:17px">📌 新設計任務已發稿</h2>
       <p style="margin:0;color:#6b7280;font-size:13px">你被指派了一項設計需求，詳情如下</p>
@@ -93,7 +95,7 @@ function buildHtml(r) {
 
 // status 由 pending → assigned 時，寄信通知指派的設計師（CC 提交人 + 主管）
 export const notifyOnAssign = onDocumentUpdated(
-  { document: 'requests/{id}', region: 'asia-east1', secrets: [GMAIL_APP_PASSWORD] },
+  { document: 'requests/{id}', region: 'asia-east1', secrets: [SMTP_PASS] },
   async (event) => {
     const before = event.data?.before?.data()
     const after = event.data?.after?.data()
@@ -102,15 +104,14 @@ export const notifyOnAssign = onDocumentUpdated(
     const designers = after.assignedDesigners || []
     if (designers.length === 0) { logger.warn('無 assignedDesigners，略過'); return }
 
-    const transporter = makeTransporter()
+    const mailer = getMailer()
     // 收件人 / CC 都改用「公司通知信箱」（查不到才退回登入 email）
     const toEmails = await Promise.all(designers.map(resolveNotifyEmail))
     const submitterEmail = await resolveNotifyEmail(after.submittedBy)
     const managers = await getManagerEmails()
     const cc = [...new Set([submitterEmail, ...managers])].filter(e => e && !toEmails.includes(e))
     try {
-      await transporter.sendMail({
-        from: `Team Scheduler <${GMAIL_USER}>`,
+      await mailer.send({
         to: toEmails,
         cc,
         subject: `[設計需求] ${after.projectName || '新任務'}${after.urgent ? '（🔥急件）' : ''}`,
@@ -120,13 +121,15 @@ export const notifyOnAssign = onDocumentUpdated(
     } catch (e) {
       logger.error('寄信失敗', e)
       throw e
+    } finally {
+      await mailer.close()
     }
   }
 )
 
 // 已發稿後主管「編輯指派」新增設計師時，寄信通知「新加入」的設計師（CC 提交人 + 主管）
 export const notifyOnReassign = onDocumentUpdated(
-  { document: 'requests/{id}', region: 'asia-east1', secrets: [GMAIL_APP_PASSWORD] },
+  { document: 'requests/{id}', region: 'asia-east1', secrets: [SMTP_PASS] },
   async (event) => {
     const before = event.data?.before?.data()
     const after = event.data?.after?.data()
@@ -142,9 +145,9 @@ export const notifyOnReassign = onDocumentUpdated(
     const submitterEmail = await resolveNotifyEmail(after.submittedBy)
     const managers = await getManagerEmails()
     const cc = [...new Set([submitterEmail, ...managers])].filter(e => e && !toEmails.includes(e))
+    const mailer = getMailer()
     try {
-      await makeTransporter().sendMail({
-        from: `Team Scheduler <${GMAIL_USER}>`,
+      await mailer.send({
         to: toEmails,
         cc,
         subject: `[設計需求] ${after.projectName || '任務'}${after.urgent ? '（🔥急件）' : ''}（新增指派）`,
@@ -154,13 +157,15 @@ export const notifyOnReassign = onDocumentUpdated(
     } catch (e) {
       logger.error('新增指派通知寄信失敗', e)
       throw e
+    } finally {
+      await mailer.close()
     }
   }
 )
 
 // status 由 pending → rejected 時，寄信通知提交人（CC 所有主管）
 export const notifyOnReject = onDocumentUpdated(
-  { document: 'requests/{id}', region: 'asia-east1', secrets: [GMAIL_APP_PASSWORD] },
+  { document: 'requests/{id}', region: 'asia-east1', secrets: [SMTP_PASS] },
   async (event) => {
     const before = event.data?.before?.data()
     const after = event.data?.after?.data()
@@ -173,7 +178,7 @@ export const notifyOnReject = onDocumentUpdated(
     const cc = [...new Set(managers)].filter(e => e && e !== submitterEmail)
 
     const html = `
-    <div style="font-family:sans-serif;color:#1f2937;max-width:560px;margin:auto;padding:24px">
+    <div style="font-family:'Microsoft JhengHei','微軟正黑體','PingFang TC','Heiti TC',sans-serif;color:#1f2937;max-width:560px;margin:auto;padding:24px">
       <div style="background:#fef2f2;border-left:4px solid #ef4444;padding:14px 18px;border-radius:8px;margin-bottom:18px">
         <h2 style="margin:0 0 4px;font-size:17px">❌ 設計需求已駁回</h2>
         <p style="margin:0;color:#6b7280;font-size:13px">你提交的設計需求未通過審核</p>
@@ -187,9 +192,9 @@ export const notifyOnReject = onDocumentUpdated(
       <p style="color:#9ca3af;font-size:12px;margin-top:24px">此信由 Team Scheduler 於需求駁回時自動寄出。</p>
     </div>`
 
+    const mailer = getMailer()
     try {
-      await makeTransporter().sendMail({
-        from: `Team Scheduler <${GMAIL_USER}>`,
+      await mailer.send({
         to: submitterEmail,
         cc,
         subject: `[設計需求駁回] ${after.projectName || ''}`,
@@ -199,6 +204,8 @@ export const notifyOnReject = onDocumentUpdated(
     } catch (e) {
       logger.error('駁回通知寄信失敗', e)
       throw e
+    } finally {
+      await mailer.close()
     }
   }
 )
@@ -268,5 +275,23 @@ export const previewFile = onRequest(
       logger.error('previewFile 失敗', e.message)
       res.status(500).send('error')
     }
+  }
+)
+
+// 每天 02:00(台灣時間)抓一次美金匯率(frankfurter.dev,免費、不需金鑰、採歐洲央行公告匯率)
+// 寫入 settings/exchangeRates,前端秀展編輯視窗用來「建議換算」,不會自動覆蓋既有預算數字
+export const updateExchangeRates = onSchedule(
+  { schedule: '0 2 * * *', timeZone: 'Asia/Taipei', region: 'asia-east1' },
+  async () => {
+    const res = await fetch('https://api.frankfurter.dev/v1/latest?from=USD')
+    if (!res.ok) throw new Error(`frankfurter.dev 回應失敗:${res.status}`)
+    const data = await res.json()
+    await db.collection('settings').doc('exchangeRates').set({
+      base: 'USD',
+      rates: data.rates,
+      date: data.date,
+      updatedAt: new Date().toISOString(),
+    })
+    logger.info('匯率更新完成', { date: data.date })
   }
 )

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import transcendLogo from '../assets/transcend-logo.svg'
 
 export default function LoginPage() {
   const { login, logout, user, unauthorized } = useAuth()
@@ -39,9 +40,9 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
       <div className="bg-white rounded-2xl shadow-lg p-10 w-full max-w-sm text-center">
-        <div className="text-5xl mb-4">📊</div>
-        <h1 className="text-2xl font-bold text-gray-800 mb-1">Team Scheduler</h1>
-        <p className="text-gray-500 text-sm mb-8">設計師 & Planner 排程管理系統</p>
+        <img src={transcendLogo} alt="創見資訊" className="h-8 mx-auto mb-5" />
+        <h1 className="text-2xl font-bold text-gray-800 mb-1">行銷設計部</h1>
+        <p className="text-gray-500 text-sm mb-8">專案管理系統</p>
         <button
           onClick={handleLogin}
           className="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 text-gray-700 py-3 px-6 rounded-xl font-medium hover:bg-gray-50 hover:shadow-md transition-all"

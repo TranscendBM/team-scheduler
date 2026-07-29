@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { doc, getDoc, setDoc } from 'firebase/firestore'
 import { db } from '../firebase'
-import { PAGES, canAccess } from '../utils/pages'
+import { ADJUSTABLE_PAGES, canAccess } from '../utils/pages'
 
 const ROLE_COLS = [
   { key: 'manager', label: '主管', fixed: true },
@@ -32,9 +32,9 @@ export default function PermissionsPage() {
 
   async function handleSave() {
     setSaving(true)
-    // 只存 designer / planner 的覆蓋值（manager 永遠全開，不存）
+    // 只存 designer / planner 的覆蓋值（manager 永遠全開；fixed 頁面不受此矩陣控制，不存）
     const clean = {}
-    for (const p of PAGES) {
+    for (const p of ADJUSTABLE_PAGES) {
       clean[p.key] = {
         designer: canAccess(perms, p.key, 'designer'),
         planner: canAccess(perms, p.key, 'planner'),
@@ -60,7 +60,7 @@ export default function PermissionsPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {PAGES.map(p => (
+            {ADJUSTABLE_PAGES.map(p => (
               <tr key={p.key} className="hover:bg-gray-50">
                 <td className="px-4 py-3 text-gray-700">{p.icon} {p.label}</td>
                 {ROLE_COLS.map(c => (
@@ -87,7 +87,7 @@ export default function PermissionsPage() {
         {saved && <span className="text-sm text-emerald-600">✓ 已儲存</span>}
       </div>
       <p className="text-xs text-gray-400 mt-4">
-        註:「使用者管理」與「權限設定」為系統管理頁,固定僅主管可見,不列在此矩陣。
+        註:「使用者管理」「權限設定」「需求審核」「設計師儀表板」固定僅主管可用,不列在此矩陣。
       </p>
     </div>
   )

@@ -3,12 +3,12 @@ import { useAuth } from '../contexts/AuthContext'
 import { usePermissions } from '../contexts/PermissionsContext'
 import { useNotifications } from '../contexts/NotificationsContext'
 import { PAGES, GROUPS } from '../utils/pages'
+import transcendLogo from '../assets/transcend-logo.svg'
 
 const ROLE_LABELS = { manager: '主管', designer: '設計師', planner: 'Planner' }
 
-// 系統管理頁（固定僅 manager）
+// 系統管理頁（固定僅 manager）。使用者管理已併入「人員管理」，不再獨立列出
 const ADMIN_ITEMS = [
-  { to: '/users', label: '使用者管理', icon: '🔑' },
   { to: '/permissions', label: '權限設定', icon: '🛡️' },
 ]
 
@@ -34,8 +34,9 @@ export default function Layout() {
       {/* Sidebar */}
       <aside className="w-56 bg-white border-r border-gray-200 flex flex-col shadow-sm">
         <div className="px-5 py-4 border-b border-gray-100">
-          <h1 className="text-lg font-bold text-gray-800">Team Scheduler</h1>
-          <p className="text-xs text-gray-400 mt-0.5">排程管理系統</p>
+          <img src={transcendLogo} alt="創見資訊" className="h-6 mb-2" />
+          <h1 className="text-lg font-bold text-gray-800">行銷設計部</h1>
+          <p className="text-xs text-gray-400 mt-0.5">專案管理系統</p>
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">

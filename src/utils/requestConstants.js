@@ -8,7 +8,7 @@ export const STATUS = {
   rejected:    { label: '已駁回',     color: `${BADGE} bg-red-100 text-red-700`,        dot: 'bg-red-400' },
   assigned:    { label: '已發稿',     color: `${BADGE} bg-blue-100 text-blue-700`,      dot: 'bg-blue-400' },
   in_progress: { label: '設計中',     color: `${BADGE} bg-indigo-100 text-indigo-700`,  dot: 'bg-indigo-400' },
-  reviewing:   { label: '設計確認中', color: `${BADGE} bg-purple-100 text-purple-700`,  dot: 'bg-purple-400' },
+  reviewing:   { label: '設計確認中', color: `${BADGE} bg-green-100 text-green-700`,    dot: 'bg-green-500' },
   completed:   { label: '已結案',     color: `${BADGE} bg-emerald-100 text-emerald-700`,dot: 'bg-emerald-400' },
 }
 
@@ -33,7 +33,7 @@ export const STATUS_TIMESTAMP = {
 }
 
 // 地區（單選）
-export const REGIONS = ['HQ', 'SD1', 'SD2', 'SD3', 'SD4', 'SD5', 'CN', 'HK', 'JP', 'KR', 'US', 'GM', 'NL', 'UK']
+export const REGIONS = ['HQ', 'TEC', 'SD1', 'SD2', 'SD3', 'SD4', 'SD5', 'CN', 'HK', 'JP', 'KR', 'US', 'GM', 'NL', 'UK']
 
 // 稿件類型（可複選）
 export const DOC_TYPES = ['DM', 'Poster', 'Display Board', 'BTO', '其他印刷品', 'Photo', 'eDM', 'PEP', 'Banner', '網頁 / HTML', 'Video', '其他']

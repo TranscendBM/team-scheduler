@@ -26,7 +26,7 @@ const KV_ROWS = [
 ]
 
 export default function SettingsPage() {
-  const { isAdmin } = useAuth()
+  const { isManager } = useAuth()
   const [rules, setRules] = useState(DEFAULT_RULES)
   const [original, setOriginal] = useState(DEFAULT_RULES)
   const [saving, setSaving] = useState(false)
@@ -78,7 +78,7 @@ export default function SettingsPage() {
     const val = getVal(baseKey, level)
     return (
       <div className="flex items-center justify-center gap-1">
-        {isAdmin ? (
+        {isManager ? (
           <>
             <button onClick={() => setVal(baseKey, level, -1)} disabled={val <= 0}
               className="w-6 h-6 flex items-center justify-center rounded border border-gray-200 hover:bg-gray-100 text-gray-600 disabled:opacity-30 text-sm font-bold">−</button>
@@ -101,7 +101,7 @@ export default function SettingsPage() {
           <h2 className="text-xl font-bold text-gray-800">里程碑設定</h2>
           <p className="text-sm text-gray-400">依秀展 Loading 程度設定各工作項目的提前週數</p>
         </div>
-        {isAdmin && (
+        {isManager && (
           <div className="flex items-center gap-2">
             {saved && <span className="text-sm text-emerald-600 font-medium">✓ 已儲存</span>}
             <button onClick={handleReset} className="px-3 py-2 text-sm text-gray-500 hover:bg-gray-100 rounded-lg">
@@ -227,7 +227,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {!isAdmin && (
+        {!isManager && (
           <p className="text-sm text-gray-400 text-center">只有管理者可以修改設定</p>
         )}
       </div>

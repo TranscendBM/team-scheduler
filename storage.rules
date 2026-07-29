@@ -1,14 +1,74 @@
 rules_version = '2';
 
 // 附件路徑：attachments/{requestId}/{fileName}
-// 已登入者可讀寫；單檔上限 10MB。
-// （Storage 規則無法讀 Firestore，故以「已登入」為界；系統流程本身已限白名單登入才進得了表單。）
+//
+// Storage Rules 本身無法讀 Firestore 的「集合」查詢，但可以用 firestore.get()/firestore.exists()
+// 對「單一文件」做跨服務查詢（Firebase 官方支援的 cross-service rules 能力）。
+// 用這個能力比對 users（白名單/啟用狀態/角色）與 requests（提交人/狀態），
+// 而不是只判斷 request.auth != null。
 service firebase.storage {
   match /b/{bucket}/o {
+
+    function email() {
+      return request.auth != null && 'email' in request.auth.token
+        ? request.auth.token.email.lower()
+        : '';
+    }
+
+    function userExists() {
+      return request.auth != null && email() != ''
+        && firestore.exists(/databases/(default)/documents/users/$(email()));
+    }
+    function userDoc() {
+      return firestore.get(/databases/(default)/documents/users/$(email()));
+    }
+    // 白名單 + 帳號啟用中
+    function whitelisted() {
+      return userExists() && userDoc().data.get('active', true) != false;
+    }
+    function isManager() {
+      return whitelisted() && userDoc().data.role == 'manager';
+    }
+
+    function requestExists(requestId) {
+      return firestore.exists(/databases/(default)/documents/requests/$(requestId));
+    }
+    function requestDoc(requestId) {
+      return firestore.get(/databases/(default)/documents/requests/$(requestId));
+    }
+
+    // 明確擋掉常見危險內容類型（可執行檔、shell script、html、js）。
+    // 注意：contentType 是用戶端自行宣告的中繼資料，非真正的檔案內容偵測，
+    // 這裡只是額外防線，不是唯一防護（見 FIREBASE_MIGRATION.md 風險說明）。
+    function safeContentType() {
+      return !request.resource.contentType.matches('.*(executable|x-msdownload|x-sh|x-python|html|javascript).*');
+    }
+
     match /attachments/{requestId}/{fileName} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null
-        && request.resource.size < 10 * 1024 * 1024;
+      // 讀取：白名單即可。附件下載連結本身另帶 token，這裡是規則層再把關一次，
+      // 停用/移除白名單的帳號無法再讀取任何附件。
+      allow read: if whitelisted();
+
+      // 寫入（上傳／覆蓋／刪除）：
+      // - manager 可管理任何需求的附件
+      // - 提交人只能在「該需求仍是 pending」時，上傳/覆蓋「自己那筆需求」的附件
+      //   （需求一經審核，內容即鎖定，附件也不再能由提交人變動 —— 與 firestore.rules
+      //   對 requests 的 pending-only 編輯規則一致）
+      allow write: if whitelisted()
+        && request.resource.size < 10 * 1024 * 1024
+        && fileName.matches('^[A-Za-z0-9._-]{1,200}$')
+        && safeContentType()
+        && (
+          isManager()
+          || (requestExists(requestId)
+              && requestDoc(requestId).data.submittedBy == email()
+              && requestDoc(requestId).data.status == 'pending')
+        );
+    }
+
+    // 其他任何路徑一律拒絕（避免預設允許到 bucket 其他區域）
+    match /{allPaths=**} {
+      allow read, write: if false;
     }
   }
 }

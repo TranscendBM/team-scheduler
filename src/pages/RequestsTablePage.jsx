@@ -8,8 +8,6 @@ import RequestDetailModal from '../components/RequestDetailModal'
 import Attachments from '../components/Attachments'
 
 const shortEmail = (e) => (e || '—').split('@')[0]
-const designerNames = (r) =>
-  (r.assignedDesignersNames?.length ? r.assignedDesignersNames : (r.assignedDesigners || []).map(shortEmail)).join('、') || '—'
 const submitterName = (r) => r.submittedByName || shortEmail(r.submittedBy)
 
 // 設計師可切換的狀態
@@ -22,6 +20,29 @@ const SORTS = [
   { key: 'created-asc', label: '提交 舊→新' },
 ]
 
+// 專案列表依設計師分組的固定順序，不在清單內的設計師依字母序排在後面，未指派排最後
+const DESIGNER_ORDER = ['Sherry', 'Tingwei', 'Yuna', 'Abby']
+function designerGroupKey(r) {
+  return r.assignedDesignersNames?.[0] || (r.assignedDesigners?.[0] ? shortEmail(r.assignedDesigners[0]) : '') || '未指派'
+}
+function designerRank(name) {
+  const i = DESIGNER_ORDER.indexOf(name)
+  if (i !== -1) return i
+  return name === '未指派' ? 999 : 500
+}
+function groupByDesigner(list) {
+  const groups = new Map()
+  for (const r of list) {
+    const key = designerGroupKey(r)
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key).push(r)
+  }
+  return [...groups.entries()].sort((a, b) => {
+    const ra = designerRank(a[0]), rb = designerRank(b[0])
+    return ra !== rb ? ra - rb : a[0].localeCompare(b[0])
+  })
+}
+
 export default function RequestsTablePage() {
   const { role, email, regions } = useAuth()
   const { newIds, markSeen } = useNotifications()
@@ -29,10 +50,11 @@ export default function RequestsTablePage() {
   const [busy, setBusy] = useState(null)
   const [noRegion, setNoRegion] = useState(false)
   const [detail, setDetail] = useState(null)
-  const [fDesigner, setFDesigner] = useState('all')
-  const [fStatus, setFStatus] = useState('all')
+  const [fDesigners, setFDesigners] = useState([])   // 空陣列 = 不篩選
+  const [fStatuses, setFStatuses] = useState([])
+  const [fRegions, setFRegions] = useState([])
   const [sort, setSort] = useState('due-asc')
-  const [deleteConfirm, setDeleteConfirm] = useState(null)
+  const [modalDeleteConfirm, setModalDeleteConfirm] = useState(false)
 
   useEffect(() => {
     let q
@@ -64,19 +86,32 @@ export default function RequestsTablePage() {
     setBusy(r.id)
     try {
       await deleteDoc(doc(db, 'requests', r.id))
-      setDeleteConfirm(null)
+      setModalDeleteConfirm(false)
+      setDetail(null)
     } catch (e) { alert('刪除失敗：' + (e.code || e.message)) }
     setBusy(null)
+  }
+
+  function openDetail(r) {
+    setDetail(r)
+    setModalDeleteConfirm(false)
+    markSeen(r.id)
   }
 
   // 篩選
   const allDesignerOpts = [...new Map(rows.flatMap(r =>
     (r.assignedDesigners || []).map((e, i) => [e, r.assignedDesignersNames?.[i] || shortEmail(e)])
   )).entries()].sort((a, b) => a[1].localeCompare(b[1]))
+  const allRegionOpts = [...new Set(rows.map(r => r.region).filter(Boolean))].sort()
+
+  function toggleFilter(setFn, value) {
+    setFn(cur => cur.includes(value) ? cur.filter(v => v !== value) : [...cur, value])
+  }
 
   const filtered = rows.filter(r =>
-    (fDesigner === 'all' || (r.assignedDesigners || []).includes(fDesigner)) &&
-    (fStatus === 'all' || r.status === fStatus)
+    (fDesigners.length === 0 || (r.assignedDesigners || []).some(d => fDesigners.includes(d))) &&
+    (fStatuses.length === 0 || fStatuses.includes(r.status)) &&
+    (fRegions.length === 0 || fRegions.includes(r.region))
   )
 
   // 排序
@@ -91,26 +126,12 @@ export default function RequestsTablePage() {
   const active = filtered.filter(r => r.status !== 'completed').sort(sortFn)
   const done = filtered.filter(r => r.status === 'completed').sort(sortFn)
 
+  // 主管沒有列表內動作(刪除已移到詳情視窗)，動作欄整欄隱藏；設計師/Planner 仍有狀態切換/結案按鈕，保留
+  const showAction = role !== 'manager'
+  const colCount = showAction ? 6 : 5
+
   function ActionCell({ r }) {
-    // 主管:刪除(兩段式確認)
-    if (role === 'manager') {
-      if (deleteConfirm === r.id) {
-        return (
-          <span onClick={e => e.stopPropagation()} className="whitespace-nowrap">
-            <button onClick={() => handleDelete(r)} disabled={busy === r.id}
-              className="text-xs bg-red-600 text-white px-2.5 py-1 rounded-lg hover:bg-red-700 disabled:opacity-50 mr-1">
-              確認刪除
-            </button>
-            <button onClick={() => setDeleteConfirm(null)}
-              className="text-xs text-gray-400 hover:text-gray-600 px-1">取消</button>
-          </span>
-        )
-      }
-      return (
-        <button onClick={e => { e.stopPropagation(); setDeleteConfirm(r.id) }}
-          className="text-xs text-red-400 hover:text-red-600 hover:underline">刪除</button>
-      )
-    }
+    // 主管:刪除已移到需求詳情視窗內，點進去才會出現，避免列表上誤觸
     if (role === 'designer' && (r.assignedDesigners || []).includes(email)) {
       return (
         <select value={r.status} disabled={busy === r.id}
@@ -136,10 +157,10 @@ export default function RequestsTablePage() {
     const meta = statusMeta(r.status)
     const isNew = newIds.has(r.id)
     return (
-      <tr onClick={() => { setDetail(r); markSeen(r.id) }}
+      <tr onClick={() => openDetail(r)}
         className={`border-t border-gray-100 cursor-pointer ${faded ? 'text-gray-400 hover:bg-gray-50/50' : 'hover:bg-gray-50'} ${isNew ? 'bg-blue-50/40' : ''}`}>
-        <td className="px-3 py-2.5">
-          <div className={`text-sm ${faded ? '' : 'text-gray-800 font-medium'}`}>
+        <td className="px-3 py-2.5 overflow-hidden">
+          <div className={`text-sm truncate ${faded ? '' : 'text-gray-800 font-medium'}`}>
             {isNew && (
               <span className="inline-block text-[10px] font-bold bg-red-500 text-white rounded px-1 py-0.5 mr-1.5 align-middle leading-none">NEW</span>
             )}
@@ -152,37 +173,57 @@ export default function RequestsTablePage() {
             </div>
           )}
         </td>
-        <td className="px-3 py-2.5 text-xs">{r.region}</td>
+        <td className="px-3 py-2.5 text-xs truncate">{r.region}</td>
         <td className="px-3 py-2.5 text-xs whitespace-nowrap">{r.dueDate || '—'}</td>
-        <td className="px-3 py-2.5 text-xs">{designerNames(r)}</td>
-        <td className="px-3 py-2.5 text-xs">{submitterName(r)}</td>
+        <td className="px-3 py-2.5 text-xs truncate">{submitterName(r)}</td>
         <td className="px-3 py-2.5">
           <span className={`text-xs px-2 py-0.5 rounded-full ${faded ? 'bg-gray-100 text-gray-400' : meta.color}`}>{meta.label}</span>
         </td>
-        <td className="px-3 py-2.5 text-right"><ActionCell r={r} /></td>
+        {showAction && <td className="px-3 py-2.5 text-right"><ActionCell r={r} /></td>}
       </tr>
     )
   }
 
+  // 固定欄寬（table-layout: fixed + 同一組 colgroup），讓每個設計師分組的表格欄位對得齊，不會因為內容長短各自伸縮
+  // 設計師欄位已隱藏（分組標題已顯示設計師名稱，欄位重複）；動作欄只有 designer/planner 有按鈕才顯示
   function Table({ data, faded, empty }) {
     return (
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto">
-        <table className="w-full">
+        <table className="w-full" style={{ tableLayout: 'fixed', minWidth: 640 }}>
+          <colgroup>
+            {showAction ? (
+              <>
+                <col style={{ width: '34%' }} />
+                <col style={{ width: '10%' }} />
+                <col style={{ width: '14%' }} />
+                <col style={{ width: '16%' }} />
+                <col style={{ width: '16%' }} />
+                <col style={{ width: '10%' }} />
+              </>
+            ) : (
+              <>
+                <col style={{ width: '40%' }} />
+                <col style={{ width: '12%' }} />
+                <col style={{ width: '16%' }} />
+                <col style={{ width: '18%' }} />
+                <col style={{ width: '14%' }} />
+              </>
+            )}
+          </colgroup>
           <thead className="bg-gray-50 text-gray-500 text-xs">
             <tr>
               <th className="text-left px-3 py-2.5 font-medium">專案名稱</th>
               <th className="text-left px-3 py-2.5 font-medium">地區</th>
               <th className="text-left px-3 py-2.5 font-medium">交期</th>
-              <th className="text-left px-3 py-2.5 font-medium">設計師</th>
               <th className="text-left px-3 py-2.5 font-medium">提交人</th>
               <th className="text-left px-3 py-2.5 font-medium">狀態</th>
-              <th className="text-right px-3 py-2.5 font-medium">動作</th>
+              {showAction && <th className="text-right px-3 py-2.5 font-medium">動作</th>}
             </tr>
           </thead>
           <tbody>
             {data.map(r => <Row key={r.id} r={r} faded={faded} />)}
             {data.length === 0 && (
-              <tr><td colSpan={7} className="px-3 py-8 text-center text-gray-400 text-sm">{empty}</td></tr>
+              <tr><td colSpan={colCount} className="px-3 py-8 text-center text-gray-400 text-sm">{empty}</td></tr>
             )}
           </tbody>
         </table>
@@ -201,25 +242,50 @@ export default function RequestsTablePage() {
 
       {/* 篩選 + 排序 */}
       {!noRegion && (
-        <div className="flex flex-wrap items-center gap-2 mb-4">
-          <select value={fDesigner} onChange={e => setFDesigner(e.target.value)}
-            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white">
-            <option value="all">全部設計師</option>
-            {allDesignerOpts.map(([e, name]) => <option key={e} value={e}>{name}</option>)}
-          </select>
-          <select value={fStatus} onChange={e => setFStatus(e.target.value)}
-            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white">
-            <option value="all">全部狀態</option>
-            {Object.entries(STATUS).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-          </select>
-          <select value={sort} onChange={e => setSort(e.target.value)}
-            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white">
-            {SORTS.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
-          </select>
-          {(fDesigner !== 'all' || fStatus !== 'all') && (
-            <button onClick={() => { setFDesigner('all'); setFStatus('all') }}
-              className="text-xs text-gray-400 hover:text-gray-600">✕ 清除篩選</button>
-          )}
+        <div className="mb-4">
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <select value={sort} onChange={e => setSort(e.target.value)}
+              className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white">
+              {SORTS.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+            </select>
+            {(fDesigners.length > 0 || fStatuses.length > 0 || fRegions.length > 0) && (
+              <button onClick={() => { setFDesigners([]); setFStatuses([]); setFRegions([]) }}
+                className="text-xs text-gray-400 hover:text-gray-600">✕ 清除篩選</button>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
+            <span className="text-xs text-gray-400 mr-1">設計師</span>
+            {allDesignerOpts.map(([e, name]) => (
+              <button key={e} onClick={() => toggleFilter(setFDesigners, e)}
+                className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                  fDesigners.includes(e) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                }`}>
+                {name}
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
+            <span className="text-xs text-gray-400 mr-1">狀態</span>
+            {Object.entries(STATUS).map(([k, v]) => (
+              <button key={k} onClick={() => toggleFilter(setFStatuses, k)}
+                className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                  fStatuses.includes(k) ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                }`}>
+                {v.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs text-gray-400 mr-1">地區</span>
+            {allRegionOpts.map(r => (
+              <button key={r} onClick={() => toggleFilter(setFRegions, r)}
+                className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                  fRegions.includes(r) ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                }`}>
+                {r}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
@@ -229,18 +295,52 @@ export default function RequestsTablePage() {
         </div>
       ) : (
         <>
-          <Table data={active} empty="目前沒有進行中的需求" />
+          {active.length === 0 ? (
+            <Table data={[]} empty="目前沒有進行中的需求" />
+          ) : (
+            groupByDesigner(active).map(([designer, list]) => (
+              <div key={designer} className="mb-6">
+                <h2 className="text-sm font-semibold text-gray-600 mb-2">{designer}（{list.length}）</h2>
+                <Table data={list} empty="" />
+              </div>
+            ))
+          )}
 
           {done.length > 0 && (
             <>
               <h2 className="text-sm font-medium text-gray-400 mt-8 mb-3">已結案（{done.length}）</h2>
-              <Table data={done} faded empty="" />
+              {groupByDesigner(done).map(([designer, list]) => (
+                <div key={designer} className="mb-4">
+                  <h3 className="text-xs font-medium text-gray-400 mb-2">{designer}（{list.length}）</h3>
+                  <Table data={list} faded empty="" />
+                </div>
+              ))}
             </>
           )}
         </>
       )}
 
-      <RequestDetailModal r={detail ? rows.find(x => x.id === detail.id) || detail : null} onClose={() => setDetail(null)} />
+      <RequestDetailModal
+        r={detail ? rows.find(x => x.id === detail.id) || detail : null}
+        onClose={() => setDetail(null)}
+        actions={role === 'manager' && detail ? (
+          modalDeleteConfirm ? (
+            <>
+              <button onClick={() => handleDelete(detail)} disabled={busy === detail.id}
+                className="flex-1 bg-red-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-red-700 disabled:opacity-50">
+                確認刪除
+              </button>
+              <button onClick={() => setModalDeleteConfirm(false)}
+                className="px-4 py-2 text-sm text-gray-500 hover:bg-gray-100 rounded-lg">取消</button>
+            </>
+          ) : (
+            <button onClick={() => setModalDeleteConfirm(true)}
+              className="text-sm text-red-500 hover:text-red-700 px-4 py-2 rounded-lg hover:bg-red-50">
+              🗑 刪除此需求
+            </button>
+          )
+        ) : null}
+      />
     </div>
   )
 }

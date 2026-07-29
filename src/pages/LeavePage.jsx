@@ -40,7 +40,7 @@ function fmtMonth(ym) {
 }
 
 export default function LeavePage() {
-  const { isAdmin } = useAuth()
+  const { isManager } = useAuth()
   const [people, setPeople] = useState([])
   const [leaves, setLeaves] = useState([])
   const [showModal, setShowModal] = useState(false)
@@ -150,10 +150,12 @@ export default function LeavePage() {
             </p>
           </div>
         </div>
-        <div className="flex gap-1.5 flex-shrink-0 ml-2">
-          <button onClick={() => openEdit(leave)} className="text-xs text-blue-500 hover:text-blue-700 px-2 py-1 rounded hover:bg-blue-50">編輯</button>
-          <button onClick={() => setDeleteConfirm(leave.id)} className="text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded hover:bg-red-50">刪除</button>
-        </div>
+        {isManager && (
+          <div className="flex gap-1.5 flex-shrink-0 ml-2">
+            <button onClick={() => openEdit(leave)} className="text-xs text-blue-500 hover:text-blue-700 px-2 py-1 rounded hover:bg-blue-50">編輯</button>
+            <button onClick={() => setDeleteConfirm(leave.id)} className="text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded hover:bg-red-50">刪除</button>
+          </div>
+        )}
       </div>
     )
   }
@@ -182,10 +184,12 @@ export default function LeavePage() {
               顯示過期（{expiredCount}）
             </label>
           )}
-          <button onClick={openCreate}
-            className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors">
-            + 新增休假
-          </button>
+          {isManager && (
+            <button onClick={openCreate}
+              className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors">
+              + 新增休假
+            </button>
+          )}
         </div>
       </div>
 
