@@ -2,9 +2,10 @@
 // 執行：npm test（functions 目錄下）
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildHtml, escapeHtml, safeAttachmentUrl, buildCcList, linkifyHtml } from '../index.js'
+import { buildHtml, escapeHtml, safeAttachmentUrl, safeAttachmentUrlForRequest, buildCcList, linkifyHtml } from '../index.js'
 
 const LEGIT_URL = 'https://firebasestorage.googleapis.com/v0/b/team-scheduler-dc7ce.firebasestorage.app/o/attachments%2Freq123%2Ffile-abc.pdf?alt=media&token=xyz'
+const REQUEST_ID = 'req123'
 
 test('escapeHtml 涵蓋 & < > " \' 五種特殊字元，且順序正確(先跳脫 & 才不會把後面產生的實體重複跳脫)', () => {
   assert.equal(escapeHtml(`&<>"'`), '&amp;&lt;&gt;&quot;&#39;')
@@ -72,7 +73,7 @@ test('buildHtml：需求簡述有 HTML 特殊字元時，網址外的部分仍�
 test('buildHtml：所有文字元素都明寫微軟正黑體字型，不是只放在最外層靠繼承', () => {
   const html = buildHtml({
     projectName: 'x', attachments: [{ name: 'a.pdf', url: 'https://firebasestorage.googleapis.com/v0/b/team-scheduler-dc7ce.firebasestorage.app/o/attachments%2Fr1%2Fa.pdf?alt=media&token=t' }],
-  })
+  }, 'r1')
   const styledTags = html.match(/<(h2|p|table|td|a|span)\b[^>]*style="[^"]*"/g) || []
   assert.ok(styledTags.length > 0, '應該至少有一些帶 style 的文字元素可供檢查')
   for (const tag of styledTags) {
@@ -111,11 +112,11 @@ test('buildHtml 急件會顯示 🔥 標記', () => {
   assert.ok(html.includes('🔥 是'))
 })
 
-test('buildHtml 合法的 Firebase Storage 附件網址會被列成連結，檔名同樣逸出特殊字元', () => {
+test('buildHtml 合法的 Firebase Storage 附件網址(屬於目前 requestId)會被列成連結，檔名同樣逸出特殊字元', () => {
   const html = buildHtml({
     projectName: 'x',
     attachments: [{ name: '<img src=x onerror=alert(1)>.pdf', url: LEGIT_URL }],
-  })
+  }, REQUEST_ID)
   // href 屬性值裡的 & 依 HTML 規則要逸出成 &amp;，所以比對時用逸出過的形式
   assert.ok(html.includes(`href="${LEGIT_URL.replace(/&/g, '&amp;')}"`))
   assert.ok(!html.includes('<img src=x onerror=alert(1)>'))
@@ -126,10 +127,77 @@ test('buildHtml 對不合法的附件網址不會產生 <a> 連結，只顯示�
   const html = buildHtml({
     projectName: 'x',
     attachments: [{ name: '假附件.pdf', url: 'https://example.com/f.pdf' }],
-  })
+  }, REQUEST_ID)
   assert.ok(!html.includes('<a href="https://example.com/f.pdf"'))
   assert.ok(html.includes('假附件.pdf'))
   assert.ok(html.includes('連結無效'))
+})
+
+// ── requestId 綁定驗證(buildHtml 第二個參數) ──────────────────────────────
+test('buildHtml：附件網址屬於目前這封信的 requestId → 產生連結', () => {
+  const html = buildHtml({
+    projectName: 'x',
+    attachments: [{ name: 'a.pdf', url: LEGIT_URL }],
+  }, REQUEST_ID)
+  assert.ok(html.includes(`href="${LEGIT_URL.replace(/&/g, '&amp;')}"`))
+})
+
+test('buildHtml：附件網址指向「另一個」requestId → 不產生連結，只顯示純文字', () => {
+  const html = buildHtml({
+    projectName: 'x',
+    attachments: [{ name: 'a.pdf', url: LEGIT_URL }],
+  }, 'some-other-request-id')
+  assert.ok(!html.includes(`href="${LEGIT_URL.replace(/&/g, '&amp;')}"`))
+  assert.ok(html.includes('連結無效'))
+})
+
+test('buildHtml：storagePath 跟 url 解出的路徑不一致(URL 合法但 storagePath 被竄改指向別筆需求)→ 不產生連結', () => {
+  const html = buildHtml({
+    projectName: 'x',
+    attachments: [{ name: 'a.pdf', url: LEGIT_URL, storagePath: 'attachments/some-other-request-id/file-abc.pdf' }],
+  }, REQUEST_ID)
+  assert.ok(!html.includes(`href="${LEGIT_URL.replace(/&/g, '&amp;')}"`))
+  assert.ok(html.includes('連結無效'))
+})
+
+test('buildHtml：舊資料(沒有 storagePath 欄位)但 url 精確屬於目前 requestId → 仍可產生連結', () => {
+  const html = buildHtml({
+    projectName: 'x',
+    attachments: [{ name: 'a.pdf', url: LEGIT_URL }], // 沒有 storagePath，模擬舊資料
+  }, REQUEST_ID)
+  assert.ok(html.includes(`href="${LEGIT_URL.replace(/&/g, '&amp;')}"`))
+})
+
+test('buildHtml：storagePath 跟 url 解出的路徑一致且都屬於目前 requestId → 產生連結', () => {
+  const html = buildHtml({
+    projectName: 'x',
+    attachments: [{ name: 'a.pdf', url: LEGIT_URL, storagePath: 'attachments/req123/file-abc.pdf' }],
+  }, REQUEST_ID)
+  assert.ok(html.includes(`href="${LEGIT_URL.replace(/&/g, '&amp;')}"`))
+})
+
+test('buildHtml：malformed/external/javascript:/data: 附件網址一律不產生連結，即使 requestId 對得上', () => {
+  // 底部一定會有「前往需求總表」這顆固定的 <a href>按鈕，跟附件連結無關 —— 這裡只驗證
+  // 「附件連結數」沒有因為這顆按鈕而被誤判，改成跟 baseline(完全沒有附件時的 <a href> 數量)比較。
+  const baselineHrefCount = (buildHtml({ projectName: 'x' }, REQUEST_ID).match(/<a href=/g) || []).length
+  const badUrls = [
+    'not a url',
+    'javascript:alert(1)',
+    'data:text/html,<script>alert(1)</script>',
+    'https://example.com/attachments/req123/file-abc.pdf', // 外部網域，非 Firebase Storage
+    LEGIT_URL.replace('https://', 'http://'), // 非 https
+  ]
+  for (const url of badUrls) {
+    const html = buildHtml({ projectName: 'x', attachments: [{ name: 'a.pdf', url }] }, REQUEST_ID)
+    const hrefCount = (html.match(/<a href=/g) || []).length
+    assert.equal(hrefCount, baselineHrefCount, `不應該對 ${url} 額外產生附件連結`)
+    assert.ok(html.includes('連結無效'), `${url} 應該顯示連結無效`)
+  }
+})
+
+test('safeAttachmentUrlForRequest：直接單元測試(不透過 buildHtml)——requestId 相符才回傳網址', () => {
+  assert.equal(safeAttachmentUrlForRequest({ name: 'a.pdf', url: LEGIT_URL }, REQUEST_ID), LEGIT_URL)
+  assert.equal(safeAttachmentUrlForRequest({ name: 'a.pdf', url: LEGIT_URL }, 'other-id'), null)
 })
 
 test('safeAttachmentUrl：合法的 Firebase Storage attachments/ 網址通過', () => {
@@ -156,10 +224,13 @@ test('safeAttachmentUrl：href 引號注入(網址裡夾帶 " 企圖跳脫屬性
 })
 
 test('buildHtml：附件網址夾帶雙引號注入時，產生的 <a href="..."> 屬性不會被跳脫(沒有裸露的 onerror= 屬性被注入)', () => {
+  // 用正確的 REQUEST_ID，確保這筆附件真的會走到產生 href 的路徑(否則這個測試即使
+  // href-escaping 邏輯本身有問題，也會因為根本沒產生連結而誤判通過)
   const html = buildHtml({
     projectName: 'x',
     attachments: [{ name: 'a.pdf', url: `${LEGIT_URL}" onerror="alert(1)` }],
-  })
+  }, REQUEST_ID)
+  assert.ok(html.includes('<a href='), '這個附件的路徑仍精確屬於 REQUEST_ID，應該要產生連結才能驗證跳脫邏輯')
   assert.ok(!html.includes('" onerror="alert(1)'), '不應該出現未跳脫的屬性跳脫注入')
 })
 
