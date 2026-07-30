@@ -133,6 +133,42 @@ async function resolveNotifyEmail(loginEmail) {
   }
 }
 
+// ccPlanners 的專用安全解析：只有「存在、role === 'planner'、active !== false」的帳號才會真的被拿去寄信。
+// 跟 resolveNotifyEmail 不同 —— resolveNotifyEmail 是給「已知一定合法」的對象(指派的設計師、提交人)用，
+// 查不到才退回原始登入 email 當降級容錯；ccPlanners 的來源是 Firestore Rules 只驗證過「型別是字串、
+// 上限 10 筆」的使用者輸入(見 firestore.rules isValidCcPlanners 的說明)，不能比照辦理退回原始字串 ——
+// 那樣任何能核准/編輯需求的人，都能把任意外部 email 塞進 ccPlanners，讓需求內容(含附件連結)被寄給
+// 非 Planner 的任意信箱，或讓已停用/已離職的帳號繼續收到通知。找不到、停用、角色不是 planner 的
+// 一律忽略並記錄 warning，絕不把原始字串直接交給 nodemailer。
+const MAX_CC_PLANNERS = 10
+
+export async function resolveActivePlannerCcEmails(ccPlanners) {
+  if (!Array.isArray(ccPlanners)) return []
+  const normalized = ccPlanners
+    .filter((e) => typeof e === 'string' && e.trim() !== '')
+    .map((e) => e.trim().toLowerCase())
+  const unique = [...new Set(normalized)]
+  if (unique.length > MAX_CC_PLANNERS) {
+    logger.warn('ccPlanners 超過上限，僅取前 N 筆', { count: unique.length, limit: MAX_CC_PLANNERS })
+  }
+  const limited = unique.slice(0, MAX_CC_PLANNERS)
+
+  const resolved = await Promise.all(limited.map(async (email) => {
+    try {
+      const snap = await db.collection('users').doc(email).get()
+      if (!snap.exists) { logger.warn('ccPlanners 略過:帳號不存在', { email }); return null }
+      const u = snap.data()
+      if (u.role !== 'planner') { logger.warn('ccPlanners 略過:角色不是 planner', { email, role: u.role }); return null }
+      if (u.active === false) { logger.warn('ccPlanners 略過:帳號已停用', { email }); return null }
+      return (u.notifyEmail || u.email || email).trim()
+    } catch (e) {
+      logger.warn('ccPlanners 查詢失敗，略過', { email, e: e.message })
+      return null
+    }
+  }))
+  return resolved.filter(Boolean)
+}
+
 // 所有「主管」的通知信箱（動態抓 users collection，不寫死）
 async function getManagerEmails() {
   try {
@@ -383,7 +419,7 @@ export const notifyOnAssign = onDocumentUpdated(
     const toEmails = await Promise.all(designers.map(resolveNotifyEmail))
     const submitterEmail = await resolveNotifyEmail(after.submittedBy)
     const managers = await getManagerEmails()
-    const ccPlanners = await Promise.all((after.ccPlanners || []).map(resolveNotifyEmail))
+    const ccPlanners = await resolveActivePlannerCcEmails(after.ccPlanners)
     const cc = buildCcList(toEmails, [submitterEmail], managers, ccPlanners)
     try {
       await mailer.send({
@@ -419,7 +455,7 @@ export const notifyOnReassign = onDocumentUpdated(
     const toEmails = await Promise.all(added.map(resolveNotifyEmail))
     const submitterEmail = await resolveNotifyEmail(after.submittedBy)
     const managers = await getManagerEmails()
-    const ccPlanners = await Promise.all((after.ccPlanners || []).map(resolveNotifyEmail))
+    const ccPlanners = await resolveActivePlannerCcEmails(after.ccPlanners)
     const cc = buildCcList(toEmails, [submitterEmail], managers, ccPlanners)
     const mailer = getMailer()
     try {

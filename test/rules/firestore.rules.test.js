@@ -15,7 +15,14 @@ import {
   doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, collection, serverTimestamp, Timestamp,
 } from 'firebase/firestore'
 
-const PROJECT_ID = 'team-scheduler-rules-test'
+// 必須跟 storage.rules.test.js、functions/test/renameUserLogin.test.js、
+// functions/test/resolveActivePlannerCcEmails.test.js，以及 package.json test:rules 裡
+// `firebase emulators:exec --project` 用的是同一個 project id —— Storage Rules 的
+// firestore.get()/firestore.exists() 跨服務查詢是綁在 emulator suite 啟動時的那個 project，
+// project id 對不上時，Storage 那邊查到的會是空的 Firestore 空間，導致本該成功的操作被誤判 permission-denied
+// (這正是先前 CI 5 個 Storage 案例失敗的根因)。用 demo- 開頭是 Firebase 保留給模擬器測試、
+// 保證不會撞到任何正式專案 id 的慣例前綴。
+const PROJECT_ID = 'demo-team-scheduler-rules'
 const RULES = readFileSync(new URL('../../firestore.rules', import.meta.url), 'utf8')
 
 const MANAGER = 'manager@example.com'
@@ -184,6 +191,54 @@ describe('requests create — 必要欄位/型別/允許欄位驗證', () => {
   })
 })
 
+// storagePath 驗證改用 split('/') 之後的邊界情境(見 firestore.rules isValidStoragePath 的說明：
+// 之前用「動態組字串的 matches() 正則」在 10 筆附件 x 多個 update 分支的情況下會超過 1000-expression 上限)
+describe('attachments — storagePath split() 版驗證的邊界情境', () => {
+  const base = {
+    urgent: false, region: 'SD1', projectName: '測試專案', docTypes: ['Banner'],
+    dueDate: '2026-08-01', description: '', submittedByName: 'Planner SD1', status: 'pending', createdAt: serverTimestamp(),
+  }
+
+  it('0 筆附件建立成功', async () => {
+    await assertSucceeds(addDoc(collection(dbAs(PLANNER_SD1), 'requests'), { ...base, submittedBy: PLANNER_SD1, attachments: [] }))
+  })
+
+  it('1 筆合法附件建立成功', async () => {
+    await assertSucceeds(addDoc(collection(dbAs(PLANNER_SD1), 'requests'), {
+      ...base, submittedBy: PLANNER_SD1,
+      attachments: [{ name: 'a.pdf', url: 'https://example.com/a.pdf', size: 1024 }],
+    }))
+  })
+
+  it('storagePath 多一層子目錄（attachments/{id}/sub/a.pdf）會被擋', async () => {
+    await assertFails(setDoc(doc(dbAs(PLANNER_SD1), 'requests', 'req-known-3'), {
+      ...base, submittedBy: PLANNER_SD1,
+      attachments: [{ name: 'a.pdf', url: 'https://example.com/a.pdf', size: 1024, storagePath: 'attachments/req-known-3/sub/a.pdf' }],
+    }))
+  })
+
+  it('storagePath 不是字串會被擋（不能讓非字串呼叫 split() 使整條規則求值出錯）', async () => {
+    await assertFails(setDoc(doc(dbAs(PLANNER_SD1), 'requests', 'req-known-4'), {
+      ...base, submittedBy: PLANNER_SD1,
+      attachments: [{ name: 'a.pdf', url: 'https://example.com/a.pdf', size: 1024, storagePath: 12345 }],
+    }))
+  })
+
+  it('storagePath 檔名區段為空字串（attachments/{id}/）會被擋', async () => {
+    await assertFails(setDoc(doc(dbAs(PLANNER_SD1), 'requests', 'req-known-5'), {
+      ...base, submittedBy: PLANNER_SD1,
+      attachments: [{ name: 'a.pdf', url: 'https://example.com/a.pdf', size: 1024, storagePath: 'attachments/req-known-5/' }],
+    }))
+  })
+
+  it('附件 name 欄位為空字串會被擋', async () => {
+    await assertFails(addDoc(collection(dbAs(PLANNER_SD1), 'requests'), {
+      ...base, submittedBy: PLANNER_SD1,
+      attachments: [{ name: '', url: 'https://example.com/a.pdf', size: 1024 }],
+    }))
+  })
+})
+
 describe('requests 狀態機 — designer 只能單步推進', () => {
   beforeEach(async () => {
     await seedRequest('req-assigned', {
@@ -339,6 +394,25 @@ describe('requests 狀態機 — manager 核准/駁回', () => {
     await assertFails(updateDoc(doc(dbAs(MANAGER), 'requests', 'to-edit-cc-bad'), {
       assignedDesigners: [DESIGNER_A], assignedDesignersNames: ['A'], dueDate: '2026-09-01', comment: '', reviewNote: '',
       ccPlanners: 'not-a-list',
+    }))
+  })
+
+  it('核准時 ccPlanners 超過 10 筆上限 → 擋', async () => {
+    await seedRequest('to-approve-cc-too-many', { submittedBy: PLANNER_SD1, region: 'SD1', status: 'pending', projectName: 'x' })
+    const ccPlanners = Array.from({ length: 11 }, (_, i) => `planner${i}@example.com`)
+    await assertFails(updateDoc(doc(dbAs(MANAGER), 'requests', 'to-approve-cc-too-many'), {
+      status: 'assigned', assignedDesigners: [DESIGNER_A], assignedDesignersNames: ['Designer A'],
+      reviewedBy: MANAGER, reviewedAt: serverTimestamp(), reviewNote: '', comment: '', dueDate: '2026-08-01',
+      ccPlanners,
+    }))
+  })
+
+  it('核准時 ccPlanners 元素不是字串 → 擋', async () => {
+    await seedRequest('to-approve-cc-bad-el', { submittedBy: PLANNER_SD1, region: 'SD1', status: 'pending', projectName: 'x' })
+    await assertFails(updateDoc(doc(dbAs(MANAGER), 'requests', 'to-approve-cc-bad-el'), {
+      status: 'assigned', assignedDesigners: [DESIGNER_A], assignedDesignersNames: ['Designer A'],
+      reviewedBy: MANAGER, reviewedAt: serverTimestamp(), reviewNote: '', comment: '', dueDate: '2026-08-01',
+      ccPlanners: [12345],
     }))
   })
 

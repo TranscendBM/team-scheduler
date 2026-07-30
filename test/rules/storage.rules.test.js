@@ -9,7 +9,8 @@ import { initializeTestEnvironment, assertSucceeds, assertFails } from '@firebas
 import { doc, setDoc } from 'firebase/firestore'
 import { ref, uploadBytes, deleteObject } from 'firebase/storage'
 
-const PROJECT_ID = 'team-scheduler-storage-rules-test'
+// 必須跟 firestore.rules.test.js 用同一個 project id，理由見該檔案 PROJECT_ID 旁的說明。
+const PROJECT_ID = 'demo-team-scheduler-rules'
 const FIRESTORE_RULES = readFileSync(new URL('../../firestore.rules', import.meta.url), 'utf8')
 const STORAGE_RULES = readFileSync(new URL('../../storage.rules', import.meta.url), 'utf8')
 

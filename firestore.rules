@@ -43,7 +43,7 @@ service cloud.firestore {
         && changedOnly(['status', 'assignedDesigners', 'assignedDesignersNames', 'reviewedBy', 'reviewedAt', 'reviewNote', 'comment', 'dueDate', 'ccPlanners'])
         && request.resource.data.assignedDesigners is list
         && request.resource.data.assignedDesigners.size() > 0
-        && request.resource.data.get('ccPlanners', []) is list
+        && isValidCcPlanners(request.resource.data.get('ccPlanners', []))
         && request.resource.data.reviewedBy == email()
         && request.resource.data.reviewedAt == request.time;
     }
@@ -64,7 +64,7 @@ service cloud.firestore {
         && resource.data.status in ['assigned', 'in_progress', 'reviewing', 'completed']
         && changedOnly(['assignedDesigners', 'assignedDesignersNames', 'dueDate', 'comment', 'reviewNote', 'ccPlanners'])
         && request.resource.data.assignedDesigners is list
-        && request.resource.data.get('ccPlanners', []) is list;
+        && isValidCcPlanners(request.resource.data.get('ccPlanners', []));
     }
 
     // 設計師：只能依序單步推進，不可跳階、倒退，且時間戳須對應正確欄位
@@ -89,10 +89,28 @@ service cloud.firestore {
         && a.name is string && a.name.size() > 0 && a.name.size() <= 300
         && a.url is string && a.url.size() > 0 && a.url.size() <= 2000
         && a.size is number && a.size > 0 && a.size <= 10485760
-        && (!('storagePath' in a) || (
-             a.storagePath is string && a.storagePath.size() > 0 && a.storagePath.size() <= 500
-             && a.storagePath.matches('^attachments/' + requestId + '/[A-Za-z0-9._-]{1,300}$')
-           ));
+        && (!('storagePath' in a) || isValidStoragePath(a.storagePath, requestId));
+    }
+
+    // storagePath 必須恰好是 attachments/{requestId}/{單一檔名}：不得多一層子目錄、不得指向別筆 request。
+    // 刻意改用 split('/') 而不是「動態組字串的 matches() 正則」(如 '^attachments/' + requestId + '/...')：
+    // 後者在 isValidAttachments 對 10 筆附件逐一檢查、且同一條 update 規則有多個 OR 分支都可能求值到的情況下，
+    // 疊加起來會讓整條規則超過 Firestore「單次求值最多 1000 個 expression」的上限。
+    // 一定要先確認 path 是字串、且沒有超出長度上限，才呼叫 split()：對非字串呼叫 split 會讓整條規則
+    // 求值直接出錯(而不是乾淨地回傳 false)，靠 && 的短路求值保證「先驗型別、才處理」。
+    function isValidStoragePath(path, requestId) {
+      return path is string
+        && path.size() > 0 && path.size() <= 500
+        && isValidStoragePathParts(path.split('/'), requestId);
+    }
+    // 拆出來讓 split() 只算一次(由呼叫端傳入結果)，避免同一個 path 被重複切割、重複求值。
+    // parts.size() == 3 同時擋掉「多一層子目錄」(會切出 4 段以上)跟「根本沒有檔名」(切不出 3 段)。
+    function isValidStoragePathParts(parts, requestId) {
+      return parts.size() == 3
+        && parts[0] == 'attachments'
+        && parts[1] == requestId
+        && parts[2].size() > 0 && parts[2].size() <= 300
+        && parts[2].matches('^[A-Za-z0-9._-]+$');
     }
     // Firestore 規則語言不支援對 list 做逐一元素的迴圈驗證，只能在已知上限(10 筆)內逐一 index 檢查
     function isValidAttachments(atts, requestId) {
@@ -107,6 +125,26 @@ service cloud.firestore {
         && (atts.size() < 8  || isValidAttachment(atts[7], requestId))
         && (atts.size() < 9  || isValidAttachment(atts[8], requestId))
         && (atts.size() < 10 || isValidAttachment(atts[9], requestId));
+    }
+
+    // ccPlanners(核准/事後編輯時可另外勾選 CC 的 planner 清單)：這裡只驗證型別、上限(10 筆)、
+    // 每筆是非空字串 —— 控制在 expression 預算內。是否真的對應「存在、角色是 planner、啟用中」的帳號，
+    // 需要對每個 email 各查一次 users 文件(get())，疊加在這條 update 規則本來就會多次呼叫
+    // whitelisted()/myRegions() 之上，容易再次逼近 1000-expression 上限與單次請求的 get() 呼叫數上限，
+    // 因此把「身分/角色/啟用狀態」這層最終驗證留給 Cloud Function
+    // (functions/index.js resolveActivePlannerCcEmails)，那裡才是真正決定「誰會收到通知信」的地方。
+    function isValidCcPlanners(v) {
+      return v is list && v.size() <= 10
+        && (v.size() < 1  || (v[0] is string && v[0].size() > 0))
+        && (v.size() < 2  || (v[1] is string && v[1].size() > 0))
+        && (v.size() < 3  || (v[2] is string && v[2].size() > 0))
+        && (v.size() < 4  || (v[3] is string && v[3].size() > 0))
+        && (v.size() < 5  || (v[4] is string && v[4].size() > 0))
+        && (v.size() < 6  || (v[5] is string && v[5].size() > 0))
+        && (v.size() < 7  || (v[6] is string && v[6].size() > 0))
+        && (v.size() < 8  || (v[7] is string && v[7].size() > 0))
+        && (v.size() < 9  || (v[8] is string && v[8].size() > 0))
+        && (v.size() < 10 || (v[9] is string && v[9].size() > 0));
     }
 
     // 建立需求時的必要欄位／型別／允許欄位驗證
@@ -166,7 +204,7 @@ service cloud.firestore {
               && request.resource.data.projectName is string && request.resource.data.projectName.size() > 0
               && request.resource.data.region is string && request.resource.data.region.size() > 0
               && request.resource.data.docTypes is list
-              && isValidAttachments(request.resource.data.attachments, id));
+              && isValidAttachments(request.resource.data.get('attachments', []), id));
 
       // manager 可刪任何需求；提交人只能刪自己「剛建立、還沒有任何附件」的 pending 需求 ——
       // 這只是給 RequestNewPage 建立需求失敗時的回滾用(見該檔案 handleSubmit 的錯誤處理):

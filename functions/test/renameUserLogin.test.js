@@ -22,8 +22,13 @@ import assert from 'node:assert/strict'
 // 注意：一定要在 import firebase-admin/../index.js 之前就設好這兩個環境變數 ——
 // ES module 的 static import 會被提升到檔案最前面先執行，所以不能像一般腳本那樣把
 // process.env.X = ... 寫在 import 的前面就以為它會先跑；這裡改用動態 import() 確保順序正確。
+// 跟 test/rules/firestore.rules.test.js 用同一個 project id(demo-team-scheduler-rules)，
+// 理由見該檔案 PROJECT_ID 旁的說明 —— 這裡雖然全程用 Admin SDK(不受 Security Rules 限制、
+// 也不會做 Storage 跨服務查詢)，跟 project id 是否一致無關，但統一成同一個值可以避免
+// 「這幾個檔案的 project id 到底該不該一樣」的疑惑，也是 `firebase emulators:exec --project`
+// 啟動 emulator suite 時使用的那個 project。
 process.env.FIRESTORE_EMULATOR_HOST = process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8080'
-process.env.GCLOUD_PROJECT = process.env.GCLOUD_PROJECT || 'team-scheduler-rename-test'
+process.env.GCLOUD_PROJECT = process.env.GCLOUD_PROJECT || 'demo-team-scheduler-rules'
 
 const { getFirestore } = await import('firebase-admin/firestore')
 const { renameUserLoginCore } = await import('../index.js')
