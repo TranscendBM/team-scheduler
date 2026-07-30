@@ -109,7 +109,7 @@ export default function SimpleProjectPage({ type, typeLabel, subtypeOptions, sub
       <div className="flex items-center justify-between px-6 py-4 border-b bg-white">
         <div>
           <h2 className="text-xl font-bold text-gray-800">{typeLabel}</h2>
-          <p className="text-sm text-gray-400">{filtered.length} 個專案</p>
+          <p className="text-sm text-gray-500">{filtered.length} 個專案</p>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
           <select value={filterYear} onChange={e => setFilterYear(parseInt(e.target.value))}
@@ -131,7 +131,7 @@ export default function SimpleProjectPage({ type, typeLabel, subtypeOptions, sub
 
       <div className="flex-1 overflow-auto p-6">
         {filtered.length === 0 ? (
-          <div className="flex items-center justify-center h-64 text-gray-400">
+          <div className="flex items-center justify-center h-64 text-gray-500">
             <div className="text-center"><div className="text-4xl mb-2">📋</div><p>尚無{typeLabel}，點擊「新增{typeLabel}」開始</p></div>
           </div>
         ) : (
@@ -157,16 +157,16 @@ export default function SimpleProjectPage({ type, typeLabel, subtypeOptions, sub
                   return (
                     <tr key={p.id} onClick={() => openEdit(p)}
                       className={`cursor-pointer hover:bg-blue-50 ${i % 2 ? 'bg-gray-50/50' : 'bg-white'}`}>
-                      <td className={`px-3 py-2 border-r border-gray-100 sticky left-0 bg-inherit font-medium whitespace-nowrap ${expired ? 'text-gray-400' : 'text-gray-800'}`}>
+                      <td className={`px-3 py-2 border-r border-gray-100 sticky left-0 bg-inherit font-medium whitespace-nowrap ${expired ? 'text-gray-500' : 'text-gray-800'}`}>
                         <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: typeColor }} />
                         {p.name}
                       </td>
-                      <td className={`px-3 py-2 whitespace-nowrap ${expired ? 'text-gray-400' : 'text-gray-600'}`}>{p.subtype || '—'}</td>
-                      <td className={`px-3 py-2 whitespace-nowrap ${expired ? 'text-gray-400' : 'text-gray-600'}`}>
+                      <td className={`px-3 py-2 whitespace-nowrap ${expired ? 'text-gray-500' : 'text-gray-600'}`}>{p.subtype || '—'}</td>
+                      <td className={`px-3 py-2 whitespace-nowrap ${expired ? 'text-gray-500' : 'text-gray-600'}`}>
                         {p.startDate ? `${p.startDate} ~ ${p.endDate}` : '—'}
                       </td>
-                      <td className={`px-3 py-2 ${expired ? 'text-gray-400' : 'text-gray-600'}`}>{p.location || '—'}</td>
-                      <td className={`px-3 py-2 whitespace-nowrap ${expired ? 'text-gray-400' : 'text-gray-600'}`}>
+                      <td className={`px-3 py-2 ${expired ? 'text-gray-500' : 'text-gray-600'}`}>{p.location || '—'}</td>
+                      <td className={`px-3 py-2 whitespace-nowrap ${expired ? 'text-gray-500' : 'text-gray-600'}`}>
                         {assigned.length > 0 ? assigned.map(a => `${a.name}${a.role === 'designer' ? '(設計)' : '(Planner)'}`).join('、') : '—'}
                       </td>
                       {isManager && (
@@ -191,7 +191,7 @@ export default function SimpleProjectPage({ type, typeLabel, subtypeOptions, sub
               <h3 className="text-lg font-semibold text-gray-800">
                 {!isManager ? `檢視${typeLabel}` : editProject ? `編輯${typeLabel}` : `新增${typeLabel}`}
               </h3>
-              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600 text-xl">×</button>
+              <button onClick={() => setShowModal(false)} className="text-gray-500 hover:text-gray-600 text-xl">×</button>
             </div>
             <div className="px-6 py-5 space-y-4">
               <div>
@@ -269,7 +269,7 @@ export default function SimpleProjectPage({ type, typeLabel, subtypeOptions, sub
                     </div>
                   </div>
                 )}
-                {people.length === 0 && <p className="text-sm text-gray-400">請先在「人員管理」新增成員</p>}
+                {people.length === 0 && <p className="text-sm text-gray-500">請先在「人員管理」新增成員</p>}
               </div>
             </div>
             <div className="px-6 py-4 border-t flex gap-3 justify-end sticky bottom-0 bg-white">

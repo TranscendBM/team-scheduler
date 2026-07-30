@@ -12,7 +12,7 @@ function Row({ label, children, highlight }) {
   if (children === null || children === undefined || children === '') return null
   return (
     <div className={`flex gap-3 py-2 border-b border-gray-50 text-sm ${highlight ? 'bg-amber-50 -mx-2 px-2 rounded' : ''}`}>
-      <dt className="w-24 shrink-0 text-gray-400 text-xs pt-0.5">{label}</dt>
+      <dt className="w-24 shrink-0 text-gray-500 text-xs pt-0.5">{label}</dt>
       <dd className={`flex-1 min-w-0 whitespace-pre-wrap ${highlight ? 'text-amber-800' : 'text-gray-700'}`}>{children}</dd>
     </div>
   )
@@ -32,10 +32,10 @@ export default function RequestDetailModal({ r, onClose, actions }) {
               {r.urgent && <span className="text-red-500 mr-1">🔥</span>}
               {r.projectName || r.title}
             </h2>
-            <p className="text-xs text-gray-400 mt-0.5">提交：{r.submittedByName || r.submittedBy} · {fmt(r.createdAt) || '—'}</p>
+            <p className="text-xs text-gray-500 mt-0.5">提交：{r.submittedByName || r.submittedBy} · {fmt(r.createdAt) || '—'}</p>
           </div>
           <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${meta.color}`}>{meta.label}</span>
-          <button onClick={onClose} className="text-gray-300 hover:text-gray-500 text-lg leading-none">✕</button>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-500 text-lg leading-none">✕</button>
         </div>
 
         <dl className="px-6 py-3">

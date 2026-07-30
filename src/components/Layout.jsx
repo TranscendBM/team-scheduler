@@ -36,13 +36,13 @@ export default function Layout() {
         <div className="px-5 py-4 border-b border-gray-100">
           <img src={transcendLogo} alt="創見資訊" className="h-6 mb-2" />
           <h1 className="text-lg font-bold text-gray-800">行銷設計部</h1>
-          <p className="text-xs text-gray-400 mt-0.5">專案管理系統</p>
+          <p className="text-xs text-gray-500 mt-0.5">專案管理系統</p>
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           {navGroups.map((g, gi) => (
             <div key={g.key} className={gi > 0 ? 'pt-3 mt-2 border-t border-gray-100' : ''}>
-              <p className="px-3 pb-1 text-xs text-gray-400 font-medium">{g.label}</p>
+              <p className="px-3 pb-1 text-xs text-gray-500 font-medium">{g.label}</p>
               {g.items.map(({ key, path, label, icon, end }) => {
                 const badge = badgeFor(key)
                 return (
@@ -74,7 +74,7 @@ export default function Layout() {
           {role === 'manager' && (
             <>
               <div className="pt-3 mt-2 border-t border-gray-100">
-                <p className="px-3 pb-1 text-xs text-gray-400 font-medium">系統管理</p>
+                <p className="px-3 pb-1 text-xs text-gray-500 font-medium">系統管理</p>
               </div>
               {ADMIN_ITEMS.map(({ to, label, icon }) => (
                 <NavLink key={to} to={to}

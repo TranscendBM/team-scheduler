@@ -89,7 +89,7 @@ export default function TradeshowTargetsPage() {
   return (
     <div className="p-8 max-w-full mx-auto">
       <h1 className="text-2xl font-bold text-gray-800 mb-1">年度秀展目標</h1>
-      <p className="text-sm text-gray-400 mb-6">依分公司設定每年度計畫參展場數，接近試算表格式方便逐年核對；HQ（COMPUTEX 主辦單位）獨立於 TW 欄位</p>
+      <p className="text-sm text-gray-500 mb-6">依分公司設定每年度計畫參展場數，接近試算表格式方便逐年核對；HQ（COMPUTEX 主辦單位）獨立於 TW 欄位</p>
 
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto">
         <table className="text-sm border-collapse min-w-full">
@@ -153,10 +153,10 @@ export default function TradeshowTargetsPage() {
                           ) : isManager ? (
                             <button onClick={() => startEdit(year, col, val)}
                               className="w-full py-0.5 rounded hover:bg-blue-100 text-gray-700 tabular-nums">
-                              {val ?? <span className="text-gray-300">—</span>}
+                              {val ?? <span className="text-gray-500">—</span>}
                             </button>
                           ) : (
-                            <span className="text-gray-700 tabular-nums">{val ?? <span className="text-gray-300">—</span>}</span>
+                            <span className="text-gray-700 tabular-nums">{val ?? <span className="text-gray-500">—</span>}</span>
                           )}
                         </td>
                       )
@@ -164,13 +164,13 @@ export default function TradeshowTargetsPage() {
                     <td className="px-3 py-1 text-center font-semibold text-gray-800 tabular-nums">{totalTarget || '—'}</td>
                   </tr>
                   <tr className="border-b border-gray-200">
-                    <td className="px-3 py-1 text-xs text-gray-400 font-medium sticky left-[90px] bg-white">達成</td>
+                    <td className="px-3 py-1 text-xs text-gray-500 font-medium sticky left-[90px] bg-white">達成</td>
                     {COLUMNS.map(col => {
                       const c = actualCount(yearProjects, col)
                       const t = officeTargets[col]
                       const met = t ? c >= t : null
                       return (
-                        <td key={col} className={`px-1 py-1 text-center tabular-nums ${met === true ? 'text-emerald-600 font-medium' : met === false ? 'text-gray-500' : 'text-gray-300'}`}>
+                        <td key={col} className={`px-1 py-1 text-center tabular-nums ${met === true ? 'text-emerald-600 font-medium' : met === false ? 'text-gray-500' : 'text-gray-500'}`}>
                           {c || '—'}
                         </td>
                       )
@@ -181,7 +181,7 @@ export default function TradeshowTargetsPage() {
               )
             })}
             {years.length === 0 && (
-              <tr><td colSpan={COLUMNS.length + 3} className="px-3 py-10 text-center text-gray-400">尚無資料</td></tr>
+              <tr><td colSpan={COLUMNS.length + 3} className="px-3 py-10 text-center text-gray-500">尚無資料</td></tr>
             )}
           </tbody>
         </table>

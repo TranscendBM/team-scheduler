@@ -140,7 +140,7 @@ export default function RequestsTablePage() {
   // 主管:刪除已移到需求詳情視窗內，點進去才會出現，避免列表上誤觸
   function actionCell(r) {
     const action = getRequestAction(r, role, email)
-    if (!action) return <span className="text-xs text-gray-300">—</span>
+    if (!action) return <span className="text-xs text-gray-500">—</span>
     const onClick = e => {
       e.stopPropagation()
       if (action.type === 'advance') setStatus(r, action.next)
@@ -157,14 +157,14 @@ export default function RequestsTablePage() {
     const isNew = newIds.has(r.id)
     return (
       <tr key={r.id} onClick={() => openDetail(r)}
-        className={`border-t border-gray-100 cursor-pointer ${faded ? 'text-gray-400 hover:bg-gray-50/50' : 'hover:bg-gray-50'} ${isNew ? 'bg-blue-50/40' : ''}`}>
+        className={`border-t border-gray-100 cursor-pointer ${faded ? 'text-gray-500 hover:bg-gray-50/50' : 'hover:bg-gray-50'} ${isNew ? 'bg-blue-50/40' : ''}`}>
         <td className="px-3 py-2.5 overflow-hidden">
           <div className={`text-sm truncate ${faded ? '' : 'text-gray-800 font-medium'}`}>
             {role === 'manager' && (
               <button
                 onClick={e => { e.stopPropagation(); toggleImportant(r) }}
                 title={r.important ? '取消標記重要' : '標記為重要'}
-                className={`mr-1 align-middle leading-none ${r.important ? 'text-amber-400' : 'text-gray-300 hover:text-amber-400'}`}>
+                className={`mr-1 align-middle leading-none ${r.important ? 'text-amber-400' : 'text-gray-500 hover:text-amber-400'}`}>
                 {r.important ? '★' : '☆'}
               </button>
             )}
@@ -184,7 +184,7 @@ export default function RequestsTablePage() {
         <td className="px-3 py-2.5 text-xs whitespace-nowrap">{r.dueDate || '—'}</td>
         <td className="px-3 py-2.5 text-xs truncate">{submitterName(r)}</td>
         <td className="px-3 py-2.5">
-          <span className={`text-xs px-2 py-0.5 rounded-full ${faded ? 'bg-gray-100 text-gray-400' : meta.color}`}>{meta.label}</span>
+          <span className={`text-xs px-2 py-0.5 rounded-full ${faded ? 'bg-gray-100 text-gray-500' : meta.color}`}>{meta.label}</span>
         </td>
         {showAction && <td className="px-3 py-2.5 text-right">{actionCell(r)}</td>}
       </tr>
@@ -230,7 +230,7 @@ export default function RequestsTablePage() {
           <tbody>
             {data.map(r => row(r, faded))}
             {data.length === 0 && (
-              <tr><td colSpan={colCount} className="px-3 py-8 text-center text-gray-400 text-sm">{empty}</td></tr>
+              <tr><td colSpan={colCount} className="px-3 py-8 text-center text-gray-500 text-sm">{empty}</td></tr>
             )}
           </tbody>
         </table>
@@ -241,7 +241,7 @@ export default function RequestsTablePage() {
   return (
     <div className="p-8 max-w-6xl mx-auto">
       <h1 className="text-2xl font-bold text-gray-800 mb-1">需求總表</h1>
-      <p className="text-sm text-gray-400 mb-5">
+      <p className="text-sm text-gray-500 mb-5">
         {role === 'manager' && '全部需求一覽,點擊任一列查看完整內容'}
         {role === 'designer' && '指派給你的需求,可調整進度'}
         {role === 'planner' && `你負責區域(${(regions || []).join('、') || '未設定'})的需求,可勾選結案`}
@@ -257,11 +257,11 @@ export default function RequestsTablePage() {
             </select>
             {(fDesigners.length > 0 || fStatuses.length > 0 || fRegions.length > 0) && (
               <button onClick={() => { setFDesigners([]); setFStatuses([]); setFRegions([]) }}
-                className="text-xs text-gray-400 hover:text-gray-600">✕ 清除篩選</button>
+                className="text-xs text-gray-500 hover:text-gray-600">✕ 清除篩選</button>
             )}
           </div>
           <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
-            <span className="text-xs text-gray-400 mr-1">設計師</span>
+            <span className="text-xs text-gray-500 mr-1">設計師</span>
             {allDesignerOpts.map(([e, name]) => (
               <button key={e} onClick={() => toggleFilter(setFDesigners, e)}
                 className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
@@ -272,7 +272,7 @@ export default function RequestsTablePage() {
             ))}
           </div>
           <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
-            <span className="text-xs text-gray-400 mr-1">狀態</span>
+            <span className="text-xs text-gray-500 mr-1">狀態</span>
             {Object.entries(STATUS).map(([k, v]) => (
               <button key={k} onClick={() => toggleFilter(setFStatuses, k)}
                 className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
@@ -283,7 +283,7 @@ export default function RequestsTablePage() {
             ))}
           </div>
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-xs text-gray-400 mr-1">地區</span>
+            <span className="text-xs text-gray-500 mr-1">地區</span>
             {allRegionOpts.map(r => (
               <button key={r} onClick={() => toggleFilter(setFRegions, r)}
                 className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
@@ -315,10 +315,10 @@ export default function RequestsTablePage() {
 
           {done.length > 0 && (
             <>
-              <h2 className="text-sm font-medium text-gray-400 mt-8 mb-3">已結案（{done.length}）</h2>
+              <h2 className="text-sm font-medium text-gray-500 mt-8 mb-3">已結案（{done.length}）</h2>
               {groupByDesigner(done).map(([designer, list]) => (
                 <div key={designer} className="mb-4">
-                  <h3 className="text-xs font-medium text-gray-400 mb-2">{designer}（{list.length}）</h3>
+                  <h3 className="text-xs font-medium text-gray-500 mb-2">{designer}（{list.length}）</h3>
                   {table(list, true, '')}
                 </div>
               ))}

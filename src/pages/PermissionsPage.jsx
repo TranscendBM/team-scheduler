@@ -44,12 +44,12 @@ export default function PermissionsPage() {
     setSaving(false); setSaved(true)
   }
 
-  if (loading) return <div className="p-8 text-gray-400 text-sm">載入中…</div>
+  if (loading) return <div className="p-8 text-gray-500 text-sm">載入中…</div>
 
   return (
     <div className="p-8 max-w-3xl mx-auto">
       <h1 className="text-2xl font-bold text-gray-800 mb-1">權限設定</h1>
-      <p className="text-sm text-gray-400 mb-6">勾選每個角色能看到的頁面。主管永遠可看全部,不可調整。</p>
+      <p className="text-sm text-gray-500 mb-6">勾選每個角色能看到的頁面。主管永遠可看全部,不可調整。</p>
 
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <table className="w-full text-sm">
@@ -86,7 +86,7 @@ export default function PermissionsPage() {
         </button>
         {saved && <span className="text-sm text-emerald-600">✓ 已儲存</span>}
       </div>
-      <p className="text-xs text-gray-400 mt-4">
+      <p className="text-xs text-gray-500 mt-4">
         註:「使用者管理」「權限設定」「需求審核」「設計師儀表板」「負責人與設計師管理」固定僅主管可用,不列在此矩陣。
       </p>
     </div>

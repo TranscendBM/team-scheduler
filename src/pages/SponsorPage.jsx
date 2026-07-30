@@ -97,10 +97,10 @@ function fmtRange(s, e) {
   return sd.getMonth() === ed.getMonth() ? `${sd.getMonth()+1}/${sd.getDate()}-${ed.getDate()}` : `${fmt(sd)}-${fmt(ed)}`
 }
 function getEventStatus(s, e) {
-  if (!s) return { label: '待確認', dot: 'bg-gray-300', cls: 'bg-gray-100 text-gray-400', progress: null }
+  if (!s) return { label: '待確認', dot: 'bg-gray-300', cls: 'bg-gray-100 text-gray-500', progress: null }
   const today = new Date(); today.setHours(0,0,0,0)
   const start = new Date(s), end = e ? new Date(e) : start
-  if (today > end)  return { label: '已結束', dot: 'bg-gray-300', cls: 'bg-gray-100 text-gray-400', progress: 100 }
+  if (today > end)  return { label: '已結束', dot: 'bg-gray-300', cls: 'bg-gray-100 text-gray-500', progress: 100 }
   if (today < start) {
     const d = Math.round((start - today) / 86400000)
     return { label: `${d} 天後`, dot: 'bg-blue-400', cls: 'bg-blue-50 text-blue-600', progress: null }
@@ -251,7 +251,7 @@ export default function SponsorPage() {
       <div className="flex items-center justify-between px-6 py-4 border-b bg-white">
         <div>
           <h2 className="text-xl font-bold text-gray-800">高中體總贊助管理</h2>
-          <p className="text-sm text-gray-400">中華民國高中體育總會 · 合約年度：民國 113–115 年（2024–2026）</p>
+          <p className="text-sm text-gray-500">中華民國高中體育總會 · 合約年度：民國 113–115 年（2024–2026）</p>
         </div>
         <a href="https://www.hhsaa.org.tw" target="_blank" rel="noopener noreferrer"
           className="text-sm text-blue-500 hover:text-blue-700 px-3 py-1.5 rounded-lg border border-blue-200 hover:bg-blue-50 transition-colors">
@@ -262,33 +262,33 @@ export default function SponsorPage() {
       {/* ── Summary cards ── */}
       <div className="px-6 py-3 grid grid-cols-5 gap-3 border-b bg-gray-50/60">
         <div className="bg-white rounded-xl border border-gray-200 px-4 py-3">
-          <p className="text-xs text-gray-400">合約總金額</p>
-          <p className="text-xl font-bold text-gray-800 mt-0.5">1,110 <span className="text-sm font-normal text-gray-400">萬</span></p>
-          <p className="text-xs text-gray-400">3 年 · 9 期</p>
+          <p className="text-xs text-gray-500">合約總金額</p>
+          <p className="text-xl font-bold text-gray-800 mt-0.5">1,110 <span className="text-sm font-normal text-gray-500">萬</span></p>
+          <p className="text-xs text-gray-500">3 年 · 9 期</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 px-4 py-3">
-          <p className="text-xs text-gray-400">已付款</p>
-          <p className="text-xl font-bold text-emerald-600 mt-0.5">{paidAmount} <span className="text-sm font-normal text-gray-400">萬</span></p>
-          <p className="text-xs text-gray-400">{paidList.length}/9 期</p>
+          <p className="text-xs text-gray-500">已付款</p>
+          <p className="text-xl font-bold text-emerald-600 mt-0.5">{paidAmount} <span className="text-sm font-normal text-gray-500">萬</span></p>
+          <p className="text-xs text-gray-500">{paidList.length}/9 期</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 px-4 py-3">
-          <p className="text-xs text-gray-400">款項逾期</p>
-          <p className={`text-xl font-bold mt-0.5 ${overdueList.length > 0 ? 'text-red-500' : 'text-gray-400'}`}>
-            {overdueList.length} <span className="text-sm font-normal text-gray-400">筆</span>
+          <p className="text-xs text-gray-500">款項逾期</p>
+          <p className={`text-xl font-bold mt-0.5 ${overdueList.length > 0 ? 'text-red-500' : 'text-gray-500'}`}>
+            {overdueList.length} <span className="text-sm font-normal text-gray-500">筆</span>
           </p>
-          <p className="text-xs text-gray-400">{overdueList.length > 0 ? `${overdueList.reduce((s,p)=>s+p.amount,0)} 萬元` : '全部正常 ✓'}</p>
+          <p className="text-xs text-gray-500">{overdueList.length > 0 ? `${overdueList.reduce((s,p)=>s+p.amount,0)} 萬元` : '全部正常 ✓'}</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 px-4 py-3">
-          <p className="text-xs text-gray-400">廣告素材交稿</p>
-          <p className="text-xl font-bold text-blue-600 mt-0.5">{submittedCount}<span className="text-sm font-normal text-gray-400">/{AD_SCHEDULE.length}</span></p>
-          <p className="text-xs text-gray-400">已完成交稿</p>
+          <p className="text-xs text-gray-500">廣告素材交稿</p>
+          <p className="text-xl font-bold text-blue-600 mt-0.5">{submittedCount}<span className="text-sm font-normal text-gray-500">/{AD_SCHEDULE.length}</span></p>
+          <p className="text-xs text-gray-500">已完成交稿</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 px-4 py-3">
-          <p className="text-xs text-gray-400">素材逾期</p>
-          <p className={`text-xl font-bold mt-0.5 ${adOverdue.length > 0 ? 'text-red-500' : 'text-gray-400'}`}>
-            {adOverdue.length} <span className="text-sm font-normal text-gray-400">筆</span>
+          <p className="text-xs text-gray-500">素材逾期</p>
+          <p className={`text-xl font-bold mt-0.5 ${adOverdue.length > 0 ? 'text-red-500' : 'text-gray-500'}`}>
+            {adOverdue.length} <span className="text-sm font-normal text-gray-500">筆</span>
           </p>
-          <p className="text-xs text-gray-400">{adOverdue.length > 0 ? '未交稿' : '全部正常 ✓'}</p>
+          <p className="text-xs text-gray-500">{adOverdue.length > 0 ? '未交稿' : '全部正常 ✓'}</p>
         </div>
       </div>
 
@@ -319,7 +319,7 @@ export default function SponsorPage() {
                   <div className="flex items-center justify-between px-5 py-3 bg-gray-50 border-b">
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-gray-800">民國 {rocYear} 年度</span>
-                      <span className="text-xs text-gray-400">（{gregYear} 年合約）</span>
+                      <span className="text-xs text-gray-500">（{gregYear} 年合約）</span>
                     </div>
                     <div className="flex items-center gap-3">
                       <div className="w-28 h-1.5 bg-gray-200 rounded-full overflow-hidden">
@@ -335,7 +335,7 @@ export default function SponsorPage() {
                       if (isPaid)       statusEl = <span className="text-xs text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full font-medium">✓ 已付款{pData.paidDate ? ` · ${pData.paidDate}` : ''}</span>
                       else if (days<0)  statusEl = <span className="text-xs text-red-600 bg-red-50 px-2 py-0.5 rounded-full font-medium">⚠ 逾期 {Math.abs(days)} 天</span>
                       else if (days<=30) statusEl = <span className="text-xs text-orange-600 bg-orange-50 px-2 py-0.5 rounded-full font-medium">⏰ {days} 天後到期</span>
-                      else              statusEl = <span className="text-xs text-gray-400">{days} 天後到期</span>
+                      else              statusEl = <span className="text-xs text-gray-500">{days} 天後到期</span>
                       return (
                         <div key={payment.id} className={`flex items-center justify-between px-5 py-3.5 ${isPaid ? 'bg-emerald-50/20' : ''}`}>
                           <div className="flex items-center gap-4">
@@ -350,13 +350,13 @@ export default function SponsorPage() {
                               </div>
                             )}
                             <div>
-                              <p className={`text-sm font-medium ${isPaid ? 'text-gray-400 line-through' : 'text-gray-800'}`}>{payment.label}</p>
-                              <p className="text-xs text-gray-400">到期日：{payment.dueDate}</p>
+                              <p className={`text-sm font-medium ${isPaid ? 'text-gray-500 line-through' : 'text-gray-800'}`}>{payment.label}</p>
+                              <p className="text-xs text-gray-500">到期日：{payment.dueDate}</p>
                             </div>
                           </div>
                           <div className="flex items-center gap-6">
                             {statusEl}
-                            <span className={`text-base font-bold w-16 text-right ${isPaid ? 'text-gray-300' : 'text-gray-800'}`}>{payment.amount} 萬</span>
+                            <span className={`text-base font-bold w-16 text-right ${isPaid ? 'text-gray-500' : 'text-gray-800'}`}>{payment.amount} 萬</span>
                           </div>
                         </div>
                       )
@@ -368,11 +368,11 @@ export default function SponsorPage() {
             <div className="bg-gray-800 rounded-xl px-5 py-4 flex items-center justify-between text-white">
               <div>
                 <p className="text-sm font-semibold">合約總計</p>
-                <p className="text-xs text-gray-400 mt-0.5">民國 113–115 年 · 9 期款項</p>
+                <p className="text-xs text-gray-500 mt-0.5">民國 113–115 年 · 9 期款項</p>
               </div>
               <div className="text-right">
-                <p className="text-xl font-bold">{paidAmount} / 1,110 <span className="text-sm font-normal text-gray-400">萬</span></p>
-                <p className="text-xs text-gray-400 mt-0.5">{paidList.length} / 9 期已付</p>
+                <p className="text-xl font-bold">{paidAmount} / 1,110 <span className="text-sm font-normal text-gray-500">萬</span></p>
+                <p className="text-xs text-gray-500 mt-0.5">{paidList.length} / 9 期已付</p>
               </div>
             </div>
           </div>
@@ -390,7 +390,7 @@ export default function SponsorPage() {
                   </button>
                 ))}
               </div>
-              <span className="text-sm text-gray-400">{events.length} 筆賽事</span>
+              <span className="text-sm text-gray-500">{events.length} 筆賽事</span>
               {isManager && filterYear === 2026 && events.length === 0 && (
                 <button onClick={importPreset} disabled={importing}
                   className="text-sm bg-emerald-600 text-white px-3 py-1.5 rounded-lg hover:bg-emerald-700 disabled:opacity-50">
@@ -411,7 +411,7 @@ export default function SponsorPage() {
               </div>
               {isManager && showAdd && formRow({ form: addForm, setForm: setAddForm, onSave: handleAdd, onCancel: () => setShowAdd(false), isNew: true })}
               {events.length === 0 && !showAdd && (
-                <div className="py-16 text-center text-gray-400">
+                <div className="py-16 text-center text-gray-500">
                   <div className="text-3xl mb-2">🏅</div>
                   <p className="text-sm">尚無賽程資料</p>
                   {isManager && filterYear === 2026 && <button onClick={importPreset} disabled={importing} className="mt-3 text-sm text-blue-500 hover:underline">{importing ? '匯入中…' : '一鍵匯入 2026 賽程'}</button>}
@@ -433,9 +433,9 @@ export default function SponsorPage() {
                         </div>
                         <div>{ev.code && <span className={`text-xs font-semibold px-1.5 py-0.5 rounded border ${codeColor(ev.code)}`}>{ev.code}</span>}</div>
                         <div className="text-sm text-gray-700 font-mono">
-                          {range ?? <span className="text-gray-300 italic text-xs">未排定</span>}
+                          {range ?? <span className="text-gray-500 italic text-xs">未排定</span>}
                           {ev.startDate && ev.endDate && ev.startDate !== ev.endDate && (
-                            <span className="text-xs text-gray-400 ml-1">({Math.round((new Date(ev.endDate)-new Date(ev.startDate))/86400000)+1}天)</span>
+                            <span className="text-xs text-gray-500 ml-1">({Math.round((new Date(ev.endDate)-new Date(ev.startDate))/86400000)+1}天)</span>
                           )}
                         </div>
                         <div className="text-xs text-gray-500 truncate">{ev.note || '—'}</div>
@@ -479,7 +479,7 @@ export default function SponsorPage() {
                   </button>
                 ))}
               </div>
-              <span className="text-sm text-gray-400">{submittedCount}/{AD_SCHEDULE.length} 已完成</span>
+              <span className="text-sm text-gray-500">{submittedCount}/{AD_SCHEDULE.length} 已完成</span>
               {adOverdue.length > 0 && (
                 <span className="text-xs text-red-600 bg-red-50 border border-red-200 px-2.5 py-1 rounded-full font-medium">
                   ⚠ {adOverdue.length} 筆素材逾期未交
@@ -507,16 +507,16 @@ export default function SponsorPage() {
                       <div className="flex items-center gap-3">
                         <span className="font-semibold text-gray-800">{monthZh}</span>
                         <span className="text-sm text-gray-600">提供日期：{group.rocDate}</span>
-                        <span className="text-xs text-gray-400">（{group.dueDate}）</span>
+                        <span className="text-xs text-gray-500">（{group.dueDate}）</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-400">{group.items.filter(i => adStatus[i.id]?.submitted).length}/{group.items.length} 完成</span>
+                        <span className="text-xs text-gray-500">{group.items.filter(i => adStatus[i.id]?.submitted).length}/{group.items.length} 完成</span>
                         {groupBadge}
                       </div>
                     </div>
 
                     {/* Table header */}
-                    <div className="hidden sm:grid px-4 py-1.5 border-b bg-gray-50/60 text-xs font-medium text-gray-400"
+                    <div className="hidden sm:grid px-4 py-1.5 border-b bg-gray-50/60 text-xs font-medium text-gray-500"
                       style={{ gridTemplateColumns: '28px 1fr 130px 150px 80px 130px' }}>
                       <div></div><div>項目</div><div>聯賽</div><div>露出尺寸</div><div>數量</div><div>備註／對象</div>
                     </div>
@@ -547,7 +547,7 @@ export default function SponsorPage() {
                             {/* Item name */}
                             <div>
                               <div className="flex items-center gap-2">
-                                <span className={`text-sm font-medium ${isSubmitted ? 'text-gray-400 line-through' : 'text-gray-800'}`}>
+                                <span className={`text-sm font-medium ${isSubmitted ? 'text-gray-500 line-through' : 'text-gray-800'}`}>
                                   {item.item}
                                 </span>
                                 {item.star && !isSubmitted && (
@@ -563,19 +563,19 @@ export default function SponsorPage() {
                             <div><LeagueBadges leagues={item.leagues} /></div>
 
                             {/* Size */}
-                            <div className={`text-xs font-mono ${isSubmitted ? 'text-gray-300' : 'text-gray-600'}`}>{item.size}</div>
+                            <div className={`text-xs font-mono ${isSubmitted ? 'text-gray-500' : 'text-gray-600'}`}>{item.size}</div>
 
                             {/* Qty */}
                             <div>
                               {item.qty && (
-                                <span className={`text-sm font-semibold ${item.star && !isSubmitted ? 'text-yellow-700 bg-yellow-100 px-1.5 py-0.5 rounded' : isSubmitted ? 'text-gray-300' : 'text-gray-700'}`}>
+                                <span className={`text-sm font-semibold ${item.star && !isSubmitted ? 'text-yellow-700 bg-yellow-100 px-1.5 py-0.5 rounded' : isSubmitted ? 'text-gray-500' : 'text-gray-700'}`}>
                                   {item.qty}
                                 </span>
                               )}
                             </div>
 
                             {/* Note */}
-                            <div className={`text-xs ${isSubmitted ? 'text-gray-300' : 'text-gray-500'}`}>
+                            <div className={`text-xs ${isSubmitted ? 'text-gray-500' : 'text-gray-500'}`}>
                               {item.note || '—'}
                             </div>
                           </div>
@@ -587,7 +587,7 @@ export default function SponsorPage() {
               })}
 
               {filteredGroups.length === 0 && (
-                <div className="bg-white rounded-xl border border-gray-200 py-16 text-center text-gray-400">
+                <div className="bg-white rounded-xl border border-gray-200 py-16 text-center text-gray-500">
                   <div className="text-3xl mb-2">✅</div>
                   <p className="text-sm">所有素材已完成交稿</p>
                 </div>

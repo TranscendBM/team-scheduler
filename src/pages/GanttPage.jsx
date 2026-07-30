@@ -165,11 +165,11 @@ export default function GanttPage() {
       <div className="flex items-center justify-between px-6 py-4 border-b bg-white">
         <div>
           <h2 className="text-xl font-bold text-gray-800">甘特圖總覽</h2>
-          <p className="text-sm text-gray-400">{filteredPeople.length} 位成員</p>
+          <p className="text-sm text-gray-500">{filteredPeople.length} 位成員</p>
         </div>
         <div className="flex items-center gap-4">
           {/* Busy legend */}
-          <div className="flex items-center gap-1.5 text-xs text-gray-400">
+          <div className="flex items-center gap-1.5 text-xs text-gray-500">
             <span>繁忙度</span>
             {[[1,'1'],[3,'3'],[5,'5'],[7,'7'],[10,'10+']].map(([cnt, label]) => (
               <div key={cnt} className="flex items-center gap-0.5">
@@ -199,7 +199,7 @@ export default function GanttPage() {
       {/* Gantt body */}
       <div className="flex-1 overflow-hidden">
         {filteredPeople.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-gray-400">
+          <div className="flex items-center justify-center h-full text-gray-500">
             <div className="text-center">
               <div className="text-4xl mb-2">👥</div>
               <p>尚未新增人員</p>
@@ -245,9 +245,9 @@ export default function GanttPage() {
                     <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1.5 ${person.role === 'designer' ? 'bg-purple-400' : 'bg-teal-400'}`} />
                     <div className="min-w-0">
                       <p className="text-base font-semibold text-gray-800 truncate">{person.name}</p>
-                      <p className="text-xs text-gray-400">{person.role === 'designer' ? '設計師' : 'Planner'}</p>
+                      <p className="text-xs text-gray-500">{person.role === 'designer' ? '設計師' : 'Planner'}</p>
                       {bars.length > 0 && (
-                        <p className="text-xs text-gray-300 mt-0.5">{bars.length} 個專案</p>
+                        <p className="text-xs text-gray-500 mt-0.5">{bars.length} 個專案</p>
                       )}
                     </div>
                   </div>
@@ -404,9 +404,9 @@ export default function GanttPage() {
           <p className="font-semibold text-sm mb-1">{tooltip.bar.projectName}</p>
           <div className="flex items-center gap-2 mb-1 flex-wrap">
             <div className="w-2 h-2 rounded-full" style={{ backgroundColor: tooltip.bar.color }} />
-            <span className="text-gray-300">{TYPE_LABELS[tooltip.bar.type]}</span>
+            <span className="text-gray-500">{TYPE_LABELS[tooltip.bar.type]}</span>
             <span className="text-gray-500">·</span>
-            <span className="text-gray-300">{tooltip.bar.role === 'designer' ? '設計師' : 'Planner'}</span>
+            <span className="text-gray-500">{tooltip.bar.role === 'designer' ? '設計師' : 'Planner'}</span>
             {tooltip.bar.loadingLevel && (
               <>
                 <span className="text-gray-500">·</span>
@@ -417,14 +417,14 @@ export default function GanttPage() {
               </>
             )}
           </div>
-          <p className="text-gray-400">
+          <p className="text-gray-500">
             {new Date(tooltip.bar.workStart).toLocaleDateString('zh-TW')} – {new Date(tooltip.bar.workEnd).toLocaleDateString('zh-TW')}
           </p>
           {tooltip.bar.milestones.length > 0 && (
             <div className="mt-2 pt-2 border-t border-gray-700">
               <p className="text-gray-500 mb-1">里程碑</p>
               {tooltip.bar.milestones.map(ms => (
-                <p key={ms.key} className="text-gray-300">◆ {ms.label}：{new Date(ms.date).toLocaleDateString('zh-TW')}</p>
+                <p key={ms.key} className="text-gray-500">◆ {ms.label}：{new Date(ms.date).toLocaleDateString('zh-TW')}</p>
               ))}
             </div>
           )}
@@ -437,8 +437,8 @@ export default function GanttPage() {
             <div className="w-2 h-2 rounded-full" style={{ backgroundColor: LEAVE_COLORS[tooltip.leave.type] || '#d1d5db' }} />
             <p className="font-semibold text-sm">{tooltip.leave.personName} · {tooltip.leave.type}</p>
           </div>
-          <p className="text-gray-400">{tooltip.leave.startDate} – {tooltip.leave.endDate}</p>
-          {tooltip.leave.note && <p className="text-gray-400 mt-1">{tooltip.leave.note}</p>}
+          <p className="text-gray-500">{tooltip.leave.startDate} – {tooltip.leave.endDate}</p>
+          {tooltip.leave.note && <p className="text-gray-500 mt-1">{tooltip.leave.note}</p>}
         </div>
       )}
     </div>

@@ -58,7 +58,7 @@ export default function LoginPage() {
         {err && (
           <p className="text-xs text-red-500 mt-4 break-words bg-red-50 rounded-lg p-2">{err}</p>
         )}
-        <p className="text-xs text-gray-400 mt-6">僅限授權成員使用</p>
+        <p className="text-xs text-gray-500 mt-6">僅限授權成員使用</p>
       </div>
     </div>
   )

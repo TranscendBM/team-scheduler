@@ -209,7 +209,7 @@ export default function RequestNewPage() {
     }
   }
 
-  if (loading) return <div className="p-8 text-gray-400 text-sm">載入中…</div>
+  if (loading) return <div className="p-8 text-gray-500 text-sm">載入中…</div>
 
   if (blocked) {
     return (
@@ -241,7 +241,7 @@ export default function RequestNewPage() {
   return (
     <div className="p-8 max-w-2xl mx-auto">
       <h1 className="text-2xl font-bold text-gray-800 mb-1">{editId ? '編輯設計需求' : '提交設計需求'}</h1>
-      <p className="text-sm text-gray-400 mb-6">
+      <p className="text-sm text-gray-500 mb-6">
         {editId ? '需求仍在「待審核」狀態,可修改內容;審核後即無法編輯' : '送出後會進入主管審核,狀態預設為「待審核」'}
       </p>
 
@@ -315,7 +315,7 @@ export default function RequestNewPage() {
               accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.key,.pages,.numbers,image/*"
               onChange={onFilesPicked} />
           </label>
-          <p className="text-xs text-gray-400 mt-1">簡報 / 試算表 / Word / PDF，單檔上限 {MAX_ATTACHMENT_MB}MB</p>
+          <p className="text-xs text-gray-500 mt-1">簡報 / 試算表 / Word / PDF，單檔上限 {MAX_ATTACHMENT_MB}MB</p>
           {(existingAtts.length > 0 || files.length > 0) && (
             <ul className="mt-2 space-y-1">
               {existingAtts.map(a => {
@@ -331,7 +331,7 @@ export default function RequestNewPage() {
                     {isRemoved ? (
                       <button type="button" onClick={() => restoreExisting(a)} className="text-blue-400 hover:text-blue-600 ml-2">復原</button>
                     ) : (
-                      <button type="button" onClick={() => removeExisting(a)} className="text-gray-400 hover:text-red-500 ml-2">移除</button>
+                      <button type="button" onClick={() => removeExisting(a)} className="text-gray-500 hover:text-red-500 ml-2">移除</button>
                     )}
                   </li>
                 )
@@ -346,7 +346,7 @@ export default function RequestNewPage() {
           )}
         </div>
 
-        <div className="text-xs text-gray-400">提交人：{user?.displayName || email}（自動帶入）</div>
+        <div className="text-xs text-gray-500">提交人：{user?.displayName || email}（自動帶入）</div>
 
         {error && <p className="text-sm text-red-500">{error}</p>}
         {saving && uploadMsg && <p className="text-sm text-blue-500">{uploadMsg}</p>}

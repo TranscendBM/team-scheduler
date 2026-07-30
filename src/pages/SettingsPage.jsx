@@ -72,7 +72,7 @@ export default function SettingsPage() {
 
   const hasChanges = JSON.stringify(rules) !== JSON.stringify(original)
 
-  if (loading) return <div className="flex items-center justify-center h-full text-gray-400">載入中…</div>
+  if (loading) return <div className="flex items-center justify-center h-full text-gray-500">載入中…</div>
 
   const Stepper = ({ baseKey, level }) => {
     const val = getVal(baseKey, level)
@@ -99,7 +99,7 @@ export default function SettingsPage() {
       <div className="flex items-center justify-between px-6 py-4 border-b bg-white">
         <div>
           <h2 className="text-xl font-bold text-gray-800">里程碑設定</h2>
-          <p className="text-sm text-gray-400">依秀展 Loading 程度設定各工作項目的提前週數</p>
+          <p className="text-sm text-gray-500">依秀展 Loading 程度設定各工作項目的提前週數</p>
         </div>
         {isManager && (
           <div className="flex items-center gap-2">
@@ -142,7 +142,7 @@ export default function SettingsPage() {
                 style={{ gridTemplateColumns: '1fr 90px 90px 90px' }}>
                 <div>
                   <p className="text-sm font-medium text-gray-800">{row.label}</p>
-                  <p className="text-xs text-gray-400">{row.desc} ·
+                  <p className="text-xs text-gray-500">{row.desc} ·
                     <span className={`ml-1 text-xs px-1.5 py-0.5 rounded-full ${row.role === '設計師' ? 'bg-purple-100 text-purple-700' : 'bg-teal-100 text-teal-700'}`}>
                       {row.role}
                     </span>
@@ -158,11 +158,11 @@ export default function SettingsPage() {
             <div className="grid px-5 py-3 items-center" style={{ gridTemplateColumns: '1fr 90px 90px 90px' }}>
               <div>
                 <p className="text-sm font-medium text-gray-800">LinkedIn 發文</p>
-                <p className="text-xs text-gray-400">開展當天 · <span className="ml-1 text-xs px-1.5 py-0.5 rounded-full bg-teal-100 text-teal-700">Planner</span></p>
+                <p className="text-xs text-gray-500">開展當天 · <span className="ml-1 text-xs px-1.5 py-0.5 rounded-full bg-teal-100 text-teal-700">Planner</span></p>
               </div>
               {LEVELS.map(lv => (
                 <div key={lv} className="text-center">
-                  <span className="text-xs text-gray-400 italic">開展當天</span>
+                  <span className="text-xs text-gray-500 italic">開展當天</span>
                 </div>
               ))}
             </div>
@@ -179,11 +179,11 @@ export default function SettingsPage() {
               <div key={row.key} className="flex items-center justify-between px-5 py-3.5">
                 <div>
                   <p className="text-sm font-medium text-gray-800">{row.label}</p>
-                  <p className="text-xs text-gray-400">{row.desc}</p>
+                  <p className="text-xs text-gray-500">{row.desc}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <Stepper baseKey={row.key} level={null} />
-                  <span className="text-sm text-gray-400 w-8">週前</span>
+                  <span className="text-sm text-gray-500 w-8">週前</span>
                 </div>
               </div>
             ))}
@@ -228,7 +228,7 @@ export default function SettingsPage() {
         </div>
 
         {!isManager && (
-          <p className="text-sm text-gray-400 text-center">只有管理者可以修改設定</p>
+          <p className="text-sm text-gray-500 text-center">只有管理者可以修改設定</p>
         )}
       </div>
     </div>

@@ -58,7 +58,7 @@ export default function TradeshowGanttPage() {
       <div className="flex items-center justify-between px-6 py-4 border-b bg-white">
         <div>
           <h2 className="text-xl font-bold text-gray-800">秀展甘特圖</h2>
-          <p className="text-sm text-gray-400">{rows.length} 場秀展</p>
+          <p className="text-sm text-gray-500">{rows.length} 場秀展</p>
         </div>
         <div className="flex items-center gap-1">
           <button onClick={() => setYear(y => y - 1)} className="p-1.5 rounded hover:bg-gray-100 text-gray-600">‹</button>
@@ -69,7 +69,7 @@ export default function TradeshowGanttPage() {
 
       <div className="flex-1 overflow-hidden">
         {rows.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-gray-400">
+          <div className="flex items-center justify-center h-full text-gray-500">
             <div className="text-center"><div className="text-4xl mb-2">📊</div><p>此年度沒有秀展資料</p></div>
           </div>
         ) : (
@@ -110,7 +110,7 @@ export default function TradeshowGanttPage() {
                   <div key={p.id} className={`flex border-b ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/60'}`} style={{ height: ROW_HEIGHT }}>
                     <div className="flex-shrink-0 border-r flex flex-col justify-center px-4 sticky left-0 z-10 bg-inherit" style={{ width: LEFT_WIDTH }}>
                       <p className="text-sm font-medium text-gray-800 truncate">{p.name}</p>
-                      {assigned.length > 0 && <p className="text-xs text-gray-400 truncate">{assigned.join('、')}</p>}
+                      {assigned.length > 0 && <p className="text-xs text-gray-500 truncate">{assigned.join('、')}</p>}
                     </div>
                     <div className="flex-1 relative overflow-hidden">
                       {MONTHS.map((_, mi) => (
@@ -145,12 +145,12 @@ export default function TradeshowGanttPage() {
         <div className="fixed z-50 bg-gray-900 text-white text-xs rounded-xl p-3 shadow-2xl pointer-events-none"
           style={{ left: tooltip.x + 14, top: tooltip.y - 10, maxWidth: 280 }}>
           <p className="font-semibold text-sm mb-1">{tooltip.p.name}</p>
-          <p className="text-gray-400">{tooltip.p.startDate} ~ {tooltip.p.endDate}</p>
-          {tooltip.p.office && <p className="text-gray-300 mt-1">Office：{tooltip.p.office}｜{tooltip.p.location || '—'}</p>}
-          {tooltip.loadingLevel && <p className="text-gray-300">Loading：{tooltip.loadingLevel}{tooltip.p.boothSize ? `（${tooltip.p.boothSize} 攤位）` : ''}</p>}
-          {tooltip.assigned.length > 0 && <p className="text-gray-300 mt-1">指派：{tooltip.assigned.join('、')}</p>}
+          <p className="text-gray-500">{tooltip.p.startDate} ~ {tooltip.p.endDate}</p>
+          {tooltip.p.office && <p className="text-gray-500 mt-1">Office：{tooltip.p.office}｜{tooltip.p.location || '—'}</p>}
+          {tooltip.loadingLevel && <p className="text-gray-500">Loading：{tooltip.loadingLevel}{tooltip.p.boothSize ? `（${tooltip.p.boothSize} 攤位）` : ''}</p>}
+          {tooltip.assigned.length > 0 && <p className="text-gray-500 mt-1">指派：{tooltip.assigned.join('、')}</p>}
           {(tooltip.p.rentUSD || tooltip.p.decorUSD || tooltip.p.prUSD) && (
-            <p className="text-gray-300 mt-1">
+            <p className="text-gray-500 mt-1">
               預算：${Math.round((tooltip.p.rentUSD || 0) + (tooltip.p.decorUSD || 0) + (tooltip.p.prUSD || 0)).toLocaleString()}
             </p>
           )}

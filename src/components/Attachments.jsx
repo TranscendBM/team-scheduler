@@ -74,7 +74,7 @@ export default function Attachments({ items, requestId }) {
             <a href={preview.a.url} target="_blank" rel="noreferrer"
               className="text-xs bg-white/10 hover:bg-white/20 rounded-lg px-3 py-1.5">下載</a>
             <button onClick={() => setPreview(null)}
-              className="text-lg leading-none px-2 hover:text-gray-300">✕</button>
+              className="text-lg leading-none px-2 hover:text-gray-500">✕</button>
           </div>
           {/* 內容 */}
           <div className="flex-1 min-h-0 p-4 flex items-center justify-center" onClick={e => e.stopPropagation()}>

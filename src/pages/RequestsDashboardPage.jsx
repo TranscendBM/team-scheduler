@@ -28,7 +28,7 @@ function fmtMD(d) { return `${d.getMonth() + 1}/${d.getDate()}` }
 
 // loading 等級:進行中任務數 → 顏色
 function loadingMeta(n) {
-  if (n === 0) return { label: '無任務', cls: 'bg-gray-100 text-gray-400' }
+  if (n === 0) return { label: '無任務', cls: 'bg-gray-100 text-gray-500' }
   if (n <= 2) return { label: `${n} 件 · 輕度`, cls: 'bg-emerald-100 text-emerald-700' }
   if (n <= 4) return { label: `${n} 件 · 中度`, cls: 'bg-amber-100 text-amber-700' }
   return { label: `${n} 件 · 高度`, cls: 'bg-red-100 text-red-700' }
@@ -81,7 +81,7 @@ export default function RequestsDashboardPage() {
   return (
     <div className="p-8 max-w-6xl mx-auto">
       <h1 className="text-2xl font-bold text-gray-800 mb-1">設計師儀表板</h1>
-      <p className="text-sm text-gray-400 mb-5">監控每位設計師的需求 loading(僅計進行中:已發稿/設計中/確認中),點色塊看詳情</p>
+      <p className="text-sm text-gray-500 mb-5">監控每位設計師的需求 loading(僅計進行中:已發稿/設計中/確認中),點色塊看詳情</p>
 
       {/* 圖例 */}
       <div className="flex flex-wrap gap-4 mb-4 text-xs text-gray-500">
@@ -94,7 +94,7 @@ export default function RequestsDashboardPage() {
 
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         {/* 時間刻度 */}
-        <div className="flex border-b border-gray-100 text-xs text-gray-400">
+        <div className="flex border-b border-gray-100 text-xs text-gray-500">
           <div className="w-44 shrink-0 px-4 py-2 font-medium">設計師</div>
           <div className="flex-1 relative h-8">
             {ticks.map(t => (
@@ -130,13 +130,13 @@ export default function RequestsDashboardPage() {
                   </button>
                 ))}
                 {bars.length > 0 && <div style={{ height: `${bars.length * 24}px` }} />}
-                {bars.length === 0 && <p className="text-xs text-gray-300 pt-2 pl-2">— 目前沒有進行中任務 —</p>}
+                {bars.length === 0 && <p className="text-xs text-gray-500 pt-2 pl-2">— 目前沒有進行中任務 —</p>}
               </div>
             </div>
           )
         })}
         {designers.length === 0 && (
-          <p className="text-sm text-gray-400 text-center py-10">尚無設計師,請先到使用者管理新增</p>
+          <p className="text-sm text-gray-500 text-center py-10">尚無設計師,請先到使用者管理新增</p>
         )}
       </div>
 

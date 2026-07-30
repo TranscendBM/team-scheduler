@@ -141,12 +141,12 @@ export default function LeavePage() {
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-semibold text-gray-800 text-sm">{person?.name || leave.personName}</span>
               <span className="text-xs px-2 py-0.5 rounded-full text-white font-medium" style={{ backgroundColor: LEAVE_COLORS[leave.type] }}>{leave.type}</span>
-              <span className="text-xs text-gray-400">{d}{typeof d === 'number' ? ' 天' : ''}</span>
-              {isExpired && <span className="text-xs text-gray-300">已過期</span>}
+              <span className="text-xs text-gray-500">{d}{typeof d === 'number' ? ' 天' : ''}</span>
+              {isExpired && <span className="text-xs text-gray-500">已過期</span>}
             </div>
             <p className="text-xs text-gray-500 mt-0.5">
               {formatTimeRange(leave)}
-              {leave.note && <span className="text-gray-400 ml-2">· {leave.note}</span>}
+              {leave.note && <span className="text-gray-500 ml-2">· {leave.note}</span>}
             </p>
           </div>
         </div>
@@ -169,7 +169,7 @@ export default function LeavePage() {
       <div className="flex items-center justify-between px-6 py-4 border-b bg-white">
         <div>
           <h2 className="text-xl font-bold text-gray-800">休假預排</h2>
-          <p className="text-sm text-gray-400">{baseFiltered.length} 筆休假記錄</p>
+          <p className="text-sm text-gray-500">{baseFiltered.length} 筆休假記錄</p>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
           <select value={filterPerson} onChange={e => setFilterPerson(e.target.value)}
@@ -206,7 +206,7 @@ export default function LeavePage() {
         </div>
 
         {monthKeys.length === 0 ? (
-          <div className="flex items-center justify-center h-64 text-gray-400">
+          <div className="flex items-center justify-center h-64 text-gray-500">
             <div className="text-center">
               <div className="text-4xl mb-2">🏖️</div>
               <p>尚無休假記錄</p>
@@ -230,7 +230,7 @@ export default function LeavePage() {
                   <div className="flex items-center gap-3 mb-3">
                     <h3 className="text-base font-bold text-gray-700">{fmtMonth(ym)}</h3>
                     <div className="flex-1 h-px bg-gray-200" />
-                    <span className="text-xs text-gray-400">{monthLeaves.length} 筆</span>
+                    <span className="text-xs text-gray-500">{monthLeaves.length} 筆</span>
                   </div>
 
                   {/* Two columns */}
@@ -241,11 +241,11 @@ export default function LeavePage() {
                         <div className="w-2 h-2 rounded-full bg-purple-400" />
                         <span className="text-xs font-semibold text-purple-600 uppercase tracking-wide">設計師</span>
                         {designerLeaves.length > 0 && (
-                          <span className="text-xs text-gray-400">{designerLeaves.length} 筆</span>
+                          <span className="text-xs text-gray-500">{designerLeaves.length} 筆</span>
                         )}
                       </div>
                       {designerLeaves.length === 0 ? (
-                        <p className="text-xs text-gray-300 pl-4">本月無休假</p>
+                        <p className="text-xs text-gray-500 pl-4">本月無休假</p>
                       ) : (
                         <div className="space-y-2">
                           {designerLeaves.map(l => <LeaveCard key={l.id} leave={l} />)}
@@ -259,11 +259,11 @@ export default function LeavePage() {
                         <div className="w-2 h-2 rounded-full bg-teal-400" />
                         <span className="text-xs font-semibold text-teal-600 uppercase tracking-wide">Planner</span>
                         {plannerLeaves.length > 0 && (
-                          <span className="text-xs text-gray-400">{plannerLeaves.length} 筆</span>
+                          <span className="text-xs text-gray-500">{plannerLeaves.length} 筆</span>
                         )}
                       </div>
                       {plannerLeaves.length === 0 ? (
-                        <p className="text-xs text-gray-300 pl-4">本月無休假</p>
+                        <p className="text-xs text-gray-500 pl-4">本月無休假</p>
                       ) : (
                         <div className="space-y-2">
                           {plannerLeaves.map(l => <LeaveCard key={l.id} leave={l} />)}
@@ -285,7 +285,7 @@ export default function LeavePage() {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
             <div className="px-6 py-4 border-b flex items-center justify-between">
               <h3 className="text-lg font-semibold text-gray-800">{editLeave ? '編輯休假' : '新增休假'}</h3>
-              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600 text-xl">×</button>
+              <button onClick={() => setShowModal(false)} className="text-gray-500 hover:text-gray-600 text-xl">×</button>
             </div>
             <div className="px-6 py-5 space-y-4">
               {/* Person */}

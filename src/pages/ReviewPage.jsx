@@ -132,7 +132,7 @@ export default function ReviewPage() {
             </button>
           )
         })}
-        {designers.length === 0 && <span className="text-xs text-gray-400">尚無設計師,請先到使用者管理新增</span>}
+        {designers.length === 0 && <span className="text-xs text-gray-500">尚無設計師,請先到使用者管理新增</span>}
       </div>
     )
   }
@@ -152,7 +152,7 @@ export default function ReviewPage() {
             </button>
           )
         })}
-        {planners.length === 0 && <span className="text-xs text-gray-400">尚無 Planner</span>}
+        {planners.length === 0 && <span className="text-xs text-gray-500">尚無 Planner</span>}
       </div>
     )
   }
@@ -160,7 +160,7 @@ export default function ReviewPage() {
   return (
     <div className="p-8 max-w-4xl mx-auto">
       <h1 className="text-2xl font-bold text-gray-800 mb-1">需求審核</h1>
-      <p className="text-sm text-gray-400 mb-5">核准並指派設計師(可多位)、填寫注意事項、可變更交期,或駁回</p>
+      <p className="text-sm text-gray-500 mb-5">核准並指派設計師(可多位)、填寫注意事項、可變更交期,或駁回</p>
 
       <div className="flex gap-2 mb-5">
         <button onClick={() => setTab('pending')}
@@ -186,10 +186,10 @@ export default function ReviewPage() {
                     {r.urgent && <span className="text-red-500 mr-1">🔥</span>}
                     {r.projectName || r.title}
                   </p>
-                  <p className="text-xs text-gray-400 mt-1">
+                  <p className="text-xs text-gray-500 mt-1">
                     {r.region ? r.region + ' · ' : ''}{(r.docTypes || []).join('、')} · 交期 {r.dueDate || '未指定'}
                   </p>
-                  <p className="text-xs text-gray-400 mt-0.5">提交：{r.submittedByName || r.submittedBy} · {fmt(r.createdAt)}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">提交：{r.submittedByName || r.submittedBy} · {fmt(r.createdAt)}</p>
                   {r.description && (
                     <p className="text-sm text-gray-600 mt-2 whitespace-pre-wrap bg-gray-50 rounded-lg p-2">
                       <Linkify text={r.description} />
@@ -308,7 +308,7 @@ export default function ReviewPage() {
           )
         })}
         {shown.length === 0 && (
-          <div className="text-center text-gray-400 text-sm py-12 bg-white rounded-xl border border-gray-100">
+          <div className="text-center text-gray-500 text-sm py-12 bg-white rounded-xl border border-gray-100">
             {tab === 'pending' ? '目前沒有待審核的需求 🎉' : '尚無需求'}
           </div>
         )}

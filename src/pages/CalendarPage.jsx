@@ -156,7 +156,7 @@ export default function CalendarPage() {
       <div className="flex items-center justify-between px-6 py-4 border-b bg-white">
         <div>
           <h2 className="text-xl font-bold text-gray-800">日曆視圖</h2>
-          <p className="text-sm text-gray-400">{year} 年 {MONTHS_LABEL[month]}｜僅顯示重要里程碑</p>
+          <p className="text-sm text-gray-500">{year} 年 {MONTHS_LABEL[month]}｜僅顯示重要里程碑</p>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={goToday} className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600">
@@ -172,7 +172,7 @@ export default function CalendarPage() {
         {/* Weekday headers */}
         <div className="grid grid-cols-7 mb-1">
           {WEEKDAYS.map(d => (
-            <div key={d} className="text-center text-base font-medium text-gray-400 py-2">{d}</div>
+            <div key={d} className="text-center text-base font-medium text-gray-500 py-2">{d}</div>
           ))}
         </div>
 
@@ -205,7 +205,7 @@ export default function CalendarPage() {
                       <span className="truncate font-medium" style={{ color: ev.color, fontSize: 12 }}>
                         {ev.label}
                       </span>
-                      <span className="flex-shrink-0 text-gray-400 hidden sm:inline" style={{ fontSize: 11 }}>
+                      <span className="flex-shrink-0 text-gray-500 hidden sm:inline" style={{ fontSize: 11 }}>
                         {ev.sub}
                       </span>
                     </div>
@@ -222,7 +222,7 @@ export default function CalendarPage() {
                     </div>
                   ))}
                   {overflow > 0 && (
-                    <p className="text-sm text-gray-400 pl-1">+{overflow} 更多</p>
+                    <p className="text-sm text-gray-500 pl-1">+{overflow} 更多</p>
                   )}
                 </div>
               </div>

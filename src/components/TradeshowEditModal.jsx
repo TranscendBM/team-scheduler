@@ -145,7 +145,7 @@ export default function TradeshowEditModal({ project, people, rules, onClose, on
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
         <div className="px-6 py-4 border-b flex items-center justify-between sticky top-0 bg-white z-10">
           <h3 className="text-lg font-semibold text-gray-800">{readOnly ? '檢視秀展' : project ? '編輯秀展' : '新增秀展'}</h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">×</button>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-600 text-xl">×</button>
         </div>
         <fieldset disabled={readOnly} className="px-6 py-5 space-y-4">
           <div>
@@ -174,7 +174,7 @@ export default function TradeshowEditModal({ project, people, rules, onClose, on
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
               {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
-            <p className="text-xs text-gray-400 mt-1">結束日期一過，展覽列表會自動顯示「已結束」，不用手動改</p>
+            <p className="text-xs text-gray-500 mt-1">結束日期一過，展覽列表會自動顯示「已結束」，不用手動改</p>
           </div>
 
           <div>
@@ -226,7 +226,7 @@ export default function TradeshowEditModal({ project, people, rules, onClose, on
             <button type="button" onClick={() => setShowBudget(v => !v)}
               className="w-full flex items-center justify-between px-4 py-2.5 bg-gray-50 hover:bg-gray-100 text-sm font-medium text-gray-600 transition-colors">
               <span>💰 預算與規格（選填）</span>
-              <span className="text-xs text-gray-400">{showBudget ? '收合 ▲' : '展開 ▼'}</span>
+              <span className="text-xs text-gray-500">{showBudget ? '收合 ▲' : '展開 ▼'}</span>
             </button>
             {showBudget && (
               <div className="p-4 space-y-3">
@@ -259,7 +259,7 @@ export default function TradeshowEditModal({ project, people, rules, onClose, on
                     <option value="">未指定</option>
                     {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
-                  <p className="text-xs text-gray-400 mt-1">
+                  <p className="text-xs text-gray-500 mt-1">
                     {!form.currency ? '依負責 Office 自動帶入，也可手動改選'
                       : form.currency === 'USD' ? '美金當地金額即 USD，不需換算'
                       : !fx ? '匯率資料尚未取得（每日自動更新）'
@@ -349,7 +349,7 @@ export default function TradeshowEditModal({ project, people, rules, onClose, on
                 </div>
               </div>
             )}
-            {people.length === 0 && <p className="text-sm text-gray-400">請先在「人員管理」新增成員</p>}
+            {people.length === 0 && <p className="text-sm text-gray-500">請先在「人員管理」新增成員</p>}
           </div>
 
           {form.startDate && form.assignments.length > 0 && (

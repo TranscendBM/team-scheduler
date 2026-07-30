@@ -115,7 +115,7 @@ export default function TradeshowListPage() {
           )}
         </div>
       </div>
-      <p className="text-sm text-gray-400 mb-4">{filtered.length} 場秀展，接近試算表格式方便核對資料</p>
+      <p className="text-sm text-gray-500 mb-4">{filtered.length} 場秀展，接近試算表格式方便核對資料</p>
 
       <div className="flex items-center gap-2 mb-3">
         <select value={year} onChange={e => setYear(parseInt(e.target.value))}
@@ -124,12 +124,12 @@ export default function TradeshowListPage() {
         </select>
         {(officeFilters.length > 0 || statusFilters.length > 0) && (
           <button onClick={() => { setOfficeFilters([]); setStatusFilters([]) }}
-            className="text-xs text-gray-400 hover:text-gray-600">✕ 清除篩選</button>
+            className="text-xs text-gray-500 hover:text-gray-600">✕ 清除篩選</button>
         )}
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5 mb-2">
-        <span className="text-xs text-gray-400 mr-1">分公司</span>
+        <span className="text-xs text-gray-500 mr-1">分公司</span>
         {offices.map(o => (
           <button key={o} onClick={() => toggleFilter(setOfficeFilters, o)}
             className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
@@ -141,7 +141,7 @@ export default function TradeshowListPage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5 mb-4">
-        <span className="text-xs text-gray-400 mr-1">狀態</span>
+        <span className="text-xs text-gray-500 mr-1">狀態</span>
         {statuses.map(s => (
           <button key={s} onClick={() => toggleFilter(setStatusFilters, s)}
             className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
@@ -171,7 +171,7 @@ export default function TradeshowListPage() {
               return (
               <tr key={p.id} onClick={() => setEditing(p)}
                 className={`cursor-pointer hover:bg-blue-50 ${i % 2 ? 'bg-gray-50/50' : 'bg-white'}`}>
-                <td className={`px-3 py-2 border-r border-gray-100 sticky left-0 bg-inherit font-medium whitespace-nowrap ${ended ? 'text-gray-400' : 'text-gray-800'}`}>
+                <td className={`px-3 py-2 border-r border-gray-100 sticky left-0 bg-inherit font-medium whitespace-nowrap ${ended ? 'text-gray-500' : 'text-gray-800'}`}>
                   {p.name}
                 </td>
                 {COLUMNS.map(c => {
@@ -189,7 +189,7 @@ export default function TradeshowListPage() {
                     )
                   }
                   return (
-                    <td key={c.key} className={`px-3 py-2 whitespace-nowrap ${c.num ? 'text-right tabular-nums' : ''} ${ended ? 'text-gray-400' : 'text-gray-600'} ${c.bold ? 'font-semibold' : ''}`}>
+                    <td key={c.key} className={`px-3 py-2 whitespace-nowrap ${c.num ? 'text-right tabular-nums' : ''} ${ended ? 'text-gray-500' : 'text-gray-600'} ${c.bold ? 'font-semibold' : ''}`}>
                       {c.render(p)}
                     </td>
                   )
@@ -199,7 +199,7 @@ export default function TradeshowListPage() {
                     {deleteConfirm === p.id ? (
                       <>
                         <button onClick={() => handleDelete(p.id)} className="text-xs text-red-600 hover:underline mr-2">確認刪除</button>
-                        <button onClick={() => setDeleteConfirm(null)} className="text-xs text-gray-400 hover:underline">取消</button>
+                        <button onClick={() => setDeleteConfirm(null)} className="text-xs text-gray-500 hover:underline">取消</button>
                       </>
                     ) : (
                       <button onClick={() => setDeleteConfirm(p.id)} className="text-xs text-red-400 hover:text-red-600 hover:underline">刪除</button>
@@ -210,7 +210,7 @@ export default function TradeshowListPage() {
               )
             })}
             {filtered.length === 0 && (
-              <tr><td colSpan={COLUMNS.length + 2} className="px-3 py-10 text-center text-gray-400">此篩選條件下沒有秀展資料</td></tr>
+              <tr><td colSpan={COLUMNS.length + 2} className="px-3 py-10 text-center text-gray-500">此篩選條件下沒有秀展資料</td></tr>
             )}
           </tbody>
         </table>

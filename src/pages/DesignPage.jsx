@@ -178,7 +178,7 @@ export default function DesignPage() {
       <div className="flex items-center justify-between px-6 py-4 border-b bg-white">
         <div>
           <h2 className="text-xl font-bold text-gray-800">設計</h2>
-          <p className="text-sm text-gray-400">{filtered.length} 個專案</p>
+          <p className="text-sm text-gray-500">{filtered.length} 個專案</p>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
           <select value={filterYear} onChange={e => setFilterYear(parseInt(e.target.value))}
@@ -200,7 +200,7 @@ export default function DesignPage() {
 
       <div className="flex-1 overflow-auto p-6">
         {filtered.length === 0 ? (
-          <div className="flex items-center justify-center h-64 text-gray-400">
+          <div className="flex items-center justify-center h-64 text-gray-500">
             <div className="text-center"><div className="text-4xl mb-2">🎨</div><p>尚無設計專案，點擊「新增設計專案」開始</p></div>
           </div>
         ) : (
@@ -228,20 +228,20 @@ export default function DesignPage() {
                   return (
                     <tr key={p.id} onClick={() => openEdit(p)}
                       className={`cursor-pointer hover:bg-blue-50 ${i % 2 ? 'bg-gray-50/50' : 'bg-white'}`}>
-                      <td className={`px-3 py-2 border-r border-gray-100 sticky left-0 bg-inherit font-medium whitespace-nowrap ${expired ? 'text-gray-400' : 'text-gray-800'}`}>
+                      <td className={`px-3 py-2 border-r border-gray-100 sticky left-0 bg-inherit font-medium whitespace-nowrap ${expired ? 'text-gray-500' : 'text-gray-800'}`}>
                         <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: typeColor }} />
                         {p.name}
                       </td>
-                      <td className={`px-3 py-2 whitespace-nowrap ${expired ? 'text-gray-400' : 'text-gray-600'}`}>
+                      <td className={`px-3 py-2 whitespace-nowrap ${expired ? 'text-gray-500' : 'text-gray-600'}`}>
                         {[subtypeLabel, region].filter(Boolean).join(' · ') || '—'}
                       </td>
-                      <td className={`px-3 py-2 whitespace-nowrap ${expired ? 'text-gray-400' : 'text-gray-600'}`}>
+                      <td className={`px-3 py-2 whitespace-nowrap ${expired ? 'text-gray-500' : 'text-gray-600'}`}>
                         {p.startDate ? `${p.startDate} ~ ${p.endDate}` : '—'}
                       </td>
-                      <td className={`px-3 py-2 ${expired ? 'text-gray-400' : 'text-gray-600'}`}>
+                      <td className={`px-3 py-2 ${expired ? 'text-gray-500' : 'text-gray-600'}`}>
                         {[p.kvCategory, p.note].filter(Boolean).join(' · ') || '—'}
                       </td>
-                      <td className={`px-3 py-2 whitespace-nowrap ${expired ? 'text-gray-400' : 'text-gray-600'}`}>
+                      <td className={`px-3 py-2 whitespace-nowrap ${expired ? 'text-gray-500' : 'text-gray-600'}`}>
                         {assigned.length > 0 ? assigned.map(a => `${a.name}${a.role === 'designer' ? '(設計)' : '(Planner)'}`).join('、') : '—'}
                       </td>
                       {isManager && (
@@ -266,7 +266,7 @@ export default function DesignPage() {
               <h3 className="text-lg font-semibold text-gray-800">
                 {!isManager ? '檢視設計專案' : editProject ? '編輯設計專案' : '新增設計專案'}
               </h3>
-              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600 text-xl">×</button>
+              <button onClick={() => setShowModal(false)} className="text-gray-500 hover:text-gray-600 text-xl">×</button>
             </div>
             <div className="px-6 py-5 space-y-4">
 
@@ -289,7 +289,7 @@ export default function DesignPage() {
                   ))}
                   {isManager && !addingSubtype && (
                     <button onClick={() => setAddingSubtype(true)}
-                      className="px-3 py-1.5 text-sm rounded-lg border-2 border-dashed border-gray-300 text-gray-400 hover:border-indigo-400 hover:text-indigo-500 transition-colors">
+                      className="px-3 py-1.5 text-sm rounded-lg border-2 border-dashed border-gray-300 text-gray-500 hover:border-indigo-400 hover:text-indigo-500 transition-colors">
                       + 新增類別
                     </button>
                   )}
@@ -301,7 +301,7 @@ export default function DesignPage() {
                         placeholder="類別名稱"
                         className="border border-indigo-400 rounded-lg px-2.5 py-1.5 text-sm w-28 focus:outline-none focus:ring-2 focus:ring-indigo-400" />
                       <button onClick={saveCustomSubtype} className="text-xs bg-indigo-600 text-white px-2.5 py-1.5 rounded-lg hover:bg-indigo-700">確認</button>
-                      <button onClick={() => { setAddingSubtype(false); setNewSubtypeInput('') }} className="text-xs text-gray-400 hover:text-gray-600 px-1.5 py-1.5">✕</button>
+                      <button onClick={() => { setAddingSubtype(false); setNewSubtypeInput('') }} className="text-xs text-gray-500 hover:text-gray-600 px-1.5 py-1.5">✕</button>
                     </div>
                   )}
                 </div>
@@ -321,7 +321,7 @@ export default function DesignPage() {
                     <input type="date" value={form.kvEventDate} disabled={!isManager}
                       onChange={e => setForm(f => ({ ...f, kvEventDate: e.target.value }))}
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-500" />
-                    <p className="text-xs text-gray-400 mt-1">KV 發稿與發佈日期依里程碑設定自動計算</p>
+                    <p className="text-xs text-gray-500 mt-1">KV 發稿與發佈日期依里程碑設定自動計算</p>
                   </div>
                   {kvPreviewKickoff && (
                     <div className="bg-indigo-50 border border-indigo-100 rounded-lg px-4 py-3 text-sm space-y-1">
@@ -418,7 +418,7 @@ export default function DesignPage() {
                     </div>
                   </div>
                 )}
-                {people.length === 0 && <p className="text-sm text-gray-400">請先在「人員管理」新增成員</p>}
+                {people.length === 0 && <p className="text-sm text-gray-500">請先在「人員管理」新增成員</p>}
               </div>
 
             </div>

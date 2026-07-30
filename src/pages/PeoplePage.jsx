@@ -202,7 +202,7 @@ export default function PeoplePage() {
       <div className="flex items-center justify-between px-6 py-4 border-b bg-white">
         <div>
           <h2 className="text-xl font-bold text-gray-800">人員管理</h2>
-          <p className="text-sm text-gray-400">
+          <p className="text-sm text-gray-500">
             {people.length} 位成員{isManager && managerUsers.length > 0 ? `、${managerUsers.length} 位主管帳號` : ''}
           </p>
         </div>
@@ -228,7 +228,7 @@ export default function PeoplePage() {
             設計師 ({designers.length})
           </h3>
           {designers.length === 0 ? (
-            <p className="text-sm text-gray-400 pl-4">尚未新增設計師</p>
+            <p className="text-sm text-gray-500 pl-4">尚未新增設計師</p>
           ) : (
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {designers.map(p => (
@@ -246,7 +246,7 @@ export default function PeoplePage() {
             Planner ({planners.length})
           </h3>
           {planners.length === 0 ? (
-            <p className="text-sm text-gray-400 pl-4">尚未新增 Planner</p>
+            <p className="text-sm text-gray-500 pl-4">尚未新增 Planner</p>
           ) : (
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
               {planners.map(p => (
@@ -265,7 +265,7 @@ export default function PeoplePage() {
               主管帳號 ({managerUsers.length})
             </h3>
             {managerUsers.length === 0 ? (
-              <p className="text-sm text-gray-400 pl-4">尚無主管帳號</p>
+              <p className="text-sm text-gray-500 pl-4">尚無主管帳號</p>
             ) : (
               <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
                 <table className="w-full text-sm">
@@ -287,16 +287,16 @@ export default function PeoplePage() {
                         <td className="px-4 py-2.5 text-gray-600">{u.displayName || '—'}</td>
                         <td className="px-4 py-2.5 text-gray-600">{u.notifyEmail || <span className="text-amber-500">未設定</span>}</td>
                         <td className="px-4 py-2.5">
-                          {u.active === false ? <span className="text-xs text-gray-400">已停用</span> : <span className="text-xs text-green-600">啟用中</span>}
+                          {u.active === false ? <span className="text-xs text-gray-500">已停用</span> : <span className="text-xs text-green-600">啟用中</span>}
                         </td>
                         <td className="px-4 py-2.5 text-right whitespace-nowrap">
                           <button onClick={() => openManagerEdit(u)} className="text-xs text-blue-500 hover:underline mr-3">編輯</button>
                           {u.email === myEmail ? (
-                            <span className="text-xs text-gray-300">—</span>
+                            <span className="text-xs text-gray-500">—</span>
                           ) : deleteManagerConfirm === u.email ? (
                             <>
                               <button onClick={() => handleManagerDelete(u.email)} className="text-xs text-red-600 hover:underline mr-2">確認刪除</button>
-                              <button onClick={() => setDeleteManagerConfirm(null)} className="text-xs text-gray-400 hover:underline">取消</button>
+                              <button onClick={() => setDeleteManagerConfirm(null)} className="text-xs text-gray-500 hover:underline">取消</button>
                             </>
                           ) : (
                             <button onClick={() => setDeleteManagerConfirm(u.email)} className="text-xs text-red-400 hover:underline">刪除</button>
@@ -318,7 +318,7 @@ export default function PeoplePage() {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
             <div className="px-6 py-4 border-b flex items-center justify-between sticky top-0 bg-white">
               <h3 className="text-lg font-semibold text-gray-800">{editPerson ? '編輯成員' : '新增成員'}</h3>
-              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600 text-xl">×</button>
+              <button onClick={() => setShowModal(false)} className="text-gray-500 hover:text-gray-600 text-xl">×</button>
             </div>
             <div className="px-6 py-5 space-y-4">
               <div>
@@ -347,7 +347,7 @@ export default function PeoplePage() {
                 <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
                   placeholder="name@transcend-info.com"
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                <p className="text-xs text-gray-400 mt-1">用來對照登入帳號、寄發通知信；跟下方 Gmail 登入信箱是不同的信箱</p>
+                <p className="text-xs text-gray-500 mt-1">用來對照登入帳號、寄發通知信；跟下方 Gmail 登入信箱是不同的信箱</p>
               </div>
 
               {isManager && (
@@ -394,7 +394,7 @@ export default function PeoplePage() {
                           <div className="flex items-center gap-2 text-xs">
                             <span className="text-red-600">確定撤銷登入權限？</span>
                             <button onClick={handleRevokeLogin} className="text-red-600 hover:underline font-medium">確認撤銷</button>
-                            <button onClick={() => setRevokeConfirm(false)} className="text-gray-400 hover:underline">取消</button>
+                            <button onClick={() => setRevokeConfirm(false)} className="text-gray-500 hover:underline">取消</button>
                           </div>
                         ) : (
                           <button onClick={() => setRevokeConfirm(true)} className="text-xs text-red-400 hover:text-red-600 hover:underline">
@@ -410,7 +410,7 @@ export default function PeoplePage() {
                           onChange={e => setForm(f => ({ ...f, grantLogin: e.target.checked }))} />
                         開通系統登入權限
                       </label>
-                      <p className="text-xs text-gray-400 mb-3">找不到跟上方公司信箱對應的登入帳號；勾選後可以新開通一個</p>
+                      <p className="text-xs text-gray-500 mb-3">找不到跟上方公司信箱對應的登入帳號；勾選後可以新開通一個</p>
                       {form.grantLogin && (
                         <div className="space-y-3">
                           <div>
@@ -482,7 +482,7 @@ export default function PeoplePage() {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
             <div className="px-6 py-4 border-b flex items-center justify-between">
               <h3 className="text-lg font-semibold text-gray-800">{editManagerEmail ? '編輯主管帳號' : '新增主管帳號'}</h3>
-              <button onClick={() => setShowManagerModal(false)} className="text-gray-400 hover:text-gray-600 text-xl">×</button>
+              <button onClick={() => setShowManagerModal(false)} className="text-gray-500 hover:text-gray-600 text-xl">×</button>
             </div>
             <div className="px-6 py-5 space-y-3">
               <input type="email" placeholder="登入 Email (Gmail)" value={managerForm.email} disabled={!!editManagerEmail}
@@ -524,9 +524,9 @@ function PersonCard({ person, assignedProjects, isManager, loginUser, onEdit, on
           </div>
           <div>
             <p className="font-semibold text-gray-800">{person.name}</p>
-            <p className="text-xs text-gray-400">{person.role === 'designer' ? '設計師' : 'Planner'}</p>
+            <p className="text-xs text-gray-500">{person.role === 'designer' ? '設計師' : 'Planner'}</p>
             {person.email && (
-              <p className="text-xs text-gray-400 truncate max-w-[140px]">{person.email}</p>
+              <p className="text-xs text-gray-500 truncate max-w-[140px]">{person.email}</p>
             )}
           </div>
         </div>
@@ -546,7 +546,7 @@ function PersonCard({ person, assignedProjects, isManager, loginUser, onEdit, on
                 {loginUser.active === false ? '登入已停用' : '登入啟用中'}
               </span>
               {person.role === 'planner' && (
-                <span className="text-xs text-gray-400">{loginUser.regions?.length ? loginUser.regions.join('、') : '未設定區域'}</span>
+                <span className="text-xs text-gray-500">{loginUser.regions?.length ? loginUser.regions.join('、') : '未設定區域'}</span>
               )}
             </>
           ) : (
@@ -557,12 +557,12 @@ function PersonCard({ person, assignedProjects, isManager, loginUser, onEdit, on
 
       {assignedProjects.length > 0 && (
         <div className="mt-3 pt-3 border-t border-gray-100">
-          <p className="text-xs text-gray-400 mb-1">目前負責 {assignedProjects.length} 個專案</p>
+          <p className="text-xs text-gray-500 mb-1">目前負責 {assignedProjects.length} 個專案</p>
           <div className="flex flex-wrap gap-1">
             {assignedProjects.slice(0, 3).map(p => (
               <span key={p.id} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded truncate max-w-[120px]">{p.name}</span>
             ))}
-            {assignedProjects.length > 3 && <span className="text-xs text-gray-400">+{assignedProjects.length - 3}</span>}
+            {assignedProjects.length > 3 && <span className="text-xs text-gray-500">+{assignedProjects.length - 3}</span>}
           </div>
         </div>
       )}

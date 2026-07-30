@@ -24,14 +24,14 @@ function projectBlock(icon, label, list, linkTo, emptyText) {
     <div key={label} className="bg-white rounded-xl border border-gray-200 p-5">
       <p className="text-sm font-semibold text-gray-700 mb-3">{icon} {label}</p>
       {list.length === 0 ? (
-        <p className="text-sm text-gray-300 py-4 text-center">{emptyText}</p>
+        <p className="text-sm text-gray-500 py-4 text-center">{emptyText}</p>
       ) : (
         <div className="space-y-2 max-h-80 overflow-y-auto">
           {list.map(p => (
             <Link key={p.id} to={linkTo}
               className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors">
               <p className="text-sm font-medium text-gray-800 truncate flex-1 min-w-0">{p.name}</p>
-              <span className="text-xs text-gray-400 whitespace-nowrap ml-2">
+              <span className="text-xs text-gray-500 whitespace-nowrap ml-2">
                 {p.startDate ? `${p.startDate}${p.endDate ? ' ~ ' + p.endDate : ''}` : ''}
               </span>
             </Link>
@@ -149,7 +149,7 @@ export default function DashboardPage() {
   return (
     <div className="p-8 max-w-5xl mx-auto">
       <h1 className="text-2xl font-bold text-gray-800 mb-1">{user?.displayName ? `${user.displayName}，你好` : '總覽'}</h1>
-      <p className="text-sm text-gray-400 mb-6">登入時的重點資訊一覽</p>
+      <p className="text-sm text-gray-500 mb-6">登入時的重點資訊一覽</p>
 
       {role !== 'manager' && !me && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-6 text-sm text-amber-700">
@@ -167,14 +167,14 @@ export default function DashboardPage() {
             <Link to="/tradeshow-list" className="text-xs text-blue-500 hover:underline">查看全部 →</Link>
           </div>
           {ongoingShows.length === 0 ? (
-            <p className="text-sm text-gray-300 py-4 text-center">目前沒有進行中的秀展</p>
+            <p className="text-sm text-gray-500 py-4 text-center">目前沒有進行中的秀展</p>
           ) : (
             <div className="space-y-2">
               {ongoingShows.map(p => (
                 <div key={p.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-blue-50/60">
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-gray-800 truncate">{p.name}</p>
-                    <p className="text-xs text-gray-400">{p.office || ''} {p.location || ''}</p>
+                    <p className="text-xs text-gray-500">{p.office || ''} {p.location || ''}</p>
                   </div>
                   <span className="text-xs text-blue-600 whitespace-nowrap ml-2">{p.startDate}~{p.endDate}</span>
                 </div>
@@ -189,14 +189,14 @@ export default function DashboardPage() {
             <Link to="/tradeshow-gantt" className="text-xs text-blue-500 hover:underline">查看甘特圖 →</Link>
           </div>
           {upcomingShows.length === 0 ? (
-            <p className="text-sm text-gray-300 py-4 text-center">未來三個月沒有你負責的秀展</p>
+            <p className="text-sm text-gray-500 py-4 text-center">未來三個月沒有你負責的秀展</p>
           ) : (
             <div className="space-y-2">
               {upcomingShows.map(p => (
                 <div key={p.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-50">
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-gray-800 truncate">{p.name}</p>
-                    <p className="text-xs text-gray-400">{p.office || ''} {p.location || ''}</p>
+                    <p className="text-xs text-gray-500">{p.office || ''} {p.location || ''}</p>
                   </div>
                   <span className="text-xs text-gray-500 whitespace-nowrap ml-2">{p.startDate}</span>
                 </div>
@@ -210,7 +210,7 @@ export default function DashboardPage() {
       <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
         <p className="text-sm font-semibold text-gray-700 mb-3">📁 我近期要負責的專案項目</p>
         {myProjects.length === 0 ? (
-          <p className="text-sm text-gray-300 py-4 text-center">目前沒有你負責的活動／報獎／設計項目</p>
+          <p className="text-sm text-gray-500 py-4 text-center">目前沒有你負責的活動／報獎／設計項目</p>
         ) : (
           <div className="space-y-2">
             {myProjects.map(p => (
@@ -221,7 +221,7 @@ export default function DashboardPage() {
                   <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 flex-shrink-0">{TYPE_LABELS[p.type]}</span>
                   <p className="text-sm font-medium text-gray-800 truncate">{p.name}</p>
                 </div>
-                <span className="text-xs text-gray-400 whitespace-nowrap ml-2">
+                <span className="text-xs text-gray-500 whitespace-nowrap ml-2">
                   {p.startDate ? `${p.startDate}${p.endDate ? ' ~ ' + p.endDate : ''}` : ''}
                 </span>
               </Link>
@@ -241,14 +241,14 @@ export default function DashboardPage() {
               <Link to="/tradeshow-list" className="text-xs text-blue-500 hover:underline">查看全部 →</Link>
             </div>
             {companyUpcomingShows.length === 0 ? (
-              <p className="text-sm text-gray-300 py-4 text-center">近三個月沒有秀展</p>
+              <p className="text-sm text-gray-500 py-4 text-center">近三個月沒有秀展</p>
             ) : (
               <div className="space-y-2 max-h-80 overflow-y-auto">
                 {companyUpcomingShows.map(p => (
                   <div key={p.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-50">
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-gray-800 truncate">{p.name}</p>
-                      <p className="text-xs text-gray-400">{p.office || ''} {p.location || ''}</p>
+                      <p className="text-xs text-gray-500">{p.office || ''} {p.location || ''}</p>
                     </div>
                     <span className="text-xs text-gray-500 whitespace-nowrap ml-2">{p.startDate}{p.endDate ? `~${p.endDate}` : ''}</span>
                   </div>
@@ -269,7 +269,7 @@ export default function DashboardPage() {
               <Link to="/leave" className="text-xs text-blue-500 hover:underline">查看全部 →</Link>
             </div>
             {upcomingLeaves.length === 0 ? (
-              <p className="text-sm text-gray-300 py-4 text-center">未來一個月沒有排休</p>
+              <p className="text-sm text-gray-500 py-4 text-center">未來一個月沒有排休</p>
             ) : (
               <div className="space-y-2 max-h-80 overflow-y-auto">
                 {upcomingLeaves.map(l => (
@@ -277,7 +277,7 @@ export default function DashboardPage() {
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: LEAVE_COLORS[l.type] || '#d1d5db' }} />
                       <p className="text-sm font-medium text-gray-800 truncate">{l.personName}</p>
-                      <span className="text-xs text-gray-400 flex-shrink-0">{l.type}</span>
+                      <span className="text-xs text-gray-500 flex-shrink-0">{l.type}</span>
                     </div>
                     <span className="text-xs text-gray-500 whitespace-nowrap ml-2">
                       {l.startDate === l.endDate ? l.startDate : `${l.startDate} ~ ${l.endDate}`}
@@ -298,7 +298,7 @@ export default function DashboardPage() {
             <Link to="/my-requests" className="text-xs text-blue-500 hover:underline">查看全部 →</Link>
           </div>
           {myRequests.length === 0 ? (
-            <p className="text-sm text-gray-300 py-4 text-center">你還沒有送出任何需求</p>
+            <p className="text-sm text-gray-500 py-4 text-center">你還沒有送出任何需求</p>
           ) : (
             <div className="space-y-2">
               {myRequests.map(r => {
@@ -325,7 +325,7 @@ export default function DashboardPage() {
             <Link to="/requests" className="text-xs text-blue-500 hover:underline">查看總表 →</Link>
           </div>
           {assignedRequests.length === 0 ? (
-            <p className="text-sm text-gray-300 py-4 text-center">目前沒有設計中或確認中的發稿</p>
+            <p className="text-sm text-gray-500 py-4 text-center">目前沒有設計中或確認中的發稿</p>
           ) : (
             <div className="space-y-2">
               {assignedRequests.map(r => {
@@ -337,7 +337,7 @@ export default function DashboardPage() {
                     <p className="flex-1 min-w-0 text-sm font-medium text-gray-800 truncate">
                       {r.urgent && <span className="text-red-500 mr-1">🔥</span>}{r.projectName || r.title}
                     </p>
-                    <span className="text-xs text-gray-400 whitespace-nowrap">交期 {r.dueDate || '未指定'}</span>
+                    <span className="text-xs text-gray-500 whitespace-nowrap">交期 {r.dueDate || '未指定'}</span>
                     <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${meta.color}`}>{meta.label}</span>
                   </button>
                 )

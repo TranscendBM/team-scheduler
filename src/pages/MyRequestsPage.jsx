@@ -44,7 +44,7 @@ export default function MyRequestsPage() {
   return (
     <div className="p-8 max-w-3xl mx-auto">
       <h1 className="text-2xl font-bold text-gray-800 mb-1">我的需求</h1>
-      <p className="text-sm text-gray-400 mb-5">追蹤你送出的設計需求進度,點擊查看完整內容;待審核時可編輯</p>
+      <p className="text-sm text-gray-500 mb-5">追蹤你送出的設計需求進度,點擊查看完整內容;待審核時可編輯</p>
 
       <div className="flex gap-2 mb-5 flex-wrap">
         {FILTERS.map(f => (
@@ -69,7 +69,7 @@ export default function MyRequestsPage() {
                   {r.urgent && <span className="text-red-500 mr-1">🔥</span>}
                   {r.projectName || r.title}
                 </p>
-                <p className="text-xs text-gray-400 mt-0.5">
+                <p className="text-xs text-gray-500 mt-0.5">
                   {r.region ? r.region + ' · ' : ''}{(r.docTypes || []).join('、') || ''} · 交期 {r.dueDate || '未指定'}
                 </p>
               </div>
@@ -79,7 +79,7 @@ export default function MyRequestsPage() {
           )
         })}
         {filtered.length === 0 && (
-          <div className="text-center text-gray-400 text-sm py-12 bg-white rounded-xl border border-gray-100">
+          <div className="text-center text-gray-500 text-sm py-12 bg-white rounded-xl border border-gray-100">
             {requests.length === 0 ? '你還沒有送出任何需求' : '此篩選沒有符合的需求'}
           </div>
         )}
