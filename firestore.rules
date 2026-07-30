@@ -43,7 +43,7 @@ service cloud.firestore {
         && changedOnly(['status', 'assignedDesigners', 'assignedDesignersNames', 'reviewedBy', 'reviewedAt', 'reviewNote', 'comment', 'dueDate', 'ccPlanners'])
         && request.resource.data.assignedDesigners is list
         && request.resource.data.assignedDesigners.size() > 0
-        && request.resource.data.get('ccPlanners', []) is list
+        && isValidCcPlanners(request.resource.data.get('ccPlanners', []))
         && request.resource.data.reviewedBy == email()
         && request.resource.data.reviewedAt == request.time;
     }
@@ -64,7 +64,7 @@ service cloud.firestore {
         && resource.data.status in ['assigned', 'in_progress', 'reviewing', 'completed']
         && changedOnly(['assignedDesigners', 'assignedDesignersNames', 'dueDate', 'comment', 'reviewNote', 'ccPlanners'])
         && request.resource.data.assignedDesigners is list
-        && request.resource.data.get('ccPlanners', []) is list;
+        && isValidCcPlanners(request.resource.data.get('ccPlanners', []));
     }
 
     // 設計師：只能依序單步推進，不可跳階、倒退，且時間戳須對應正確欄位
@@ -108,6 +108,26 @@ service cloud.firestore {
         && (atts.size() < 8  || isValidAttachment(atts[7]))
         && (atts.size() < 9  || isValidAttachment(atts[8]))
         && (atts.size() < 10 || isValidAttachment(atts[9]));
+    }
+
+    // ccPlanners(核准/事後編輯時可另外勾選 CC 的 planner 清單)：這裡只驗證型別、上限(10 筆)、
+    // 每筆是非空字串 —— 控制在 expression 預算內。是否真的對應「存在、角色是 planner、啟用中」的帳號，
+    // 需要對每個 email 各查一次 users 文件(get())，疊加在這條 update 規則本來就會多次呼叫
+    // whitelisted()/myRegions() 之上，容易逼近單次請求的 get() 呼叫數上限，因此把「身分/角色/
+    // 啟用狀態」這層最終驗證留給 Cloud Function(functions/index.js resolveActivePlannerCcEmails)，
+    // 那裡才是真正決定「誰會收到通知信」的地方。
+    function isValidCcPlanners(v) {
+      return v is list && v.size() <= 10
+        && (v.size() < 1  || (v[0] is string && v[0].size() > 0))
+        && (v.size() < 2  || (v[1] is string && v[1].size() > 0))
+        && (v.size() < 3  || (v[2] is string && v[2].size() > 0))
+        && (v.size() < 4  || (v[3] is string && v[3].size() > 0))
+        && (v.size() < 5  || (v[4] is string && v[4].size() > 0))
+        && (v.size() < 6  || (v[5] is string && v[5].size() > 0))
+        && (v.size() < 7  || (v[6] is string && v[6].size() > 0))
+        && (v.size() < 8  || (v[7] is string && v[7].size() > 0))
+        && (v.size() < 9  || (v[8] is string && v[8].size() > 0))
+        && (v.size() < 10 || (v[9] is string && v[9].size() > 0));
     }
 
     // 建立需求時的必要欄位／型別／允許欄位驗證
@@ -167,7 +187,7 @@ service cloud.firestore {
               && request.resource.data.projectName is string && request.resource.data.projectName.size() > 0
               && request.resource.data.region is string && request.resource.data.region.size() > 0
               && request.resource.data.docTypes is list
-              && isValidAttachments(request.resource.data.attachments));
+              && isValidAttachments(request.resource.data.get('attachments', [])));
 
       // manager 可刪任何需求；提交人只能刪自己「剛建立、還沒有任何附件」的 pending 需求 ——
       // 這只是給 RequestNewPage 建立需求失敗時的回滾用(見該檔案 handleSubmit 的錯誤處理):

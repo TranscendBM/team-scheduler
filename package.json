@@ -9,7 +9,7 @@
     "deploy": "vite build && firebase deploy --only hosting",
     "lint": "eslint .",
     "test": "vitest run test/unit",
-    "test:rules": "firebase emulators:exec --only firestore,storage \"vitest run test/rules && node --test functions/test/renameUserLogin.test.js\""
+    "test:rules": "firebase emulators:exec --project demo-team-scheduler-rules --only firestore,storage \"node scripts/run-rules-tests.mjs\""
   },
   "dependencies": {
     "firebase": "^12.16.0",

@@ -15,7 +15,13 @@ import {
   doc, getDoc, setDoc, addDoc, updateDoc, deleteDoc, collection, serverTimestamp, Timestamp,
 } from 'firebase/firestore'
 
-const PROJECT_ID = 'team-scheduler-rules-test'
+// 必須跟 storage.rules.test.js、functions/test/renameUserLogin.test.js、
+// functions/test/resolveActivePlannerCcEmails.test.js，以及 package.json test:rules 裡
+// `firebase emulators:exec --project` 用的是同一個 project id —— Storage Rules 的
+// firestore.get()/firestore.exists() 跨服務查詢是綁在 emulator suite 啟動時的那個 project，
+// project id 對不上時，Storage 那邊查到的會是空的 Firestore 空間，導致本該成功的操作被誤判 permission-denied。
+// 用 demo- 開頭是 Firebase 保留給模擬器測試、保證不會撞到任何正式專案 id 的慣例前綴。
+const PROJECT_ID = 'demo-team-scheduler-rules'
 const RULES = readFileSync(new URL('../../firestore.rules', import.meta.url), 'utf8')
 
 const MANAGER = 'manager@example.com'
@@ -342,6 +348,25 @@ describe('requests 狀態機 — manager 核准/駁回', () => {
     await assertFails(updateDoc(doc(dbAs(MANAGER), 'requests', 'to-edit-cc-bad'), {
       assignedDesigners: [DESIGNER_A], assignedDesignersNames: ['A'], dueDate: '2026-09-01', comment: '', reviewNote: '',
       ccPlanners: 'not-a-list',
+    }))
+  })
+
+  it('核准時 ccPlanners 超過 10 筆上限 → 擋', async () => {
+    await seedRequest('to-approve-cc-too-many', { submittedBy: PLANNER_SD1, region: 'SD1', status: 'pending', projectName: 'x' })
+    const ccPlanners = Array.from({ length: 11 }, (_, i) => `planner${i}@example.com`)
+    await assertFails(updateDoc(doc(dbAs(MANAGER), 'requests', 'to-approve-cc-too-many'), {
+      status: 'assigned', assignedDesigners: [DESIGNER_A], assignedDesignersNames: ['Designer A'],
+      reviewedBy: MANAGER, reviewedAt: serverTimestamp(), reviewNote: '', comment: '', dueDate: '2026-08-01',
+      ccPlanners,
+    }))
+  })
+
+  it('核准時 ccPlanners 元素不是字串 → 擋', async () => {
+    await seedRequest('to-approve-cc-bad-el', { submittedBy: PLANNER_SD1, region: 'SD1', status: 'pending', projectName: 'x' })
+    await assertFails(updateDoc(doc(dbAs(MANAGER), 'requests', 'to-approve-cc-bad-el'), {
+      status: 'assigned', assignedDesigners: [DESIGNER_A], assignedDesignersNames: ['Designer A'],
+      reviewedBy: MANAGER, reviewedAt: serverTimestamp(), reviewNote: '', comment: '', dueDate: '2026-08-01',
+      ccPlanners: [12345],
     }))
   })
 
