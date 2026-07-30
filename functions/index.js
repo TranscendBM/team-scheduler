@@ -31,6 +31,21 @@ export function escapeHtml(str) {
     .replace(/'/g, '&#39;')
 }
 
+// 把純文字裡的網址轉成 <a> 連結，其餘文字照常 escapeHtml，兩者都逸出過才組成 HTML 字串。
+// 只認 http(s):// 開頭 —— regex 本身就限定字首，不會被拿來塞 javascript:/data: 之類的 scheme。
+const URL_RE = /(https?:\/\/[^\s<>"']+)/g
+export function linkifyHtml(text) {
+  return String(text ?? '')
+    .split(URL_RE)
+    .map((part, i) => {
+      const safe = escapeHtml(part)
+      return i % 2 === 1
+        ? `<a href="${safe}" target="_blank" rel="noreferrer" style="font-family:${FONT};color:#2563eb;text-decoration:underline">${safe}</a>`
+        : safe
+    })
+    .join('')
+}
+
 // 共用的附件網址解析/驗證 —— 只有「https、host 是 Firebase Storage、bucket 是本專案、
 // 路徑在 attachments/ 底下」的網址才算合法，其餘一律當作無效(null)。
 // 這樣可以擋掉 javascript:、data:、或指向別的 bucket/路徑的偽造網址。
@@ -324,22 +339,26 @@ function getMailer() {
 // export 供 test/buildHtml.test.js 做純函式測試（不連任何 Firebase 服務）
 export function buildHtml(r) {
   const docTypes = (r.docTypes || []).join('、')
+  // 需求簡述裡的網址要能點擊，其餘欄位都是純文字 escapeHtml 就好；用 { html } 包一層
+  // 標記「這欄已經是安全的 HTML，不要再 escapeHtml 一次」，下面 tr 那段依此分流。
   const rows = [
     ['專案名稱', r.projectName || r.title || ''],
     ['地區', r.region || ''],
     ['稿件類型', docTypes],
     ['交期', r.dueDate || '未指定'],
     ['急件', r.urgent ? '🔥 是' : '否'],
-    ['需求簡述', r.description || '（無）'],
+    ['需求簡述', r.description ? { html: linkifyHtml(r.description) } : '（無）'],
     ['審核備註', r.reviewNote || '（無）'],
     ['注意事項', r.comment || '（無）'],
     ['提交人', r.submittedByName || r.submittedBy || ''],
   ]
-  const tr = rows.map(([k, v], i) =>
-    `<tr style="background:${i % 2 ? '#f9fafb' : '#fff'}">
+  const tr = rows.map(([k, v], i) => {
+    const cellHtml = (v && typeof v === 'object' && 'html' in v) ? v.html : escapeHtml(v)
+    return `<tr style="background:${i % 2 ? '#f9fafb' : '#fff'}">
        <td style="font-family:${FONT};padding:8px 12px;color:#6b7280;width:32%;vertical-align:top;font-size:13px">${escapeHtml(k)}</td>
-       <td style="font-family:${FONT};padding:8px 12px;font-weight:500;white-space:pre-wrap;font-size:13px">${escapeHtml(v)}</td>
-     </tr>`).join('')
+       <td style="font-family:${FONT};padding:8px 12px;font-weight:500;white-space:pre-wrap;font-size:13px">${cellHtml}</td>
+     </tr>`
+  }).join('')
   const atts = (r.attachments || [])
   const attHtml = atts.length
     ? `<div style="margin-top:16px">
@@ -402,21 +421,39 @@ export const notifyOnAssign = onDocumentUpdated(
   }
 )
 
-// 已發稿後主管「編輯指派」新增設計師時，寄信通知「新加入」的設計師（CC 提交人 + 主管 + 勾選的 planner）
+// 判斷「已發稿後」的一次編輯，設計師名單或交期是不是真的變了、該通知誰。
+// 抽成純函式方便測試，不用真的接 Firestore trigger。
+// - 只要設計師名單(新增/移除/都有)或交期任一項改變，就通知「異動後目前所有」被指派的設計師
+//   (不是只通知新加入的人)——交期異動影響全部在做這個案子的人，指派名單異動也一樣讓大家知道最新狀態。
+// - 兩者都沒變(例如只改了注意事項/審核備註/CC 名單)不通知，避免無關的信件干擾。
+export function computeReassignNotification(before, after) {
+  const prev = before.assignedDesigners || []
+  const cur = after.assignedDesigners || []
+  const designersChanged = cur.length !== prev.length
+    || cur.some((e) => !prev.includes(e))
+    || prev.some((e) => !cur.includes(e))
+  const dueDateChanged = (before.dueDate || '') !== (after.dueDate || '')
+  if (!designersChanged && !dueDateChanged) return null
+  if (cur.length === 0) return null
+  const changeLabels = [designersChanged && '指派異動', dueDateChanged && '交期異動'].filter(Boolean)
+  return { notifyEmails: cur, changeLabels }
+}
+
+// 已發稿後主管「編輯指派」調整設計師名單或交期時，寄信通知目前所有被指派的設計師
+// （CC 提交人 + 主管 + 勾選的 planner）
 export const notifyOnReassign = onDocumentUpdated(
   { document: 'requests/{id}', region: 'asia-east1', secrets: [SMTP_PASS] },
   async (event) => {
     const before = event.data?.before?.data()
     const after = event.data?.after?.data()
     if (!before || !after) return
-    // 初次核准(pending→assigned)由 notifyOnAssign 處理，這裡只管「已審核後」的名單變動
+    // 初次核准(pending→assigned)由 notifyOnAssign 處理，這裡只管「已審核後」的異動
     if (before.status === 'pending' || after.status === 'rejected') return
-    const prev = before.assignedDesigners || []
-    const cur = after.assignedDesigners || []
-    const added = cur.filter(e => !prev.includes(e))
-    if (added.length === 0) return
 
-    const toEmails = await Promise.all(added.map(resolveNotifyEmail))
+    const notification = computeReassignNotification(before, after)
+    if (!notification) return
+
+    const toEmails = await Promise.all(notification.notifyEmails.map(resolveNotifyEmail))
     const submitterEmail = await resolveNotifyEmail(after.submittedBy)
     const managers = await getManagerEmails()
     const ccPlanners = await Promise.all((after.ccPlanners || []).map(resolveNotifyEmail))
@@ -426,12 +463,12 @@ export const notifyOnReassign = onDocumentUpdated(
       await mailer.send({
         to: toEmails,
         cc,
-        subject: `[設計需求] ${after.projectName || '任務'}${after.urgent ? '（🔥急件）' : ''}（新增指派）`,
+        subject: `[設計需求] ${after.projectName || '任務'}${after.urgent ? '（🔥急件）' : ''}（${notification.changeLabels.join('、')}）`,
         html: buildHtml(after),
       })
-      logger.info('已寄新增指派通知', { to: toEmails, cc })
+      logger.info('已寄異動通知', { to: toEmails, cc, changeLabels: notification.changeLabels })
     } catch (e) {
-      logger.error('新增指派通知寄信失敗', e)
+      logger.error('異動通知寄信失敗', e)
       throw e
     } finally {
       await mailer.close()

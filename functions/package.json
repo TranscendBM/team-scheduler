@@ -8,7 +8,7 @@
   "main": "index.js",
   "scripts": {
     "lint": "node --check index.js",
-    "test": "node --test test/buildHtml.test.js test/previewFile.test.js",
+    "test": "node --test test/buildHtml.test.js test/previewFile.test.js test/notifications.test.js",
     "test:integration": "node --test test/renameUserLogin.test.js"
   },
   "dependencies": {

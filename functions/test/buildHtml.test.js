@@ -2,7 +2,7 @@
 // 執行：npm test（functions 目錄下）
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildHtml, escapeHtml, safeAttachmentUrl, buildCcList } from '../index.js'
+import { buildHtml, escapeHtml, safeAttachmentUrl, buildCcList, linkifyHtml } from '../index.js'
 
 const LEGIT_URL = 'https://firebasestorage.googleapis.com/v0/b/team-scheduler-dc7ce.firebasestorage.app/o/attachments%2Freq123%2Ffile-abc.pdf?alt=media&token=xyz'
 
@@ -34,6 +34,39 @@ test('buildCcList：拿掉空字串/undefined，並且同一個信箱在不同�
 test('buildCcList：沒有勾選任何 planner(空陣列)也能正常運作', () => {
   const cc = buildCcList(['designer@x.com'], ['submitter@x.com'], ['manager@x.com'], [])
   assert.deepEqual([...cc].sort(), ['manager@x.com', 'submitter@x.com'])
+})
+
+test('linkifyHtml：純文字裡的網址變成可點擊的 <a>，其餘文字照常逸出', () => {
+  const html = linkifyHtml('請看 https://example.com/a?x=1&y=2 這份文件')
+  assert.ok(html.includes('<a href="https://example.com/a?x=1&amp;y=2" target="_blank" rel="noreferrer"'))
+  assert.ok(html.includes('請看 '))
+  assert.ok(html.includes(' 這份文件'))
+})
+
+test('linkifyHtml：沒有網址的純文字維持原樣(只是照常 escapeHtml)', () => {
+  assert.equal(linkifyHtml('普通文字 <b>粗體</b>'), '普通文字 &lt;b&gt;粗體&lt;/b&gt;')
+})
+
+test('linkifyHtml：只認 http(s):// 開頭，javascript:/data: 不會被當成連結', () => {
+  const html = linkifyHtml('javascript:alert(1) 和 data:text/html,x 都只是文字')
+  assert.ok(!html.includes('<a href'))
+})
+
+test('linkifyHtml：多個網址都各自變成連結', () => {
+  const html = linkifyHtml('第一個 https://a.com 第二個 https://b.com')
+  assert.equal((html.match(/<a href/g) || []).length, 2)
+})
+
+test('buildHtml：需求簡述裡的網址會變成可點擊連結', () => {
+  const html = buildHtml({ projectName: 'x', description: '參考 https://example.com/spec 這份規格' })
+  assert.ok(html.includes('<a href="https://example.com/spec" target="_blank"'))
+})
+
+test('buildHtml：需求簡述有 HTML 特殊字元時，網址外的部分仍然逸出(不會被注入標籤)', () => {
+  const html = buildHtml({ projectName: 'x', description: '<script>alert(1)</script> https://example.com' })
+  assert.ok(!html.includes('<script>alert(1)</script>'))
+  assert.ok(html.includes('&lt;script&gt;alert(1)&lt;/script&gt;'))
+  assert.ok(html.includes('<a href="https://example.com" target="_blank"'))
 })
 
 test('buildHtml：所有文字元素都明寫微軟正黑體字型，不是只放在最外層靠繼承', () => {

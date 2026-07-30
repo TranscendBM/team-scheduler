@@ -84,15 +84,21 @@ service cloud.firestore {
     // 並限制筆數上限。storagePath 若存在，至少要求「看起來」屬於這個 request(attachments/{requestId}/...)，
     // 但這只是盡力而為的字串比對防線 —— 規則語言沒辦法像 Cloud Function 那樣完整解析/驗證 URL，
     // 真正的最終防線一定要靠 Cloud Function 端 resolveAttachmentPath 那組完整一致性驗證。
+    // storagePath 是否形如 attachments/{requestId}/{檔名}。刻意不用 .matches()(regex) ——
+    // 這個函式最多會被呼叫 10 次(每個附件一次)，regex 引擎評估成本很高，疊加起來會撞到
+    // Firestore 規則「單次請求最多 1000 個運算式」的上限，導致連合法的寫入都被拒
+    // (exceeded evaluation limit，實測發生過)。改用 split('/') + 逐段比對，成本低很多。
+    function isValidStoragePath(path, requestId) {
+      let parts = path.split('/');
+      return path is string && path.size() > 0 && path.size() <= 500
+        && parts.size() == 3 && parts[0] == 'attachments' && parts[1] == requestId && parts[2].size() > 0;
+    }
     function isValidAttachment(a, requestId) {
       return a.keys().hasOnly(['name', 'url', 'size', 'storagePath'])
         && a.name is string && a.name.size() > 0 && a.name.size() <= 300
         && a.url is string && a.url.size() > 0 && a.url.size() <= 2000
         && a.size is number && a.size > 0 && a.size <= 10485760
-        && (!('storagePath' in a) || (
-             a.storagePath is string && a.storagePath.size() > 0 && a.storagePath.size() <= 500
-             && a.storagePath.matches('^attachments/' + requestId + '/[A-Za-z0-9._-]{1,300}$')
-           ));
+        && (!('storagePath' in a) || isValidStoragePath(a.storagePath, requestId));
     }
     // Firestore 規則語言不支援對 list 做逐一元素的迴圈驗證，只能在已知上限(10 筆)內逐一 index 檢查
     function isValidAttachments(atts, requestId) {
