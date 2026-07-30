@@ -81,6 +81,12 @@ export default function RequestsTablePage() {
   }
   const plannerClose = (r) => setStatus(r, 'completed')
 
+  async function toggleImportant(r) {
+    try {
+      await updateDoc(doc(db, 'requests', r.id), { important: !r.important })
+    } catch (e) { alert('更新失敗：' + (e.code || e.message)) }
+  }
+
   async function handleDelete(r) {
     setBusy(r.id)
     try {
@@ -154,6 +160,14 @@ export default function RequestsTablePage() {
         className={`border-t border-gray-100 cursor-pointer ${faded ? 'text-gray-400 hover:bg-gray-50/50' : 'hover:bg-gray-50'} ${isNew ? 'bg-blue-50/40' : ''}`}>
         <td className="px-3 py-2.5 overflow-hidden">
           <div className={`text-sm truncate ${faded ? '' : 'text-gray-800 font-medium'}`}>
+            {role === 'manager' && (
+              <button
+                onClick={e => { e.stopPropagation(); toggleImportant(r) }}
+                title={r.important ? '取消標記重要' : '標記為重要'}
+                className={`mr-1 align-middle leading-none ${r.important ? 'text-amber-400' : 'text-gray-300 hover:text-amber-400'}`}>
+                {r.important ? '★' : '☆'}
+              </button>
+            )}
             {isNew && (
               <span className="inline-block text-[10px] font-bold bg-red-500 text-white rounded px-1 py-0.5 mr-1.5 align-middle leading-none">NEW</span>
             )}

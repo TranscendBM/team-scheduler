@@ -67,6 +67,13 @@ service cloud.firestore {
         && isValidCcPlanners(request.resource.data.get('ccPlanners', []));
     }
 
+    // manager 在需求總表把需求標記/取消標記為重要（星號）：不限狀態，只能單獨改這一個欄位，
+    // 不影響狀態機或其他審核相關欄位
+    function isImportantToggle() {
+      return changedOnly(['important'])
+        && request.resource.data.important is bool;
+    }
+
     // 設計師：只能依序單步推進，不可跳階、倒退，且時間戳須對應正確欄位
     function isDesignerTransition() {
       return (resource.data.status == 'assigned' && request.resource.data.status == 'in_progress'
@@ -166,9 +173,9 @@ service cloud.firestore {
       allow create: if whitelisted() && isValidRequestCreate();
 
       allow update: if
-          // manager：核准 / 駁回 / 事後編輯，且 status 必須落在既定 enum 內
+          // manager：核准 / 駁回 / 事後編輯 / 標記重要，且 status 必須落在既定 enum 內
           (isManager() && isValidStatus(request.resource.data.status)
-            && (isApproveTransition() || isRejectTransition() || isManagerMetaEdit()))
+            && (isApproveTransition() || isRejectTransition() || isManagerMetaEdit() || isImportantToggle()))
           // 設計師：改自己被指派任務的狀態，只能依合法流程單步推進
           || (whitelisted() && email() in resource.data.get('assignedDesigners', []) && isDesignerTransition())
           // planner：只能把「負責區域」且「非 pending/rejected」的需求改成 completed

@@ -370,6 +370,32 @@ describe('requests 狀態機 — manager 核准/駁回', () => {
     }))
   })
 
+  it('manager 可以把任何狀態的需求標記為重要（不限 assigned/in_progress/reviewing/completed）', async () => {
+    await seedRequest('to-mark-important-pending', { submittedBy: PLANNER_SD1, region: 'SD1', status: 'pending', projectName: 'x' })
+    await assertSucceeds(updateDoc(doc(dbAs(MANAGER), 'requests', 'to-mark-important-pending'), { important: true }))
+  })
+
+  it('manager 可以取消標記重要', async () => {
+    await seedRequest('to-unmark-important', { submittedBy: PLANNER_SD1, region: 'SD1', status: 'assigned', projectName: 'x', important: true })
+    await assertSucceeds(updateDoc(doc(dbAs(MANAGER), 'requests', 'to-unmark-important'), { important: false }))
+  })
+
+  it('標記重要時 important 型別錯誤（不是布林）→ 擋', async () => {
+    await seedRequest('to-mark-important-bad-type', { submittedBy: PLANNER_SD1, region: 'SD1', status: 'pending', projectName: 'x' })
+    await assertFails(updateDoc(doc(dbAs(MANAGER), 'requests', 'to-mark-important-bad-type'), { important: 'yes' }))
+  })
+
+  it('標記重要時夾帶其他欄位一起改 → 擋（只能單獨改 important）', async () => {
+    await seedRequest('to-mark-important-with-extra', { submittedBy: PLANNER_SD1, region: 'SD1', status: 'pending', projectName: 'x' })
+    await assertFails(updateDoc(doc(dbAs(MANAGER), 'requests', 'to-mark-important-with-extra'), { important: true, projectName: 'hacked' }))
+  })
+
+  it('非 manager 不能標記需求為重要', async () => {
+    await seedRequest('to-mark-important-non-manager', { submittedBy: PLANNER_SD1, region: 'SD1', status: 'pending', projectName: 'x' })
+    await assertFails(updateDoc(doc(dbAs(PLANNER_SD1), 'requests', 'to-mark-important-non-manager'), { important: true }))
+    await assertFails(updateDoc(doc(dbAs(DESIGNER_A), 'requests', 'to-mark-important-non-manager'), { important: true }))
+  })
+
   it('manager 可刪除需求；跟這筆需求無關的角色不行', async () => {
     await seedRequest('to-delete', { submittedBy: PLANNER_SD1, region: 'SD1', status: 'pending', projectName: 'x', attachments: [] })
     await assertFails(deleteDoc(doc(dbAs(DESIGNER_A), 'requests', 'to-delete'))) // 不是提交人、也不是 manager
