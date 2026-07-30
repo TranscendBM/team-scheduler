@@ -9,7 +9,8 @@
     "deploy": "vite build && firebase deploy --only hosting",
     "lint": "eslint .",
     "test": "vitest run test/unit",
-    "test:rules": "firebase emulators:exec --project demo-team-scheduler-rules --only firestore,storage \"node scripts/run-rules-tests.mjs\""
+    "test:rules": "firebase emulators:exec --project demo-team-scheduler-rules --only firestore,storage \"node scripts/run-rules-tests.mjs\"",
+    "audit:check": "node scripts/check-npm-audit.mjs"
   },
   "dependencies": {
     "firebase": "^12.16.0",

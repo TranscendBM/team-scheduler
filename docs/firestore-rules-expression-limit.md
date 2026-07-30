@@ -21,6 +21,25 @@
 執行，每個變體都是全新一次 `firebase emulators:exec` process（自動起新 emulator、測完自動
 關閉），彼此不共用任何狀態、不共用 coverage cache。
 
+## 這份文件裡，什麼是官方規格、什麼是實驗觀察、什麼是推論
+
+Firebase 官方文件明確記載的只有一件事：**單次請求最多評估 1,000 個運算式**
+（"maximum number of expressions evaluated per request = 1,000"）。官方文件**沒有**
+記載這個上限的計算範圍是「整個 request」、「單一 `match` 區塊」還是「單一 `allow` 子句」——
+這是實作細節，不是公開語意保證。
+
+以下區分本文件的每一個結論屬於哪一類：
+
+- **官方明確規格**：單次請求最多 1,000 個運算式；同一路徑多個重疊 `match`/`allow` 用 OR
+  合併判斷結果。
+- **Emulator v1.22.0 的實驗觀察**（下面 M/N/O、L0-L4 的測試結果）：在本機 Firestore
+  Emulator v1.22.0 上，每個 `allow` 子句各自獨立回報 expression-limit 錯誤，errors 訊息
+  分別標註 `for 'create'`/`for 'update'` 且各自獨立達到/沒達到上限——這是**觀察到的行為**，
+  不是 Firebase 官方保證的正式語意。
+- **尚未在正式環境驗證、不能直接推論到正式 Firestore 的部分**：Emulator 是否在這件事上
+  跟正式 Firestore 完全一致，沒有獨立驗證過（受限於「絕不碰正式資料」的硬性要求），見下方
+  「限制」一節。
+
 ## 先前的錯誤結論（已被推翻）
 
 早期排查一度認為「`match /requests/{id}` 區塊底下 `read/create/update/delete` 四條
@@ -90,13 +109,17 @@ Unable to evaluate the expression as the maximum of 1000 expressions to evaluate
 「同路徑多個 match/allow 用 OR 合併」一致（合併就代表兩邊都要被評估）。「同一路徑拆成多個
 match block」**不是**可靠的隔離手段，也不等於不同資料路徑。
 
-## 真正的根本原因
+## 真正的根本原因（Emulator v1.22.0 觀察，非官方保證的正式語意）
 
-1000-expression 上限是 **per allow 子句**獨立計算，不是 per match block、也不是整份檔案
-共用。真正的問題單純是：`isValidAttachments` 這個 10 筆展開驗證的 pattern，光是最基本的
-三個欄位檢查就已經逼近上限，而這個函式同時被 `create`（`isValidRequestCreate`）跟
-`update`（提交人編輯分支）各呼叫一次，`update` 還額外呼叫 `isValidCcPlanners`（同樣 10 筆
-展開）兩次——每條子句各自獨立超標，不是互相拖累。
+**在 Firestore Emulator v1.22.0 的最小重現中**，expression-limit 是每個 `allow` 子句
+各自獨立回報，不像同一個 `match` 區塊（或整份檔案）共用同一個計數池。這是實驗觀察，
+Firebase 官方並未正式文件化「per allow clause」這個計算範圍，不能直接當作正式 Firestore
+保證會完全相同的語意——只能說「在我們測試過的這個 Emulator 版本上，行為是這樣」。
+
+在這個前提下，真正的成本驅動很明確：`isValidAttachments` 這個 10 筆展開驗證的 pattern，
+光是最基本的三個欄位檢查就已經逼近上限，而這個函式同時被 `create`
+（`isValidRequestCreate`）跟 `update`（提交人編輯分支）各呼叫一次，`update` 還額外呼叫
+`isValidCcPlanners`（同樣 10 筆展開）兩次——每條子句各自獨立超標，不是互相拖累。
 
 ## 限制：不能推論到正式 Firestore 的部分
 
@@ -105,8 +128,11 @@ emulator 的錯誤訊息就會列出 `for 'update'`——代表 emulator 確實�
 運算式，即便這次請求跟 update 完全無關。這件事本身是真實可重現的，但**只在本機 Firestore
 Emulator v1.22.0 上驗證過，沒有也無法對正式 Firestore 驗證**（受限於「絕不碰正式資料」的
 硬性要求）。重要的是：這個「跨子句評估」的現象**沒有影響任何一次的放行結果**（M/N/O 全部
-正確 PASS），所以不影響「1000 上限是 per-clause、不是 pooled」這個結論的信心，但無法排除
-正式環境跟 emulator 行為有差異的可能性。
+正確 PASS），所以不影響「在這個 Emulator 版本上，1000 上限是逐條 `allow` 子句各自回報、
+不是被單一計數池共同耗盡」這個觀察的可信度，但這整套結論**僅限於 Emulator v1.22.0**，
+無法排除正式 Firestore 環境行為不同的可能性——這也是為什麼
+`docs/firestore-attachments-subcollection-design.md` 第 2 節（方案 A 的 Rules 草案）
+明確要求「實作時要重新用同樣的方法論實測，不能只憑閱讀規則推論」。
 
 ## 對現行 PR 的影響
 

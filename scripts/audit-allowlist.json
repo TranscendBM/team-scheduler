@@ -1,0 +1,12 @@
+{
+  "entries": [
+    {
+      "ghsaId": "GHSA-qwww-vcr4-c8h2",
+      "package": "react-router",
+      "severity": "high",
+      "reason": "React Router: RSC Mode CSRF Bypass Allows Action Execution Before 400 Response. This app does not use React Server Components (RSC) or SSR — it's a client-only SPA (see vite.config.js / no server entry) — so this attack surface does not apply. The only fix is `npm audit fix --force`, which downgrades react-router-dom to 7.11.0 (a breaking change).",
+      "reviewedAt": "2026-07-30",
+      "reviewBy": "2026-10-30"
+    }
+  ]
+}

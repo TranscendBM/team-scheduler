@@ -61,14 +61,13 @@ jobs:
       - name: Rules tests (Firestore + Storage emulator)
         run: npm run test:rules
 
-      # 目前有 2 個 high severity 已知風險(react-router GHSA-qwww-vcr4-c8h2，RSC Mode CSRF
-      # Bypass)：`npm audit fix --force` 唯一的修法是降版到 react-router-dom@7.11.0(breaking
-      # change)。這個網站沒有使用 RSC(React Server Components)/SSR，這個漏洞的攻擊面
-      # 不適用；接受風險、暫不處理，continue-on-error 只是避免這個已知、已評估過的問題
-      # 擋住其他測試，不代表「通過」——exit code 仍是 1，實際結果見這個 step 的 log。
-      - name: npm audit (frontend，已知 React Router 風險，非阻擋)
-        run: npm audit
-        continue-on-error: true
+      # 不再對 frontend audit 用 continue-on-error 無條件放行——那樣會連未來新增的任何
+      # high/critical 漏洞都一併忽略，不只目前已評估過的 react-router GHSA。改用
+      # scripts/check-npm-audit.mjs 讀 scripts/audit-allowlist.json 這份「有記錄理由跟
+      # 到期日」的白名單：只有白名單內、且沒過期的 high 才會放行，critical 一律不放行，
+      # 白名單以外的任何 high/critical(或格式不符預期的 audit 輸出)都會讓這個 step 失敗。
+      - name: npm audit (frontend，經白名單檢查)
+        run: npm run audit:check
 
   functions:
     runs-on: ubuntu-latest
@@ -94,8 +93,7 @@ jobs:
       - name: Test
         run: npm test
 
-      # functions 目前是 0 vulnerabilities；continue-on-error 保留是為了避免未來新增依賴
-      # 出現低風險項目時擋住整個 pipeline，不代表現在有已知風險被刻意放行。
-      - name: npm audit (functions，目前 0 vulnerabilities)
+      # functions 目前是 0 vulnerabilities，沒有需要放行的已知風險，所以不用白名單機制——
+      # 拿掉 continue-on-error：以後這裡出現任何漏洞都應該讓 CI 失敗，不能被無條件蓋過去。
+      - name: npm audit (functions)
         run: npm audit
-        continue-on-error: true
