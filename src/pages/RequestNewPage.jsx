@@ -6,6 +6,7 @@ import { db, storage } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
 import { REGIONS, DOC_TYPES, MAX_ATTACHMENT_MB } from '../utils/requestConstants'
 import { attachmentKey, markRemoved, unmarkRemoved, keptAttachments, removedAttachments, commitWithDeferredDeletion } from '../utils/attachmentDraft'
+import { getSafeAttachmentUrl } from '../utils/attachmentUrl'
 
 const MAX_BYTES = MAX_ATTACHMENT_MB * 1024 * 1024
 const empty = { urgent: false, region: '', projectName: '', docTypes: [], dueDate: '', description: '' }
@@ -320,13 +321,16 @@ export default function RequestNewPage() {
             <ul className="mt-2 space-y-1">
               {existingAtts.map(a => {
                 const isRemoved = removedKeys.includes(attachmentKey(a))
+                const safeUrl = getSafeAttachmentUrl(a, editId)
                 return (
                   <li key={attachmentKey(a)}
                     className={`flex items-center justify-between text-xs rounded-lg px-3 py-1.5 ${isRemoved ? 'bg-red-50 text-red-300' : 'bg-gray-100 text-gray-600'}`}>
                     {isRemoved ? (
                       <span className="truncate line-through">📄 {a.name}（將於儲存後移除）</span>
+                    ) : safeUrl ? (
+                      <a href={safeUrl} target="_blank" rel="noreferrer noopener" className="truncate hover:underline">📄 {a.name}（已上傳）</a>
                     ) : (
-                      <a href={a.url} target="_blank" rel="noreferrer" className="truncate hover:underline">📄 {a.name}（已上傳）</a>
+                      <span className="truncate text-red-400" title="連結驗證失敗">📄 {a.name}（連結無效）</span>
                     )}
                     {isRemoved ? (
                       <button type="button" onClick={() => restoreExisting(a)} className="text-blue-400 hover:text-blue-600 ml-2">復原</button>

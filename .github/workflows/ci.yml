@@ -51,6 +51,13 @@ jobs:
       - name: Build (test env vars, 不連正式 Firebase 專案)
         run: npm run build
 
+      # test:rules 除了跑 Firestore/Storage rules 測試，還會跑 functions/test/renameUserLogin.test.js
+      # 和 functions/test/resolveActivePlannerCcEmails.test.js 這兩個整合測試(直接 import firebase-admin)。
+      # 這個 job 跟下面的 functions job 是各自獨立的 runner，彼此的 node_modules 不會共用，
+      # 所以這裡一定要自己裝一次 functions/ 的依賴，不能假設 functions job 裝好的東西這裡看得到。
+      - name: Install functions dependencies (test:rules 的整合測試需要 firebase-admin)
+        run: npm ci --prefix functions
+
       - name: Rules tests (Firestore + Storage emulator)
         run: npm run test:rules
 

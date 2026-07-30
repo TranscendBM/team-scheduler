@@ -9,7 +9,7 @@
   "scripts": {
     "lint": "node --check index.js",
     "test": "node --test test/buildHtml.test.js test/previewFile.test.js test/notifications.test.js",
-    "test:integration": "node --test test/renameUserLogin.test.js test/resolveActivePlannerCcEmails.test.js"
+    "test:integration": "node --test --test-concurrency=1 test/renameUserLogin.test.js test/resolveActivePlannerCcEmails.test.js"
   },
   "dependencies": {
     "firebase-admin": "^14.2.0",

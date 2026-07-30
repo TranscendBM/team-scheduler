@@ -41,10 +41,15 @@ const rulesStatus = run(
   [vitestBin, 'run', 'test/rules', '--no-file-parallelism']
 )
 
+// renameUserLogin.test.js 跟 resolveActivePlannerCcEmails.test.js 共用同一個 emulator project，
+// 而且各自的 beforeEach 都會清掉 users(renameUserLogin 還會清 requests/userRenameOperations)。
+// node --test 預設會平行執行多個測試檔，兩份檔案的 clear/seed 互相打架會造成間歇性失敗，
+// 所以這裡強制 --test-concurrency=1，確保兩個測試檔依序執行、不平行清資料。
 const integrationStatus = run(
   'renameUserLogin + resolveActivePlannerCcEmails 整合測試',
   [
     '--test',
+    '--test-concurrency=1',
     'functions/test/renameUserLogin.test.js',
     'functions/test/resolveActivePlannerCcEmails.test.js',
   ]
