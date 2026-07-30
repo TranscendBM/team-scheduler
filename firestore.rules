@@ -78,45 +78,40 @@ service cloud.firestore {
     }
 
     // 附件結構驗證：只能有 name/url/size/storagePath 四個欄位、型別正確、size 落在合理範圍
-    // (對應前端 MAX_ATTACHMENT_MB=10)。URL 本身合不合法(host/bucket/路徑)規則語言無法完整驗證
-    // (不支援字串正則比對網域結構)，交給 Cloud Function 在組信件內容/提供預覽下載時再次驗證
-    // (見 functions/index.js 的 safeAttachmentUrl / resolveAttachmentPath)，這裡只負責把好「結構」這一關、
-    // 並限制筆數上限。storagePath 若存在，至少要求「看起來」屬於這個 request(attachments/{requestId}/...)，
-    // 但這只是盡力而為的字串比對防線 —— 規則語言沒辦法像 Cloud Function 那樣完整解析/驗證 URL，
-    // 真正的最終防線一定要靠 Cloud Function 端 resolveAttachmentPath 那組完整一致性驗證。
-    // storagePath 是否形如 attachments/{requestId}/{檔名}。刻意不用 .matches()(regex) ——
-    // 這個函式最多會被呼叫 10 次(每個附件一次)，regex 引擎評估成本很高，疊加起來會撞到
-    // Firestore 規則「單次請求最多 1000 個運算式」的上限，導致連合法的寫入都被拒
-    // (exceeded evaluation limit，實測發生過)。改用 split('/') + 逐段比對，成本低很多。
-    function isValidStoragePath(path, requestId) {
-      let parts = path.split('/');
-      return path is string && path.size() > 0 && path.size() <= 500
-        && parts.size() == 3 && parts[0] == 'attachments' && parts[1] == requestId && parts[2].size() > 0;
-    }
-    function isValidAttachment(a, requestId) {
+    // (對應前端 MAX_ATTACHMENT_MB=10)。
+    //
+    // 注意：storagePath 是否確實對應這個 requestId，刻意「不」在這裡驗證。原本試過
+    // .matches()(regex)、後來改成 split('/') 逐段比對，兩種都會在附件數量到 10 筆時撞到
+    // Firestore 規則「單次請求最多 1000 個運算式」的上限，導致連合法的寫入都被拒(CI 實測
+    // 兩種寫法都發生過 exceeded evaluation limit)。Firestore 規則的運算式上限算的應該是
+    // AST 節點數而非實際執行成本，逐筆(最多 10 次)呼叫任何一種字串比對函式都會疊加太多節點。
+    // 這條檢查本來就只是「盡力而為」的第二道防線 —— 真正的最終防線是 Cloud Function 端
+    // resolveAttachmentPath() 的完整一致性驗證(previewFile 會用它擋掉跨 request 的 storagePath)，
+    // 拿掉這裡的檢查不影響實際安全性，只是把這一小段驗證完全交給 Cloud Function 負責。
+    function isValidAttachment(a) {
       return a.keys().hasOnly(['name', 'url', 'size', 'storagePath'])
         && a.name is string && a.name.size() > 0 && a.name.size() <= 300
         && a.url is string && a.url.size() > 0 && a.url.size() <= 2000
         && a.size is number && a.size > 0 && a.size <= 10485760
-        && (!('storagePath' in a) || isValidStoragePath(a.storagePath, requestId));
+        && (!('storagePath' in a) || (a.storagePath is string && a.storagePath.size() > 0 && a.storagePath.size() <= 500));
     }
     // Firestore 規則語言不支援對 list 做逐一元素的迴圈驗證，只能在已知上限(10 筆)內逐一 index 檢查
-    function isValidAttachments(atts, requestId) {
+    function isValidAttachments(atts) {
       return atts is list && atts.size() <= 10
-        && (atts.size() < 1  || isValidAttachment(atts[0], requestId))
-        && (atts.size() < 2  || isValidAttachment(atts[1], requestId))
-        && (atts.size() < 3  || isValidAttachment(atts[2], requestId))
-        && (atts.size() < 4  || isValidAttachment(atts[3], requestId))
-        && (atts.size() < 5  || isValidAttachment(atts[4], requestId))
-        && (atts.size() < 6  || isValidAttachment(atts[5], requestId))
-        && (atts.size() < 7  || isValidAttachment(atts[6], requestId))
-        && (atts.size() < 8  || isValidAttachment(atts[7], requestId))
-        && (atts.size() < 9  || isValidAttachment(atts[8], requestId))
-        && (atts.size() < 10 || isValidAttachment(atts[9], requestId));
+        && (atts.size() < 1  || isValidAttachment(atts[0]))
+        && (atts.size() < 2  || isValidAttachment(atts[1]))
+        && (atts.size() < 3  || isValidAttachment(atts[2]))
+        && (atts.size() < 4  || isValidAttachment(atts[3]))
+        && (atts.size() < 5  || isValidAttachment(atts[4]))
+        && (atts.size() < 6  || isValidAttachment(atts[5]))
+        && (atts.size() < 7  || isValidAttachment(atts[6]))
+        && (atts.size() < 8  || isValidAttachment(atts[7]))
+        && (atts.size() < 9  || isValidAttachment(atts[8]))
+        && (atts.size() < 10 || isValidAttachment(atts[9]));
     }
 
     // 建立需求時的必要欄位／型別／允許欄位驗證
-    function isValidRequestCreate(requestId) {
+    function isValidRequestCreate() {
       let d = request.resource.data;
       return d.keys().hasOnly([
                'urgent', 'region', 'projectName', 'docTypes', 'dueDate', 'description',
@@ -128,7 +123,7 @@ service cloud.firestore {
         && d.dueDate is string
         && d.description is string
         && d.urgent is bool
-        && isValidAttachments(d.attachments, requestId)
+        && isValidAttachments(d.attachments)
         && d.submittedBy == email()
         && d.submittedByName is string
         && d.status == 'pending'
@@ -148,7 +143,7 @@ service cloud.firestore {
         || (whitelisted() && email() in resource.data.get('assignedDesigners', []))      // designer 看指派給自己的
         || (whitelisted() && resource.data.region in myRegions());                       // planner 看負責區域的
 
-      allow create: if whitelisted() && isValidRequestCreate(id);
+      allow create: if whitelisted() && isValidRequestCreate();
 
       allow update: if
           // manager：核准 / 駁回 / 事後編輯，且 status 必須落在既定 enum 內
@@ -172,7 +167,7 @@ service cloud.firestore {
               && request.resource.data.projectName is string && request.resource.data.projectName.size() > 0
               && request.resource.data.region is string && request.resource.data.region.size() > 0
               && request.resource.data.docTypes is list
-              && isValidAttachments(request.resource.data.attachments, id));
+              && isValidAttachments(request.resource.data.attachments));
 
       // manager 可刪任何需求；提交人只能刪自己「剛建立、還沒有任何附件」的 pending 需求 ——
       // 這只是給 RequestNewPage 建立需求失敗時的回滾用(見該檔案 handleSubmit 的錯誤處理):

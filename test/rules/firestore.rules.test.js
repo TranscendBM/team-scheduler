@@ -167,19 +167,22 @@ describe('requests create — 必要欄位/型別/允許欄位驗證', () => {
     await assertSucceeds(addDoc(collection(dbAs(PLANNER_SD1), 'requests'), { ...base, submittedBy: PLANNER_SD1, attachments }))
   })
 
-  // storagePath 是選填欄位，測試它跟「這個 request 的 id」的對應關係時要用已知的 doc id(setDoc)，
-  // 不能用 addDoc(建立前不知道自動產生的 id，無法組出應該相符的 storagePath)
-  it('attachments storagePath 符合 attachments/{這個 request 的 id}/{檔名} 成功', async () => {
-    await assertSucceeds(setDoc(doc(dbAs(PLANNER_SD1), 'requests', 'req-known-1'), {
+  // storagePath 是選填欄位；規則層只驗證它是「合理長度的字串」，不驗證是否對應這個 request 的 id ——
+  // 那項檢查(storagePath 是否真的屬於這個 requestId)刻意移到 Cloud Function 的
+  // resolveAttachmentPath() 做(previewFile 會用它擋掉跨 request 的 storagePath)，因為在規則層
+  // 對最多 10 筆附件逐一做這種比對，不管用 regex 還是 split()，都會撞到 Firestore 規則
+  // 「單次請求最多 1000 個運算式」的上限，導致連合法寫入都被拒(CI 實測發生過)。
+  it('attachments storagePath 只驗證結構(合理長度的字串)，不管內容指到哪個 requestId 都成功', async () => {
+    await assertSucceeds(addDoc(collection(dbAs(PLANNER_SD1), 'requests'), {
       ...base, submittedBy: PLANNER_SD1,
-      attachments: [{ name: 'a.pdf', url: 'https://example.com/a.pdf', size: 1024, storagePath: 'attachments/req-known-1/a-123.pdf' }],
+      attachments: [{ name: 'a.pdf', url: 'https://example.com/a.pdf', size: 1024, storagePath: 'attachments/some-other-request/a-123.pdf' }],
     }))
   })
 
-  it('attachments storagePath 指向別的 requestId 會被擋', async () => {
-    await assertFails(setDoc(doc(dbAs(PLANNER_SD1), 'requests', 'req-known-2'), {
+  it('attachments storagePath 型別錯誤(不是字串)會被擋', async () => {
+    await assertFails(addDoc(collection(dbAs(PLANNER_SD1), 'requests'), {
       ...base, submittedBy: PLANNER_SD1,
-      attachments: [{ name: 'a.pdf', url: 'https://example.com/a.pdf', size: 1024, storagePath: 'attachments/some-other-request/a-123.pdf' }],
+      attachments: [{ name: 'a.pdf', url: 'https://example.com/a.pdf', size: 1024, storagePath: 12345 }],
     }))
   })
 })
