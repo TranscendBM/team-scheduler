@@ -303,9 +303,10 @@ requests/{requestId} {
   子集合（即使子集合裡因為某種原因已經有文件，也不讀）。
 - `attachmentsSchemaVersion == 2`：一律只讀新子集合，**即使子集合目前是空的，也絕對不
   fallback 讀舊陣列**——空子集合在版本 2 就是「真的沒有附件」的正確表示。
-- 這個欄位**只能在遷移腳本完成「所有 10 個 slot 都已寫入且跟舊陣列逐項比對一致」之後**才
-  設定成 `2`（見第 13 節的一致性檢查）——不是遷移腳本開始處理就設，是驗證通過才設，這是
-  這個欄位唯一的寫入時機。
+- 這個欄位**只能在「新子集合 `ready` 文件數精確等於舊陣列長度(0-10)，且每一筆來源與
+  destination 內容都驗證一致」之後**才設定成 `2`（見第 13 節的完整一致性檢查——不是固定
+  寫滿 10 個 slot，是跟舊陣列實際長度一致）——不是遷移腳本開始處理就設，是驗證通過才設，
+  這是這個欄位唯一的寫入時機。
 - **Rollback 時如何恢復讀取來源**：把該文件的 `attachmentsSchemaVersion` 寫回 `1`（或整個
   刪除這個欄位）。因為遷移階段全程保留舊陣列欄位不刪除（見第 12 節），這個回退是單純的
   欄位寫入，不需要任何資料搬回去，前端/Functions 的讀取邏輯看到 `1` 就會自動切回讀舊陣列。
@@ -639,43 +640,189 @@ expression 數量是不同的限制維度，但一樣是要小心的資源）。
      沒刪乾淨」的情況高，所以選擇先刪 Storage、Firestore 紀錄留到最後一步才刪，讓「有
      紀錄但清理未完成」是唯一需要重試處理的中間狀態）。
 
-## 11. 遷移批次與可重試設計
+## 11. 遷移批次與可重試設計（Storage copy migration）
 
-- 用一次性 Cloud Function（`onCall`，manager-only，或一次性 script 透過 Admin SDK 執行，
-  **需另外核准**）分批處理：每批用 Firestore 查詢抓 N 筆（例如 50 筆）
-  `attachmentsSchemaVersion` 不是 `2` 的 `requests` 文件，對每一筆：
-  1. 讀 `attachments` 陣列。
-  2. 對每個 index 寫入對應 slot 子集合文件（`set`，非 `add`，天然幂等——同一個 slot
-     重複寫入結果一致，可安全重試），`objectName` 從舊資料的 `storagePath` 反解最後一段
-     （舊資料沒有獨立的 `objectName` 欄位，用 `storagePath.split('/')` 取最後一段；沒有
-     `storagePath` 的舊資料用 `derivePathFromUrl` 同等邏輯反推，跟現行前端
-     `RequestNewPage.jsx` 的既有備援邏輯一致）。
-  3. 逐項比對子集合寫入結果跟原陣列是否一致（見第 13 節）。
-  4. 全部一致後，才把該筆文件的 `attachmentsSchemaVersion` 設成 `2`。
+**修正(第四輪)：原草稿自相矛盾**——新 schema 要求 `storagePath` 是四段
+（`attachments/{requestId}/{reservationId}/{objectName}`），但原本第 11、13 節說遷移只是
+「直接複製舊 `storagePath`/`url`，新舊完全相同」，而舊資料的 `storagePath` 實際上是三段
+（`attachments/{requestId}/{objectName}`，沒有 `reservationId` 這一段）。這兩件事不可能
+同時成立——不能一邊要求新 schema 是四段路徑，一邊又說「新舊 storagePath/url 相同」。
+修正方向：**遷移時真的把 Storage object 複製到新的四段路徑**，而不是讓舊三段路徑掛著不變、
+只在 Firestore 裡假裝套用新 schema。這裡刻意不引入「永久 legacy Rules 分支」（例如讓 Rules
+同時接受三段或四段兩種 `storagePath` 格式）——那樣會讓第 2 節的驗證函式永遠多一條分支、
+永久墊高 expression 成本，且會讓「這個系統的 storagePath 到底該長怎樣」變成一個沒有終點的
+問題。統一 schema（遷移時就把舊物件複製過去，之後全部都是四段格式）雖然遷移當下比較貴
+（要真的複製檔案），但換來的是 Rules 永遠只需要驗證一種格式，長期複雜度更低。
+
+**流程：source 解析 → 產生穩定的 migration reservationId → destination 存在性/一致性
+檢查 → Storage copy → 新 URL → 寫入 ready 子文件**
+
+1. **Source path 解析**（每筆舊附件）：
+   - 若舊附件有 `storagePath`：直接當作 source path，驗證必須精確符合三段格式
+     `attachments/{requestId}/{filename}`（`split('/').length === 3`、
+     `parts[0] === 'attachments'`、`parts[1] === requestId`）。
+   - 若沒有 `storagePath`：從 `url` 反解——**不能用前端 `RequestNewPage.jsx` 那個寬鬆的
+     `derivePathFromUrl()`**（那個只用 `/o/([^?]+)/` 抓字串、不驗證 host/bucket，是給
+     UI 顯示用的寬鬆備援，不適合當遷移腳本的正確性依據）。遷移腳本必須用
+     `functions/index.js` 現有的、已驗證過的
+     `parseAttachmentUrl`/`parseAttachmentStoragePath` 同等邏輯（https-only、host 必須是
+     `firebasestorage.googleapis.com`、bucket 必須符合本專案、解碼後路徑必須落在
+     `attachments/` 底下），解出的路徑一樣要通過上面的三段格式 + `requestId` 綁定驗證。
+   - **source path、bucket、requestId 任一項不合法 → 這筆附件的遷移直接失敗**，記錄
+     文件 id + slot + 失敗原因，**這份 request 文件不設定 `attachmentsSchemaVersion: 2`**
+     （只要有任何一筆附件遷移失敗，整份文件都不能標記完成——不能「部分附件遷移成功就切
+     版本」，那樣會讓 schemaVersion:2 卻讀不到某筆附件）。
+
+2. **穩定、可重試的 migration reservationId(不是一般上傳用的隨機 UUID v4)**：
+   - 一般新上傳的 reservation（第 7 節）用 `crypto.randomUUID()`(UUID v4，隨機、不可預測)
+     ——這對「一次性、不會重跑」的操作是對的，但**遷移腳本會被重跑**(中斷、部分失敗、
+     重新執行)，如果每次重跑都對同一筆舊附件重新產生一個新的隨機 UUID，會導致
+     destination path 每次都不一樣，**在 Storage 上留下重複的物件**(舊的那次複製留下的
+     物件沒有任何機制知道該不該刪，因為每次重跑都覺得自己是第一次)。
+   - 修正：遷移用的 `reservationId` 改用**確定性(deterministic)**的 UUID v5（或等效的
+     hash），輸入至少包含 `requestId`、`slot`、`source storagePath` 這三個值：
+     ```js
+     import { v5 as uuidv5 } from 'uuid'
+     // 固定的 namespace UUID，遷移腳本專用，寫死在程式碼裡、不可變更(一旦變更，所有
+     // 舊附件重跑時算出的 destination path 會全部改變，等於失去「確定性」這個屬性)
+     const MIGRATION_NAMESPACE = '6f1b1c1e-6f2a-4b6e-9f2d-3c9a2b7d4e10'
+     const migrationReservationId = uuidv5(`${requestId}:${slot}:${sourcePath}`, MIGRATION_NAMESPACE)
+     ```
+   - **同一筆舊附件不管重跑幾次，算出來的 `migrationReservationId` 跟 destination path
+     都完全一樣**——這是「可安全重試」的核心前提，沒有這個前提，任何部分失敗後的重跑都會
+     製造孤兒物件。
+
+3. **Destination path**：
+   ```
+   attachments/{requestId}/{migrationReservationId}/{objectName}
+   ```
+   `objectName` 是 source path 最後一段(檔名)，**重新驗證**必須符合 ASCII 安全格式
+   `^[A-Za-z0-9._-]{1,200}$`（既有的合法上傳檔名理論上都已經是這個格式，因為當初上傳時
+   就是用 `safeFileName()` 產生的；但遷移腳本不能「假設」這件事一定成立，必須實際驗證——
+   如果驗證失敗，這筆附件的遷移失敗，不嘗試自動改寫成別的檔名，避免產生「migration 自己
+   決定的檔名」跟原始資料對不上的疑慮）。
+
+4. **Destination 存在性與一致性檢查(冪等的關鍵)**：
+   - 複製前先檢查 destination path 是否已存在(對應「這是不是重跑」的情況)。
+   - **不存在** → 執行第 5 點的複製。
+   - **已存在** → **不可盲目覆蓋**，必須驗證 destination object 的 `size` 與
+     `md5Hash`/`generation`(或等效的內容指紋 metadata)跟 source object 完全一致：
+     - 一致 → 視為「上次已經複製成功，這次重跑不用重新複製」，跳過複製，直接進入第 6 點
+       (取得/確認下載 URL)。
+     - **不一致 → 停止這筆附件的遷移並回報**(可能是 hash 碰撞、或曾經被別的東西寫過這個
+       路徑這種不應該發生的情況)，不能因為路徑存在就假設內容一定對，更不能覆蓋掉一個
+       來源不明的物件。
+5. **Storage copy**：用**已核准的一次性 Admin migration function/script**（Admin SDK，
+   例如 `bucket.file(sourcePath).copy(bucket.file(destinationPath))`）把 source object
+   複製到 destination path——**這一步是實際的正式資料操作，執行前必須另外取得明確核准**
+   （見第 15 節），本文件本身不構成這個核准。
+6. **新的下載 URL/token**：複製完成後，在 destination object 上設定新的
+   `firebaseStorageDownloadTokens` metadata(產生一個新 token，不是沿用 source 的
+   token)，組出新的下載 URL(`https://firebasestorage.googleapis.com/v0/b/{bucket}/o/
+   {encodeURIComponent(destinationPath)}?alt=media&token={newToken}`)——**新舊
+   `storagePath`/`url` 不會相同，也不應該要求它們相同**，這正是本輪要修正的錯誤預期。
+7. **寫入子集合 `ready` 文件**，欄位對應第 1 節的 schema：
+   ```js
+   {
+     name: oldAttachment.name,              // 沿用舊資料的顯示名稱
+     objectName,                             // 從 source path 重新驗證取得(見第 3 點)
+     storagePath: destinationPath,           // 新的四段路徑
+     url: newDownloadUrl,                    // 新的下載網址(見第 6 點)
+     size: destinationObjectMetadata.size,   // 用 destination object 實際的 size(已在
+                                              // 第 4 點驗證跟 source 一致)，不是照抄舊
+                                              // Firestore 資料裡可能過時的 size 欄位
+     reservationId: migrationReservationId,  // 第 2 點的確定性 migration ID
+     createdAt: <遷移執行當下的時間戳>,        // 定義：這個 ready 文件是「遷移這次執行」
+                                              // 才產生的，語意上代表這份 Firestore 文件
+                                              // (reservation)本身的建立時間，不是沿用
+                                              // parent 原始建立時間(parent.createdAt 代表
+                                              // 的是「這個 request」的建立時間，不是「這筆
+                                              // 附件 reservation 文件」的建立時間，兩者是
+                                              // 不同的時間點，不應該混用)
+     createdBy: parentRequest.submittedBy,   // 定義：沿用 parent 的提交人 email，代表
+                                              // 「這筆附件原本歸屬於誰」，而不是遷移腳本
+                                              // 自己的服務身分——這樣 canEditRequestAttachments
+                                              // (第 4 節，檢查 parent.submittedBy == e)在
+                                              // 提交人之後編輯附件時，行為才會跟遷移前一致
+     status: 'ready',
+   }
+   ```
+   **Admin SDK 寫入不受 Rules 限制，但寫出來的資料仍必須完整符合第 2 節
+   `isValidReadyAttachment` 的新版 schema**（`objectName` 格式、`storagePath` 精確等於
+   `'attachments/' + requestId + '/' + reservationId + '/' + objectName`、`url`/`size`
+   型別範圍、`status == 'ready'`）——不是「反正 Admin SDK 不受 Rules 限制就可以隨便寫」，
+   因為切到 `schemaVersion: 2` 之後，這筆資料未來會被**一般 client**(受 Rules 限制)讀取、
+   甚至編輯(例如提交人在 pending 狀態下修改附件)，如果遷移寫出的資料本身不符合 schema，
+   會變成「切版本後這筆附件變成事實上讀得到但改不動」的壞資料。
 - 用 `attachmentsSchemaVersion`（不是額外的 `attachmentsMigrated` 布林欄位——兩者擇一，
   這裡統一用前者）當作 checkpoint：整個遷移可以中斷、重跑，只會重複處理「還不是版本 2」
-  的文件，不會對已完成的文件重複寫入造成副作用（因為子集合寫入是幂等的 `set`）。
+  的文件，不會對已完成的文件重複寫入造成副作用（因為第 4 點的存在性/一致性檢查讓
+  Storage copy 本身也是幂等的，不只是 Firestore 寫入幂等）。
 - 每批之間有明確的成功/失敗計數回報，失敗的文件 id 記錄下來，方便針對性重跑，不需要整批
   重來。
 
 ## 12. Rollback 方法（整體遷移層級）
 
-- 因為遷移階段全程保留舊 `attachments` 陣列欄位（不會因為遷移完成就刪除，刪除是額外一次
-  核准的清理步驟，見第 15 節），rollback 只需要：
+- 因為遷移階段全程保留舊 `attachments` 陣列欄位**跟舊的三段 Storage object**（都不會因為
+  遷移完成就刪除/搬移——遷移是「複製」不是「搬移」，source object 遷移完成後依然原封不動
+  留在原本的三段路徑上），rollback 只需要：
   1. 把已遷移文件的 `attachmentsSchemaVersion` 寫回 `1`（見第 6 節「Rollback 時如何恢復
-     讀取來源」——前端/Functions 的讀取邏輯看到 `1` 就自動切回讀舊陣列，不需要搬任何資料）。
-  2. 保留（不刪除）已寫入的子集合文件，之後要重新遷移可以直接複用，不用重新處理。
-- 只有在確認新流程穩定運作一段時間、且不再需要回退之後，才會有**額外一次**、**另外核准**
-  的清理步驟去移除 `attachments` 陣列欄位。
+     讀取來源」——前端/Functions 的讀取邏輯看到 `1` 就自動切回讀舊陣列/舊三段
+     `storagePath`/`url`，不需要搬任何資料，舊資料完整未動）。
+  2. 保留（不刪除）已寫入的四段路徑 Storage object 跟子集合 `ready` 文件，之後要重新
+     遷移時，靠第 11 節第 2/4 點的確定性 ID + 存在性/一致性檢查，可以直接偵測到「這筆已經
+     複製過」而跳過重複複製，不用重新處理。
+- 只有在**確認新流程穩定運作一段時間、且不再需要回退之後**，才會有**額外一次**、
+  **另外核准**的清理步驟去：
+  1. 移除 `attachments` 陣列欄位。
+  2. 刪除**舊的三段路徑** Storage object（新的四段路徑物件是唯一保留的正式版本）。
+  - 這個清理步驟執行前，**必須重新跑一次第 13 節的唯讀稽核**，確認所有文件的新舊資料
+    仍然一致，才能進行。
+- **部分失敗重跑的安全性**：如果某一批遷移「Storage copy 已經成功，但 Firestore 的
+  `ready` 文件寫入失敗」(例如腳本在兩步之間當掉)，重跑時：第 11 節第 4 點的「destination
+  已存在」分支會被觸發，驗證內容一致後跳過重新複製，直接補寫 Firestore 文件——不需要
+  額外的復原邏輯，這正是「確定性 ID + 存在性檢查」這個設計要達成的效果。
+- **孤兒 destination object 的偵測**：如果腳本在「複製成功」之後、「寫入 Firestore 之前」
+  就徹底中止且從未重跑（不是上面「有重跑」的情況），會留下一個有 Storage object、但沒有
+  對應 Firestore `ready` 文件的孤兒。因為 `migrationReservationId` 是從
+  `requestId`/`slot`/`source path` 確定性推算出來的，稽核腳本可以對每一筆舊附件重新算出
+  「預期的 destination path」，檢查該路徑是否存在 Storage object、但子集合裡沒有對應的
+  `ready` 文件——找到就代表是這種孤兒，可以安全地重新觸發「補寫 Firestore」這個步驟(冪等)，
+  不需要用「列舉整個 bucket 前綴、看哪些路徑沒有 Firestore 紀錄」這種更貴的方式去猜。
 
 ## 13. 遷移前後資料一致性檢查
 
-- 遷移腳本每處理完一筆文件，立即比對：子集合的 `ready` 文件數是否等於原陣列長度；逐一
-  比對 `name`/`url`/`size`/`storagePath` 欄位是否跟陣列裡對應 index 的物件完全一致
-  （`objectName` 從 `storagePath`/`url` 反解，見第 11 節）。**全部比對通過才設定
-  `attachmentsSchemaVersion: 2`**——這是這個欄位唯一的寫入時機，見第 6 節。
+**修正(第四輪)：只有以下條件全部成立，才能設定 `attachmentsSchemaVersion: 2`**（取代
+原本「所有 10 個 slot 都已寫入」這個錯誤敘述——正確條件是「跟舊陣列長度一致」，不是
+「固定寫滿 10 個」）：
+
+1. 新子集合裡 `status == 'ready'` 的文件數，**精確等於**舊 `attachments` 陣列的長度
+   （範圍 0-10，不是固定 10）。
+2. 用到的 slot id 集合，**精確是** `0` 到 `oldAttachments.length - 1`（例如舊陣列有 3 筆，
+   slot 就必須精確是 `'0'`、`'1'`、`'2'`，不可以多、不可以少，也不可以跳號）。
+3. **不可以為了「湊滿 10 個 slot」而建立空的 slot 文件**——沒有對應舊附件的 slot 就是不
+   存在，不是存在但內容為空。
+4. 每一筆逐項比對：`name`、`size` 跟來源附件（`attachments` 陣列裡對應 index 的物件）
+   完全一致。
+5. Destination Storage object 必須存在（不是只檢查 Firestore 文件寫了就好）。
+6. Destination object 的 `size`/`md5Hash`(或等效內容指紋) 跟 source object 完全一致
+   （見第 11 節第 4 點——這一步在遷移當下已經驗證過一次，這裡的一致性檢查是**獨立
+   再驗證一次**，確保沒有在複製之後、切版本之前的空窗期被意外改動過）。
+7. `storagePath` 精確符合新的四段格式（`attachments/{requestId}/{reservationId}/
+   {objectName}`），且 `reservationId`/`objectName` 分別對應到 `storagePath` 的正確段落。
+8. **URL 解出的 path 必須與(新的)`storagePath` 一致**——這裡驗證的是新 `url`/新
+   `storagePath` 這一組，不是新舊之間的比對（本輪修正前的敘述誤把這件事跟「新舊
+   storagePath 必須相同」混為一談）。
+9. **舊陣列是空的（0 筆附件）這個邊界情況**：確認子集合裡**完全沒有** `ready` 或
+   `uploading` 狀態的文件之後，才能設定 `attachmentsSchemaVersion: 2`（空陣列對應到「這份
+   request 沒有附件」，子集合也必須是真的空的，不是「因為沒有東西要比對就跳過檢查」）。
+
+**全部比對通過才設定 `attachmentsSchemaVersion: 2`**——這是這個欄位唯一的寫入時機，
+見第 6 節。
+
 - 額外提供一個唯讀的稽核腳本（不寫入，只讀取+比對+回報），可以在遷移完成後、雙軌並存的
-  任何時間點重新執行，找出「陣列與子集合不一致」的文件 id 清單。
+  任何時間點重新執行，找出「陣列與子集合不一致」的文件 id 清單，以及第 12 節提到的孤兒
+  destination object 清單。
 - 稽核腳本的執行本身（即使是唯讀）如果要對接正式 Firebase 專案，同樣需要另外核准。
 
 ## 14. 舊版前端與新版資料的相容性
@@ -697,10 +844,13 @@ expression 數量是不同的限制維度，但一樣是要小心的資源）。
 - 對正式 Firebase 專案套用新的 `firestore.rules`（子集合驗證規則）
 - 部署新的 Cloud Functions（`cleanupIncompleteRequest`、`cleanupOnDelete`、遷移用的
   一次性 function/script、孤兒 Storage 物件清理排程）
-- 執行遷移腳本（不管是完整批次或單筆測試）
+- 執行遷移腳本（不管是完整批次或單筆測試），**包含把正式 Storage object 從舊三段路徑
+  複製到新四段路徑這個操作本身**（第 11 節）
 - 執行任何會寫入正式 `requests` 或其子集合的操作
 - 執行唯讀稽核腳本對接正式專案
-- 執行清理步驟（移除舊 `attachments` 陣列欄位）
+- 執行清理步驟（移除舊 `attachments` 陣列欄位，以及第 12 節提到的「刪除舊三段路徑
+  Storage object」——這是遷移完成、穩定觀察期過後的**另一次**、**獨立**核准，不能沿用
+  遷移本身的核准）
 
 本次 PR **不**包含以上任何一項，也不包含前端/Functions 的對應程式碼改動 —— 僅有這份
 設計文件。

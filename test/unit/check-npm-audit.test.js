@@ -337,6 +337,104 @@ describe('evaluateAudit — severity 正確性(先前兩個 fail-open bug 的迴
   })
 })
 
+describe('evaluateAudit — malformed 結構(isPlainRecord 迴歸測試：陣列/null/字串不可被誤判成物件)', () => {
+  it('vulnerabilities 是陣列 → 失敗', () => {
+    const json = JSON.stringify({
+      auditReportVersion: 2,
+      vulnerabilities: [],
+      metadata: { vulnerabilities: { info: 0, low: 0, moderate: 0, high: 0, critical: 0, total: 0 } },
+    })
+    const result = evaluateAudit(json, [], { now: new Date('2026-08-01') })
+    expect(result.ok).toBe(false)
+    expect(result.reasons.some((r) => r.includes('vulnerabilities 必須是物件'))).toBe(true)
+  })
+
+  it('vulnerabilities 是 null → 失敗', () => {
+    const json = JSON.stringify({
+      auditReportVersion: 2,
+      vulnerabilities: null,
+      metadata: { vulnerabilities: { info: 0, low: 0, moderate: 0, high: 0, critical: 0, total: 0 } },
+    })
+    const result = evaluateAudit(json, [], { now: new Date('2026-08-01') })
+    expect(result.ok).toBe(false)
+  })
+
+  it('vulnerabilities entry 是字串 → 失敗(先前版本會被安靜跳過，metadata.high=0 就誤判通過)', () => {
+    const json = auditJson({ vulnerabilities: { evil: 'not-an-object' }, high: 0 })
+    const result = evaluateAudit(json, [], { now: new Date('2026-08-01') })
+    expect(result.ok).toBe(false)
+    expect(result.reasons.some((r) => r.includes('evil') && r.includes('不是物件'))).toBe(true)
+  })
+
+  it('vulnerabilities entry 是 null → 失敗', () => {
+    const json = auditJson({ vulnerabilities: { evil: null }, high: 0 })
+    const result = evaluateAudit(json, [], { now: new Date('2026-08-01') })
+    expect(result.ok).toBe(false)
+    expect(result.reasons.some((r) => r.includes('evil') && r.includes('不是物件'))).toBe(true)
+  })
+
+  it('vulnerabilities entry 是數字 → 失敗', () => {
+    const json = auditJson({ vulnerabilities: { evil: 42 }, high: 0 })
+    const result = evaluateAudit(json, [], { now: new Date('2026-08-01') })
+    expect(result.ok).toBe(false)
+  })
+
+  it('vulnerabilities entry 是 boolean → 失敗', () => {
+    const json = auditJson({ vulnerabilities: { evil: true }, high: 0 })
+    const result = evaluateAudit(json, [], { now: new Date('2026-08-01') })
+    expect(result.ok).toBe(false)
+  })
+
+  it('vulnerabilities entry 是陣列 → 失敗', () => {
+    const json = auditJson({ vulnerabilities: { evil: ['not', 'a', 'record'] }, high: 0 })
+    const result = evaluateAudit(json, [], { now: new Date('2026-08-01') })
+    expect(result.ok).toBe(false)
+    expect(result.reasons.some((r) => r.includes('evil') && r.includes('array'))).toBe(true)
+  })
+
+  it('metadata 是陣列 → 失敗', () => {
+    const json = JSON.stringify({ auditReportVersion: 2, vulnerabilities: {}, metadata: [] })
+    const result = evaluateAudit(json, [], { now: new Date('2026-08-01') })
+    expect(result.ok).toBe(false)
+    expect(result.reasons.some((r) => r.includes('metadata 必須是物件'))).toBe(true)
+  })
+
+  it('metadata.vulnerabilities 是陣列 → 失敗', () => {
+    const json = JSON.stringify({ auditReportVersion: 2, vulnerabilities: {}, metadata: { vulnerabilities: [] } })
+    const result = evaluateAudit(json, [], { now: new Date('2026-08-01') })
+    expect(result.ok).toBe(false)
+    expect(result.reasons.some((r) => r.includes('metadata.vulnerabilities'))).toBe(true)
+  })
+
+  it('正常的空 vulnerabilities 物件(乾淨結果)→ 通過', () => {
+    const json = auditJson({ vulnerabilities: {}, high: 0, critical: 0 })
+    const result = evaluateAudit(json, [], { now: new Date('2026-08-01') })
+    expect(result.ok).toBe(true)
+    expect(result.reasons).toEqual([])
+  })
+
+  it('正常真實 npm audit 結構(react-router-dom -> react-router)在新的 isPlainRecord 檢查下仍然通過', () => {
+    const json = JSON.stringify({
+      auditReportVersion: 2,
+      vulnerabilities: {
+        'react-router': {
+          name: 'react-router', severity: 'high', isDirect: false,
+          via: [advisoryObj('GHSA-qwww-vcr4-c8h2')],
+          effects: ['react-router-dom'], range: '7.12.0 - 8.2.0', nodes: ['node_modules/react-router'],
+        },
+        'react-router-dom': {
+          name: 'react-router-dom', severity: 'high', isDirect: true,
+          via: ['react-router'], effects: [], range: '>=7.12.0-pre.0', nodes: ['node_modules/react-router-dom'],
+        },
+      },
+      metadata: { vulnerabilities: { info: 0, low: 0, moderate: 0, high: 2, critical: 0, total: 2 } },
+    })
+    const result = evaluateAudit(json, ALLOWLIST, { now: new Date('2026-08-01') })
+    expect(result.ok).toBe(true)
+    expect(result.reasons).toEqual([])
+  })
+})
+
 describe('evaluateAudit — 白名單過期/套件不符', () => {
   it('白名單項目已過 reviewBy 到期日 → 視為未放行，失敗', () => {
     const json = auditJson({

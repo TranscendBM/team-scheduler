@@ -47,6 +47,18 @@ function isNonNegativeInteger(v) {
   return typeof v === 'number' && Number.isInteger(v) && v >= 0
 }
 
+// 「普通物件」檢查：`typeof [] === 'object'` 也是 true，`typeof null === 'object'` 也是
+// true——如果只寫 `v && typeof v === 'object'`，陣列會被誤判成合法物件、null 會被誤判成
+// 假值而整個跳過(不噴錯，但也不會被攔下來)。這是先前版本的 fail-open bug：
+// vulnerabilities 是陣列、或某個 entry 是 null/字串/數字/boolean/陣列，都沒有被明確拒絕，
+// 只是安靜地被排除在 rootPackages 之外，metadata 的 high/critical 只要剛好是 0 就會直接
+// 通過。這裡統一用 isPlainRecord 判斷，陣列/null 一律不算合法物件。
+function isPlainRecord(value) {
+  return value !== null
+    && typeof value === 'object'
+    && !Array.isArray(value)
+}
+
 // YYYY-MM-DD 格式檢查 + 用 Date 往返序列化排除「格式對但數值不合法」的日期(例如 2026-13-45
 // 會被 Date 寬鬆解析成別的日期，往返後字串就對不上，藉此抓出來)。
 function isValidIsoDate(str) {
@@ -140,8 +152,8 @@ function resolveAdvisoriesForPackage(pkgName, vulnerabilities, visited, inherite
     return { advisories: [], errors: [`循環參照(cyclic via)：${[...visited, pkgName].join(' -> ')}`] }
   }
   const vuln = vulnerabilities[pkgName]
-  if (!vuln || typeof vuln !== 'object') {
-    return { advisories: [], errors: [`懸空參照(dangling via)：找不到套件 "${pkgName}" 的漏洞資料`] }
+  if (!isPlainRecord(vuln)) {
+    return { advisories: [], errors: [`懸空參照(dangling via)：找不到套件 "${pkgName}" 的漏洞資料，或它不是物件`] }
   }
   if (!isKnownSeverity(vuln.severity)) {
     return { advisories: [], errors: [`套件 "${pkgName}" 的 severity 未知或缺失：${JSON.stringify(vuln.severity)}`] }
@@ -220,34 +232,52 @@ export function evaluateAudit(rawStdout, allowlistEntries, { now = new Date() } 
   } catch (err) {
     return { ok: false, reasons: [`npm audit 輸出不是合法的 JSON：${err.message}`], advisories: [] }
   }
-  if (!data || typeof data !== 'object' || !data.vulnerabilities || typeof data.vulnerabilities !== 'object') {
-    return { ok: false, reasons: ['npm audit JSON 缺少預期的 vulnerabilities 欄位'], advisories: [] }
+  // 最外層必須是「普通物件」——不可以是陣列/null/字串/數字/boolean。`!data` 只能擋掉
+  // null/falsy 原始值，`typeof data !== 'object'` 擋不掉陣列(typeof [] === 'object')，
+  // 必須用 isPlainRecord。
+  if (!isPlainRecord(data)) {
+    return { ok: false, reasons: ['npm audit JSON 最外層必須是物件(不可為陣列/null/其他型別)'], advisories: [] }
+  }
+  if (!isPlainRecord(data.vulnerabilities)) {
+    return { ok: false, reasons: ['npm audit JSON 的 vulnerabilities 必須是物件(不可為陣列/null/字串等)'], advisories: [] }
   }
 
   const vulnerabilities = data.vulnerabilities
   const reasons = []
 
-  // 任何套件(不只是要走訪的 root)出現無法識別或缺失的 severity，都視為資料不符預期，
-  // fail closed——真實的 npm audit 輸出每個 vulnerability 一定有 severity 欄位，完全缺失
-  // 本身就是異常資料，不能因為它「連判斷都不夠格當 root」就放過。
+  // 任何套件(不只是要走訪的 root)出現「不是物件」或「無法識別/缺失的 severity」，都視為
+  // 資料不符預期，fail closed——先前版本只在 `v && typeof v === 'object'` 為真時才檢查
+  // severity，導致 v 是 null/字串/數字/boolean/陣列時被直接跳過、完全沒有任何錯誤訊息，
+  // 而且這些 malformed entry 也不會被選進 rootPackages，只要 metadata.high/critical 剛好
+  // 是 0 就會整個安靜地通過。這裡改成：不是普通物件就直接 fail closed，不再嘗試讀
+  // .severity(對 null 讀屬性會直接噴例外，對字串/數字/boolean/陣列讀 .severity 雖然安全
+  // 但語意上就是不合法資料，不需要再往下檢查)。
   for (const [name, v] of Object.entries(vulnerabilities)) {
-    if (v && typeof v === 'object' && !isKnownSeverity(v.severity)) {
+    if (!isPlainRecord(v)) {
+      reasons.push(`套件 "${name}" 的漏洞資料不是物件(實際型別：${Array.isArray(v) ? 'array' : v === null ? 'null' : typeof v})，fail closed`)
+      continue
+    }
+    if (!isKnownSeverity(v.severity)) {
       reasons.push(`套件 "${name}" 的 severity 未知或缺失：${JSON.stringify(v.severity)}`)
     }
   }
 
   const rootPackages = Object.entries(vulnerabilities)
-    .filter(([, v]) => v && (v.severity === 'high' || v.severity === 'critical'))
+    .filter(([, v]) => isPlainRecord(v) && (v.severity === 'high' || v.severity === 'critical'))
     .map(([name]) => name)
 
-  // 嚴格驗證 metadata：必須存在、high/critical 必須是非負整數、critical > 0 一律失敗、
+  // 嚴格驗證 metadata：必須是物件、high/critical 必須是非負整數、critical > 0 一律失敗、
   // 且 vulnerabilities 裡實際 severity=high/critical 的套件數必須跟 metadata 完全一致——
   // 這是先前版本 Bug A 的根因(metadata.critical 只有在 rootPackages.length===0 才會被檢查，
   // 導致「metadata 說有 critical，但 vulnerabilities 裡剛好有別的 high 項目」這種情況被
-  // 誤判成通過)。
-  const metaVuln = data.metadata?.vulnerabilities
-  if (!metaVuln || typeof metaVuln !== 'object') {
-    reasons.push('npm audit JSON 缺少 metadata.vulnerabilities，無法確認 high/critical 數量是否吻合，fail closed')
+  // 誤判成通過)。metadata 本身(不只是 metadata.vulnerabilities)如果不是物件(例如整個是
+  // 陣列)也要先擋下來，不能只看 metadata.vulnerabilities 是不是 undefined 就當作「缺少」。
+  if (data.metadata !== undefined && !isPlainRecord(data.metadata)) {
+    reasons.push('npm audit JSON 的 metadata 必須是物件(不可為陣列等)，fail closed')
+  }
+  const metaVuln = isPlainRecord(data.metadata) ? data.metadata.vulnerabilities : undefined
+  if (!isPlainRecord(metaVuln)) {
+    reasons.push('npm audit JSON 缺少 metadata.vulnerabilities，或它不是物件(不可為陣列等)，無法確認 high/critical 數量是否吻合，fail closed')
   } else {
     const metaHigh = metaVuln.high
     const metaCritical = metaVuln.critical
