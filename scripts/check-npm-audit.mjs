@@ -1,17 +1,20 @@
 #!/usr/bin/env node
 // 對 `npm audit --json` 的結果做「有記錄、可到期」的白名單檢查，取代原本無條件 continue-on-error
 // 的做法。設計原則是 fail closed：任何解析不出來的東西(懸空/循環參照、缺 GHSA、malformed
-// JSON、malformed allowlist、npm audit 本身執行異常)一律當作失敗，絕不能因為「沒擷取到東西」
-// 就放行。
+// JSON、malformed allowlist、npm audit 本身執行異常、severity 無法辨識、metadata 與實際
+// vulnerabilities 對不上)一律當作失敗，絕不能因為「沒擷取到東西」或「被 leaf 節點的較低
+// severity 蓋掉」就放行。
 //
 // 白名單格式(scripts/audit-allowlist.json)：
 //   { "entries": [{ ghsa, package, severity, reason, reviewedAt, reviewBy }] }
 //   - ghsa 必須符合 GHSA-xxxx-xxxx-xxxx
 //   - package/reason 必須是非空字串
+//   - severity 必須「恰好」是字串 'high'——除此之外任何值(缺少、undefined、null、
+//     'moderate'、'critical'、'banana'、數字...)都視為 malformed，讓整份白名單驗證失敗。
+//     critical 永遠不能被放行，這裡不是「檢查是不是 critical」，而是「只接受 high 這一種值」，
+//     兩者看似等價但後者才能同時擋下所有其他不合法的值。
 //   - reviewedAt/reviewBy 必須是合法 ISO 日期(YYYY-MM-DD)，且 reviewedAt <= reviewBy
 //   - reviewBy 是必填，不可省略(省略不會被當成永久放行，反而會讓白名單載入失敗)
-//   - severity 不可以是 critical(critical 永遠不能被放行，寫在白名單也一樣沒用，而且
-//     整份白名單只要出現一筆 critical 就視為 malformed，直接讓 audit 失敗)
 //   - 不可以有重複的 ghsa/package 組合
 //
 // 純函式(loadAllowlist/validateAllowlistEntries/evaluateAudit/validateSpawnResult)刻意跟
@@ -26,6 +29,23 @@ const DIR = dirname(fileURLToPath(import.meta.url))
 const DEFAULT_ALLOWLIST_PATH = join(DIR, 'audit-allowlist.json')
 
 const GHSA_RE = /^GHSA-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}$/i
+
+// severity 的嚴重程度排序，用來在遞迴解析 via 鏈時取「沿路遇到的最高值」，
+// 不可以讓 leaf 節點的較低 severity 蓋掉 root 的較高 severity。
+const SEVERITY_RANK = { info: 0, low: 1, moderate: 2, high: 3, critical: 4 }
+
+function isKnownSeverity(s) {
+  return typeof s === 'string' && Object.hasOwn(SEVERITY_RANK, s)
+}
+
+// 兩個「已知合法」的 severity 取較高值；呼叫端必須先各自驗證過是已知值才呼叫這個函式。
+function higherSeverity(a, b) {
+  return SEVERITY_RANK[a] >= SEVERITY_RANK[b] ? a : b
+}
+
+function isNonNegativeInteger(v) {
+  return typeof v === 'number' && Number.isInteger(v) && v >= 0
+}
 
 // YYYY-MM-DD 格式檢查 + 用 Date 往返序列化排除「格式對但數值不合法」的日期(例如 2026-13-45
 // 會被 Date 寬鬆解析成別的日期，往返後字串就對不上，藉此抓出來)。
@@ -70,8 +90,10 @@ export function validateAllowlistEntries(entries) {
     if (reviewedAtValid && reviewByValid && entry.reviewedAt > entry.reviewBy) {
       errors.push(`${label}.reviewedAt (${entry.reviewedAt}) 晚於 reviewBy (${entry.reviewBy})`)
     }
-    if (entry.severity === 'critical') {
-      errors.push(`${label} severity 是 critical——allowlist 不得放行 critical，即使寫在白名單裡也一樣`)
+    // severity 必須「恰好」是 'high'——不是只檢查「是不是 critical」，這樣才能同時擋下
+    // missing/undefined/null/'moderate'/數字/'banana' 等任何非 'high' 的值。
+    if (entry.severity !== 'high') {
+      errors.push(`${label}.severity 必須恰好是 'high'(allowlist 只能放行 high，其餘一律視為 malformed)：${JSON.stringify(entry.severity)}`)
     }
     if (typeof entry.ghsa === 'string' && typeof entry.package === 'string') {
       const key = `${entry.ghsa.toLowerCase()}::${entry.package}`
@@ -101,14 +123,19 @@ export function loadAllowlist(path = DEFAULT_ALLOWLIST_PATH) {
   return parsed.entries
 }
 
-// 遞迴解析單一套件的 via 鏈：
-// - via 是字串 → 代表 vulnerabilities 裡另一個套件 key，必須繼續往下解析(多層 transitive)。
-// - via 是物件且有可解析的 GHSA url → 這才是一個真正的 advisory。
+// 遞迴解析單一套件的 via 鏈，沿路傳遞「目前為止遇到的最高 severity」(inheritedSeverity)：
+// - via 是字串 → 代表 vulnerabilities 裡另一個套件 key，必須繼續往下解析(多層 transitive)，
+//   並把目前套件的 severity 併入繼續往下傳遞的 inheritedSeverity。
+// - via 是物件且有可解析的 GHSA url → 這才是一個真正的 advisory，它的 severity(如果有)
+//   跟沿路繼承的 inheritedSeverity 取較高值，不可以讓這個 leaf 節點的值蓋掉/降低 root 的
+//   severity(這是先前版本的 fail-open bug：`item.severity || vuln.severity` 讓明確寫成
+//   高於自己實際嚴重度的 leaf severity 直接覆蓋掉 root 的 critical)。
 // - via 是物件但沒有 url/解不出 GHSA → 視為錯誤(無法解析)，fail closed。
 // - 參照到 vulnerabilities 裡不存在的套件 → 懸空參照，fail closed。
 // - 參照形成循環(A -> B -> A) → 偵測到就停止遞迴並回報錯誤，不會無窮迴圈，也 fail closed。
 // - via 是空陣列 → 這個套件沒有任何可解析的 advisory，fail closed(不能因為沒東西可查就放行)。
-function resolveAdvisoriesForPackage(pkgName, vulnerabilities, visited) {
+// - 套件本身或 via 物件的 severity 是未知值(不在 SEVERITY_RANK 裡)→ fail closed。
+function resolveAdvisoriesForPackage(pkgName, vulnerabilities, visited, inheritedSeverity) {
   if (visited.has(pkgName)) {
     return { advisories: [], errors: [`循環參照(cyclic via)：${[...visited, pkgName].join(' -> ')}`] }
   }
@@ -116,6 +143,11 @@ function resolveAdvisoriesForPackage(pkgName, vulnerabilities, visited) {
   if (!vuln || typeof vuln !== 'object') {
     return { advisories: [], errors: [`懸空參照(dangling via)：找不到套件 "${pkgName}" 的漏洞資料`] }
   }
+  if (!isKnownSeverity(vuln.severity)) {
+    return { advisories: [], errors: [`套件 "${pkgName}" 的 severity 未知或缺失：${JSON.stringify(vuln.severity)}`] }
+  }
+
+  const pathSeverity = inheritedSeverity == null ? vuln.severity : higherSeverity(inheritedSeverity, vuln.severity)
 
   const nextVisited = new Set(visited)
   nextVisited.add(pkgName)
@@ -129,7 +161,7 @@ function resolveAdvisoriesForPackage(pkgName, vulnerabilities, visited) {
   const errors = []
   for (const item of via) {
     if (typeof item === 'string') {
-      const nested = resolveAdvisoriesForPackage(item, vulnerabilities, nextVisited)
+      const nested = resolveAdvisoriesForPackage(item, vulnerabilities, nextVisited, pathSeverity)
       advisories.push(...nested.advisories)
       errors.push(...nested.errors)
     } else if (item && typeof item === 'object') {
@@ -142,9 +174,16 @@ function resolveAdvisoriesForPackage(pkgName, vulnerabilities, visited) {
         errors.push(`套件 "${pkgName}" 的 advisory url 無法解析出 GHSA id：${item.url}`)
         continue
       }
+      if (item.severity !== undefined && !isKnownSeverity(item.severity)) {
+        errors.push(`套件 "${pkgName}" 的 advisory severity 未知：${JSON.stringify(item.severity)}`)
+        continue
+      }
+      // 有明確寫 severity 才拿來跟路徑目前的最高值比較取大；沒寫就單純沿用路徑的值，
+      // 兩種情況都不會讓結果比 pathSeverity 低。
+      const advisorySeverity = item.severity !== undefined ? higherSeverity(pathSeverity, item.severity) : pathSeverity
       advisories.push({
         package: pkgName,
-        severity: item.severity || vuln.severity,
+        severity: advisorySeverity,
         ghsaId: m[1],
         title: item.title || '(no title)',
         url: item.url,
@@ -157,7 +196,7 @@ function resolveAdvisoriesForPackage(pkgName, vulnerabilities, visited) {
 }
 
 function isAllowed(advisory, allowlistEntries, now) {
-  if (advisory.severity === 'critical') return false // critical 一律不放行，無論白名單
+  if (advisory.severity !== 'high') return false // 只有 high 才可能被放行；critical 一律不放行
   if (!advisory.ghsaId) return false // 解析不出 GHSA 的一律不算已放行
   return allowlistEntries.some((entry) => {
     if (entry.ghsa !== advisory.ghsaId) return false
@@ -186,32 +225,66 @@ export function evaluateAudit(rawStdout, allowlistEntries, { now = new Date() } 
   }
 
   const vulnerabilities = data.vulnerabilities
+  const reasons = []
+
+  // 任何套件(不只是要走訪的 root)出現無法識別或缺失的 severity，都視為資料不符預期，
+  // fail closed——真實的 npm audit 輸出每個 vulnerability 一定有 severity 欄位，完全缺失
+  // 本身就是異常資料，不能因為它「連判斷都不夠格當 root」就放過。
+  for (const [name, v] of Object.entries(vulnerabilities)) {
+    if (v && typeof v === 'object' && !isKnownSeverity(v.severity)) {
+      reasons.push(`套件 "${name}" 的 severity 未知或缺失：${JSON.stringify(v.severity)}`)
+    }
+  }
+
   const rootPackages = Object.entries(vulnerabilities)
     .filter(([, v]) => v && (v.severity === 'high' || v.severity === 'critical'))
     .map(([name]) => name)
 
-  const reasons = []
-  const allAdvisories = []
-  const seenAdvisoryKeys = new Set()
-
-  for (const root of rootPackages) {
-    const { advisories, errors } = resolveAdvisoriesForPackage(root, vulnerabilities, new Set())
-    for (const err of errors) reasons.push(`[${root}] ${err}`)
-    for (const adv of advisories) {
-      const key = `${adv.package}::${adv.ghsaId}::${adv.severity}`
-      if (seenAdvisoryKeys.has(key)) continue
-      seenAdvisoryKeys.add(key)
-      allAdvisories.push(adv)
+  // 嚴格驗證 metadata：必須存在、high/critical 必須是非負整數、critical > 0 一律失敗、
+  // 且 vulnerabilities 裡實際 severity=high/critical 的套件數必須跟 metadata 完全一致——
+  // 這是先前版本 Bug A 的根因(metadata.critical 只有在 rootPackages.length===0 才會被檢查，
+  // 導致「metadata 說有 critical，但 vulnerabilities 裡剛好有別的 high 項目」這種情況被
+  // 誤判成通過)。
+  const metaVuln = data.metadata?.vulnerabilities
+  if (!metaVuln || typeof metaVuln !== 'object') {
+    reasons.push('npm audit JSON 缺少 metadata.vulnerabilities，無法確認 high/critical 數量是否吻合，fail closed')
+  } else {
+    const metaHigh = metaVuln.high
+    const metaCritical = metaVuln.critical
+    const highValid = isNonNegativeInteger(metaHigh)
+    const criticalValid = isNonNegativeInteger(metaCritical)
+    if (!highValid) reasons.push(`metadata.vulnerabilities.high 不是非負整數：${JSON.stringify(metaHigh)}`)
+    if (!criticalValid) reasons.push(`metadata.vulnerabilities.critical 不是非負整數：${JSON.stringify(metaCritical)}`)
+    if (criticalValid && metaCritical > 0) {
+      reasons.push(`metadata 回報 ${metaCritical} 個 critical 漏洞，一律不放行(不受白名單影響，即使 vulnerabilities 裡的其他項目都已放行)`)
+    }
+    if (highValid && criticalValid) {
+      const actualHighCount = rootPackages.filter((name) => vulnerabilities[name].severity === 'high').length
+      const actualCriticalCount = rootPackages.filter((name) => vulnerabilities[name].severity === 'critical').length
+      if (actualHighCount !== metaHigh) {
+        reasons.push(`metadata.vulnerabilities.high=${metaHigh}，但 vulnerabilities 裡實際只有 ${actualHighCount} 個 severity=high 的套件，數量不吻合，fail closed`)
+      }
+      if (actualCriticalCount !== metaCritical) {
+        reasons.push(`metadata.vulnerabilities.critical=${metaCritical}，但 vulnerabilities 裡實際只有 ${actualCriticalCount} 個 severity=critical 的套件，數量不吻合，fail closed`)
+      }
     }
   }
 
-  // 防禦性檢查：metadata 說有 high/critical，但我們完全沒找到任何 severity 為 high/critical
-  // 的套件項目——這代表資料格式跟預期不符，不能因為「沒擷取到東西」就默默回傳成功。
-  const metaHigh = data.metadata?.vulnerabilities?.high ?? 0
-  const metaCritical = data.metadata?.vulnerabilities?.critical ?? 0
-  if ((metaHigh > 0 || metaCritical > 0) && rootPackages.length === 0) {
+  const advisoryMap = new Map() // key: package::ghsaId -> advisory(severity 取所有路徑的最高值)
+  for (const root of rootPackages) {
+    const { advisories, errors } = resolveAdvisoriesForPackage(root, vulnerabilities, new Set(), null)
+    for (const err of errors) reasons.push(`[${root}] ${err}`)
+    for (const adv of advisories) {
+      const key = `${adv.package}::${adv.ghsaId}`
+      const existing = advisoryMap.get(key)
+      advisoryMap.set(key, existing ? { ...existing, severity: higherSeverity(existing.severity, adv.severity) } : adv)
+    }
+  }
+  const allAdvisories = [...advisoryMap.values()]
+
+  if ((metaVuln?.high > 0 || metaVuln?.critical > 0) && rootPackages.length === 0) {
     reasons.push(
-      `metadata 回報 high=${metaHigh}/critical=${metaCritical}，但 vulnerabilities 裡找不到任何 `
+      `metadata 回報 high=${metaVuln?.high}/critical=${metaVuln?.critical}，但 vulnerabilities 裡找不到任何 `
       + 'severity 為 high/critical 的套件項目，資料可能不符預期格式',
     )
   }
@@ -222,7 +295,7 @@ export function evaluateAudit(rawStdout, allowlistEntries, { now = new Date() } 
       reasons.push(
         `未放行的 ${advisory.severity} 漏洞：${advisory.package} — ${advisory.title}`
         + (advisory.ghsaId ? ` (${advisory.ghsaId})` : ' (無法解析 GHSA id)')
-        + ' — 不在白名單內，或白名單項目已過 reviewBy 到期日',
+        + ' — 不在白名單內，或白名單項目已過 reviewBy 到期日，或 severity 是 critical(一律不放行)',
       )
     }
   }
@@ -293,7 +366,7 @@ function main() {
     process.exit(1)
   }
 
-  console.log('\n通過：所有 high/critical advisory 都已解析、都在白名單內且未過期，沒有 critical、沒有無法解析的參照。')
+  console.log('\n通過：所有 high/critical advisory 都已解析、都在白名單內且未過期，沒有 critical、沒有無法解析的參照，metadata 數量吻合。')
   process.exit(0)
 }
 

@@ -190,6 +190,153 @@ describe('evaluateAudit — 遞迴解析 via（transitive / 循環 / 懸空）',
   })
 })
 
+describe('evaluateAudit — severity 正確性(先前兩個 fail-open bug 的迴歸測試)', () => {
+  it('Bug A 迴歸：metadata.critical=1，但 vulnerabilities 裡只有一個已放行的 high → 失敗', () => {
+    // 先前版本只有在 rootPackages.length===0 時才檢查 metadata.critical，這裡故意讓
+    // rootPackages 非空(react-router 是 high)，但 metadata 另外回報了 1 個 critical——
+    // 舊版會誤判成功，因為它從來沒去看 metadata.critical 這個數字本身。
+    const json = JSON.stringify({
+      auditReportVersion: 2,
+      vulnerabilities: { 'react-router': { name: 'react-router', severity: 'high', via: [advisoryObj('GHSA-qwww-vcr4-c8h2')] } },
+      metadata: { vulnerabilities: { info: 0, low: 0, moderate: 0, high: 1, critical: 1, total: 2 } },
+    })
+    const result = evaluateAudit(json, ALLOWLIST, { now: new Date('2026-08-01') })
+    expect(result.ok).toBe(false)
+    expect(result.reasons.some((r) => r.includes('critical'))).toBe(true)
+  })
+
+  it('Bug B 迴歸：root severity 是 critical，但 via advisory 物件的 severity 被標成 high → 仍判定為 critical，失敗', () => {
+    // 先前版本用 `item.severity || vuln.severity`，advisory 物件明確寫 severity:'high' 時
+    // 會直接蓋掉 root 的 'critical'，讓一個實際上是 critical 的漏洞被誤判成 high 去跟白名單比對。
+    const json = auditJson({
+      vulnerabilities: {
+        'evil-pkg': { name: 'evil-pkg', severity: 'critical', via: [advisoryObj('GHSA-down-grad-e001', 'high')] },
+      },
+      critical: 1,
+    })
+    // 即使白名單「假設」放行了這個 GHSA(severity 寫 high)，也不該通過，因為真正的 severity 是 critical
+    const allowlistTryingToAllow = [
+      { ghsa: 'GHSA-down-grad-e001', package: 'evil-pkg', severity: 'high', reason: 'x', reviewedAt: '2026-07-01', reviewBy: '2027-01-01' },
+    ]
+    const result = evaluateAudit(json, allowlistTryingToAllow, { now: new Date('2026-08-01') })
+    expect(result.ok).toBe(false)
+    const advisory = result.advisories.find((a) => a.ghsaId === 'GHSA-down-grad-e001')
+    expect(advisory.severity).toBe('critical')
+  })
+
+  it('root high + via advisory 標成 moderate → 不會被降級，仍照 high 檢查(有放行就過)', () => {
+    const json = auditJson({
+      vulnerabilities: {
+        'some-pkg': { name: 'some-pkg', severity: 'high', via: [advisoryObj('GHSA-stay-high-0001', 'moderate')] },
+      },
+      high: 1,
+    })
+    const allowlist = [{ ghsa: 'GHSA-stay-high-0001', package: 'some-pkg', severity: 'high', reason: 'x', reviewedAt: '2026-07-01', reviewBy: '2027-01-01' }]
+    const result = evaluateAudit(json, allowlist, { now: new Date('2026-08-01') })
+    expect(result.advisories[0].severity).toBe('high')
+    expect(result.ok).toBe(true)
+  })
+
+  it('多層 transitive：critical -> high -> moderate -> 最終仍是 critical', () => {
+    const json = auditJson({
+      vulnerabilities: {
+        A: { name: 'A', severity: 'critical', via: ['B'] },
+        B: { name: 'B', severity: 'high', via: ['C'] },
+        C: { name: 'C', severity: 'moderate', via: [advisoryObj('GHSA-chain-crit-001', 'moderate')] },
+      },
+      critical: 1,
+    })
+    const result = evaluateAudit(json, [], { now: new Date('2026-08-01') })
+    expect(result.ok).toBe(false)
+    expect(result.advisories[0].severity).toBe('critical')
+  })
+
+  it('metadata.high=2，但實際只有 1 個 high 套件 → 失敗', () => {
+    const json = JSON.stringify({
+      auditReportVersion: 2,
+      vulnerabilities: { 'react-router': { name: 'react-router', severity: 'high', via: [advisoryObj('GHSA-qwww-vcr4-c8h2')] } },
+      metadata: { vulnerabilities: { info: 0, low: 0, moderate: 0, high: 2, critical: 0, total: 2 } },
+    })
+    const result = evaluateAudit(json, ALLOWLIST, { now: new Date('2026-08-01') })
+    expect(result.ok).toBe(false)
+    expect(result.reasons.some((r) => r.includes('數量不吻合'))).toBe(true)
+  })
+
+  it('metadata.critical=1，但實際沒有任何 critical 套件 → 失敗', () => {
+    const json = JSON.stringify({
+      auditReportVersion: 2,
+      vulnerabilities: { 'react-router': { name: 'react-router', severity: 'high', via: [advisoryObj('GHSA-qwww-vcr4-c8h2')] } },
+      metadata: { vulnerabilities: { info: 0, low: 0, moderate: 0, high: 1, critical: 1, total: 2 } },
+    })
+    const result = evaluateAudit(json, ALLOWLIST, { now: new Date('2026-08-01') })
+    expect(result.ok).toBe(false)
+  })
+
+  it('metadata 整個缺失 → 失敗', () => {
+    const json = JSON.stringify({ auditReportVersion: 2, vulnerabilities: {} })
+    const result = evaluateAudit(json, [], { now: new Date('2026-08-01') })
+    expect(result.ok).toBe(false)
+    expect(result.reasons.some((r) => r.includes('metadata.vulnerabilities'))).toBe(true)
+  })
+
+  it('metadata.high/critical 是字串/負數/小數/null → 失敗', () => {
+    const badValues = ['1', -1, 1.5, null]
+    for (const bad of badValues) {
+      const json = JSON.stringify({
+        auditReportVersion: 2,
+        vulnerabilities: {},
+        metadata: { vulnerabilities: { info: 0, low: 0, moderate: 0, high: bad, critical: 0, total: 0 } },
+      })
+      expect(evaluateAudit(json, [], { now: new Date('2026-08-01') }).ok, `high=${JSON.stringify(bad)} 應該失敗`).toBe(false)
+
+      const json2 = JSON.stringify({
+        auditReportVersion: 2,
+        vulnerabilities: {},
+        metadata: { vulnerabilities: { info: 0, low: 0, moderate: 0, high: 0, critical: bad, total: 0 } },
+      })
+      expect(evaluateAudit(json2, [], { now: new Date('2026-08-01') }).ok, `critical=${JSON.stringify(bad)} 應該失敗`).toBe(false)
+    }
+  })
+
+  it('unknown/missing 的 vulnerability severity → 失敗', () => {
+    const missingJson = auditJson({ vulnerabilities: { A: { name: 'A', via: [] } }, high: 0 })
+    expect(evaluateAudit(missingJson, [], { now: new Date('2026-08-01') }).ok).toBe(false)
+
+    const unknownJson = JSON.stringify({
+      auditReportVersion: 2,
+      vulnerabilities: { A: { name: 'A', severity: 'banana', via: [] } },
+      metadata: { vulnerabilities: { info: 0, low: 0, moderate: 0, high: 0, critical: 0, total: 0 } },
+    })
+    const result = evaluateAudit(unknownJson, [], { now: new Date('2026-08-01') })
+    expect(result.ok).toBe(false)
+    expect(result.reasons.some((r) => r.includes('未知或缺失'))).toBe(true)
+  })
+
+  it('metadata 與 vulnerabilities 完全一致的真實 npm audit 輸出(react-router-dom -> react-router 鏈)仍然通過', () => {
+    // 逐字對應本專案實際跑出的 npm audit --json 形狀(見 scripts/check-npm-audit.mjs 開發時
+    // 擷取的真實輸出)：react-router-dom 是直接依賴、經由字串 via 指向 react-router，
+    // react-router 才是真正帶 advisory 物件的那個。
+    const json = JSON.stringify({
+      auditReportVersion: 2,
+      vulnerabilities: {
+        'react-router': {
+          name: 'react-router', severity: 'high', isDirect: false,
+          via: [advisoryObj('GHSA-qwww-vcr4-c8h2', 'high', 'React Router: RSC Mode CSRF Bypass Allows Action Execution Before 400 Response')],
+          effects: ['react-router-dom'], range: '7.12.0 - 8.2.0', nodes: ['node_modules/react-router'],
+        },
+        'react-router-dom': {
+          name: 'react-router-dom', severity: 'high', isDirect: true,
+          via: ['react-router'], effects: [], range: '>=7.12.0-pre.0', nodes: ['node_modules/react-router-dom'],
+        },
+      },
+      metadata: { vulnerabilities: { info: 0, low: 0, moderate: 0, high: 2, critical: 0, total: 2 } },
+    })
+    const result = evaluateAudit(json, ALLOWLIST, { now: new Date('2026-08-01') })
+    expect(result.ok).toBe(true)
+    expect(result.reasons).toEqual([])
+  })
+})
+
 describe('evaluateAudit — 白名單過期/套件不符', () => {
   it('白名單項目已過 reviewBy 到期日 → 視為未放行，失敗', () => {
     const json = auditJson({
@@ -283,6 +430,16 @@ describe('validateAllowlistEntries — schema 驗證', () => {
 
   it('severity 是 critical → 失敗(allowlist 不得包含 critical)', () => {
     expect(validateAllowlistEntries([{ ...base, severity: 'critical' }]).ok).toBe(false)
+  })
+
+  it('severity 必須恰好是 "high"：banana/moderate/數字/null/缺少/undefined 全部視為 malformed', () => {
+    expect(validateAllowlistEntries([{ ...base, severity: 'banana' }]).ok).toBe(false)
+    expect(validateAllowlistEntries([{ ...base, severity: 'moderate' }]).ok).toBe(false)
+    expect(validateAllowlistEntries([{ ...base, severity: 3 }]).ok).toBe(false)
+    expect(validateAllowlistEntries([{ ...base, severity: null }]).ok).toBe(false)
+    expect(validateAllowlistEntries([{ ...base, severity: undefined }]).ok).toBe(false)
+    const { severity: _severity, ...noSeverity } = base
+    expect(validateAllowlistEntries([noSeverity]).ok).toBe(false)
   })
 
   it('重複的 ghsa/package 組合 → 失敗', () => {

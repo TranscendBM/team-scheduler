@@ -32,13 +32,26 @@ requests/{requestId}/attachments/{slot}  ← 新子集合，slot 只允許 '0' ~
 分成「顯示用」跟「Storage 實際檔名」兩個欄位，不能只有一個 `name`：
 
 **修正(第二輪)**：`storagePath` 其實在 reservation 建立當下就是完全確定的
-（`'attachments/' + requestId + '/' + objectName`，只跟 `requestId`/`objectName` 有關，
-不需要等實際上傳完成），所以不必留到 finalize 才寫入——這樣 reservation 文件本身就能被
-Rules 完整驗證路徑綁定，不用等 finalize 那一刻。真正只有上傳完成後才知道的欄位只有
-`url`(下載網址，Storage 產生時才有)跟 `size`(要實際讀到檔案才知道)。另外新增
-`reservationId`（見第 6 節的競態修正——每次「建立新 reservation」或「接管一個逾時的舊
-reservation」都要產生一個全新、不可預測的值，finalize/delete 都要比對這個欄位，防止舊
-uploader 晚到時搞壞新的 reservation）：
+（只跟 `requestId`/`objectName` 有關，不需要等實際上傳完成），所以不必留到 finalize 才
+寫入——這樣 reservation 文件本身就能被 Rules 完整驗證路徑綁定，不用等 finalize 那一刻。
+真正只有上傳完成後才知道的欄位只有 `url`(下載網址，Storage 產生時才有)跟 `size`(要實際
+讀到檔案才知道)。另外新增 `reservationId`（見第 7 節的競態修正——每次「建立新 reservation」
+或「接管一個逾時的舊 reservation」都要產生一個全新、不可預測的值，finalize/delete 都要
+比對這個欄位，防止舊 uploader 晚到時搞壞新的 reservation）。
+
+**修正(第三輪)**：`storagePath` 不能只是 `'attachments/' + requestId + '/' + objectName`(即僅由 requestId 跟 objectName 組成、完全不含 reservationId 的舊寫法)
+——這個路徑只跟 slot 的 `objectName` 有關，同一個 slot 每次 takeover 都可能重新使用相同或
+不同的 `objectName`，導致舊 reservation(A)跟新 reservation(B)的 Storage 物件可能落在
+**同一個路徑**上。這會讓第 7 節第 9 點「transaction 比對 `reservationId` 才刪 Firestore
+文件」的保護出現漏洞：即使 Firestore 文件層面已經正確擋下了 A 誤刪 B 的*文件*，A 手上
+記錄的 Storage 路徑跟 B 現在真正使用的路徑仍然是同一個字串——A 對 Storage 執行的
+`deleteObject(storagePath)` 完全不受 Firestore transaction 保護，會直接刪掉 B 剛上傳好
+的檔案（見第 7 節新增的時序案例 3）。修正：**把 `reservationId` 也編進 Storage path**，
+讓每一次 reservation（不管是初次建立還是接管）的 Storage 物件路徑都是全域唯一、永不重用：
+
+```
+attachments/{requestId}/{reservationId}/{objectName}
+```
 
 ```
 {
@@ -46,17 +59,19 @@ uploader 晚到時搞壞新的 reservation）：
                             // reservation 建立當下就知道(來自 File 物件)，不是 finalize 才有
   objectName: string,      // Storage 實際檔名(safeFileName 產生的 ASCII 安全名稱)，
                             // 唯一可以拿來組 storagePath 的欄位；reservation 建立當下就決定
-  storagePath: string,      // attachments/{requestId}/{objectName}，reservation 建立當下就
-                            // 完整寫入(見上方說明)，不是選填、也不是 finalize 才補上的欄位
+  storagePath: string,      // attachments/{requestId}/{reservationId}/{objectName}，
+                            // reservation 建立當下就完整寫入(見上方說明)，不是選填、也不是
+                            // finalize 才補上的欄位——注意路徑裡包含 reservationId，見上方
+                            // 第三輪修正的說明，這是防止跨 reservation 誤刪的關鍵設計
   url: string,              // Firebase Storage download URL，1-2000 字元；只有 finalize
                             // (uploading -> ready)這一步才會出現
   size: number,             // bytes，0 < size <= 10485760 (10MB)；只有 finalize 才會出現
-  createdAt: Timestamp,     // reservation 建立時間(見第 6 節)
+  createdAt: Timestamp,     // reservation 建立時間(見第 7 節)
   createdBy: string,        // reservation 建立者 email
   reservationId: string,    // 每次 create(初次保留)或 update(逾時接管)都要換成全新、不可
                             // 預測的值(例如前端產生的 UUID)，finalize/delete/cleanup 都要
-                            // 比對這個欄位是否跟自己記得的一致，見第 6 節
-  status: 'uploading' | 'ready', // 見第 6 節的 reservation 流程
+                            // 比對這個欄位是否跟自己記得的一致，也是 storagePath 的一部分，見第 7 節
+  status: 'uploading' | 'ready', // 見第 7 節的 reservation 流程
 }
 ```
 
@@ -65,7 +80,7 @@ uploader 晚到時搞壞新的 reservation）：
 
 `slot` 是文件 id（不是欄位），直接對應目前陣列的 index（0-9）。沒有附件的 slot 不建立
 文件（不是建立空文件）。**但「目前有幾筆附件」不能單純用「子集合底下有幾個文件」判斷**——
-見第 6 節，`status: 'uploading'` 的 reservation 文件也會佔用一個 slot，計數時需要決定是否
+見第 7 節，`status: 'uploading'` 的 reservation 文件也會佔用一個 slot，計數時需要決定是否
 把 `uploading` 也算進去（建議：算，因為它佔用了那個 slot，即使最終上傳失敗也需要先被清理
 掉才能釋出）。
 
@@ -84,15 +99,18 @@ match /requests/{requestId} {
 }
 
 match /requests/{requestId}/attachments/{slot} {
-  allow read: if canReadRequest();  // 沿用 parent 的讀取授權(見下方第 5 節)
+  allow read: if canReadRequestAttachments(requestId);  // 見下方第 5 節——現行 firestore.rules
+  // 沒有 canReadRequest() 這個函式，requests/{id} 的 read 規則是直接內嵌用 resource.data
+  // 表達的；子集合的 resource.data 是「附件文件」，不是 parent request，不能直接沿用同一段
+  // 表達式，必須另外定義一個會 get() parent 文件的 helper，見第 5 節。
 
-  // create：這個 slot 目前不存在——初次 reservation，只能建立 status:'uploading'(見第 6 節)
+  // create：這個 slot 目前不存在——初次 reservation，只能建立 status:'uploading'(見第 7 節)
   allow create: if
     slot in ['0','1','2','3','4','5','6','7','8','9']
     && canEditRequestAttachments(requestId)
     && isValidUploadingReservation(request.resource.data, requestId);
 
-  // update：兩種情況(見第 6 節的完整時序)——
+  // update：兩種情況(見第 7 節的完整時序)——
   // (a) finalize：同一個 reservationId，uploading -> ready，只允許 url/size/status 這三個
   //     欄位變動(changedOnly)，objectName/storagePath/createdBy/createdAt/reservationId/name
   //     一律不可變(changedOnly 沒列的欄位，Firestore 規則語言本身就會擋掉任何差異)。
@@ -112,7 +130,7 @@ match /requests/{requestId}/attachments/{slot} {
   // 實作時要照 docs/firestore-rules-expression-limit.md 的方法論，用真實 Emulator
   // 對這兩條 OR 分支實測運算式成本，不能只憑閱讀規則推論「單一 slot 一定遠低於 1000」。
 
-  // delete：見第 6 節——Rules 的 allow delete 沒有 request.resource 可以比對「呼叫端預期的
+  // delete：見第 7 節——Rules 的 allow delete 沒有 request.resource 可以比對「呼叫端預期的
   // reservationId」(Firestore 的 delete 操作不帶任何 payload)，所以「這是不是我建立的那個
   // reservation」這一層比對，設計上必須放在呼叫端的 transaction 裡，不能寫成 Rules 條件——
   // 這裡只負責身分/狀態層面的授權。
@@ -126,14 +144,19 @@ function isStaleUploadingReservation() {
 }
 
 // 兩種狀態共用的身分欄位驗證：objectName 才是唯一可以拿來組 storagePath 的欄位，
-// name 只驗證型別/長度，不參與任何路徑比對。
+// name 只驗證型別/長度，不參與任何路徑比對。storagePath 這一輪改成包含 reservationId
+// (attachments/{requestId}/{reservationId}/{objectName})，讓每次 reservation 的 Storage
+// 路徑全域唯一、永不重用——見第 1 節第三輪修正、第 7 節第 10 點跟時序案例 3 的完整說明，
+// 這是防止「A 刪除 reservation 後、B 立即重用同一個 slot、A 晚到的 Storage cleanup
+// 誤刪 B 剛上傳的檔案」這個問題的關鍵設計，不是隨意加欄位。
 function isValidAttachmentIdentity(a, requestId) {
   return a.name is string && a.name.size() > 0 && a.name.size() <= 300
     && a.objectName is string && a.objectName.size() > 0 && a.objectName.size() <= 200
     && a.objectName.matches('^[A-Za-z0-9._-]{1,200}$')
-    && a.storagePath is string
-    && a.storagePath == 'attachments/' + requestId + '/' + a.objectName
     && a.reservationId is string && a.reservationId.size() > 0 && a.reservationId.size() <= 100
+    && a.reservationId.matches('^[A-Za-z0-9-]{1,100}$')
+    && a.storagePath is string
+    && a.storagePath == 'attachments/' + requestId + '/' + a.reservationId + '/' + a.objectName
     && a.createdBy == email();
 }
 
@@ -163,8 +186,11 @@ function isValidReadyAttachment(a, requestId) {
 **驗證清單（對應需求逐項確認）**：
 - `objectName` 是 1-200 字元、只允許 `[A-Za-z0-9._-]`。
 - `name` 只供顯示，Rules 完全不用它組任何路徑，`uploading`/`ready` 兩種狀態都一樣。
-- `storagePath` 必須精確等於 `'attachments/' + requestId + '/' + objectName`（`objectName`
-  必須等於 `storagePath` 最後一段——這裡直接用字串相等表達，不需要額外 `split()` 反查）。
+- `storagePath` 必須精確等於 `'attachments/' + requestId + '/' + reservationId + '/' +
+  objectName`（`objectName` 必須等於 `storagePath` 最後一段，`reservationId` 必須等於
+  `storagePath` 倒數第二段——這裡直接用字串相等表達，不需要額外 `split()` 反查）。路徑裡
+  包含 `reservationId` 是第三輪修正加上的（見第 1 節、第 7 節第 10 點），讓每次 reservation
+  的 Storage 路徑全域唯一。
 - `uploading → ready` 這個 finalize 動作用 `changedOnly(['url', 'size', 'status'])` 限制
   affected keys，`objectName`/`storagePath`/`createdBy`/`createdAt`/`reservationId`/`name`
   這幾個欄位不在允許清單內，Firestore Rules 的 `diff().affectedKeys().hasOnly(...)` 語意
@@ -177,7 +203,7 @@ function isValidReadyAttachment(a, requestId) {
 
 - Rules 層：`slot` 只允許 `'0'`~`'9'` 這 10 個字串值（above），寫入任何其他 slot id
   一律被拒——這是**結構性**上限，不需要額外的 `count()` 查詢或 `size()` 檢查。
-- 前端：計數時把 `status` 是 `'uploading'` 或 `'ready'` 的 slot 都算進「已佔用」（見第 6
+- 前端：計數時把 `status` 是 `'uploading'` 或 `'ready'` 的 slot 都算進「已佔用」（見第 7
   節），達到 10 筆時 UI 停用上傳按鈕。
 - 因為 slot 上限本身就是 Rules 強制的邊界，即使前端邏輯有 bug 想塞第 11 筆，也會在
   `allow create` 就被擋下（沒有合法的 slot id 可以用）。
@@ -202,9 +228,56 @@ function canEditRequestAttachmentsAs(e, parent) {
 （實作時要重新驗證運算式成本，預期遠低於 1000，但仍要照
 `docs/firestore-rules-expression-limit.md` 的方法論實測驗證，不能只憑閱讀規則推論。）
 
-`canReadRequest()` 直接沿用既有函式（parent 文件能讀，子集合就能讀）。
+## 5. 讀取授權：`canReadRequestAttachments(requestId)`（修正不存在的 `canReadRequest()`）
 
-## 5. schemaVersion：明確版本旗標，取代「子集合是否為空」的判斷
+**原草稿的錯誤**：第 2 節寫著 `allow read: if canReadRequest();`，但現行 `firestore.rules`
+**沒有**這個函式——`requests/{id}` 的 read 規則是直接寫在 `match` 區塊裡的內嵌表達式，用
+`resource.data` 表示「這份 request 文件」：
+
+```
+// 現行 firestore.rules 的真實寫法(match /requests/{id} 區塊內)：
+allow read: if isManager()
+  || (whitelisted() && resource.data.submittedBy == email())
+  || (whitelisted() && email() in resource.data.get('assignedDesigners', []))
+  || (whitelisted() && resource.data.region in myRegions());
+```
+
+子集合的 `match /requests/{requestId}/attachments/{slot}` 區塊裡，`resource.data` 指的是
+**附件文件**，不是 parent request——沒有 `resource.data.submittedBy`/`region`/
+`assignedDesigners` 這些欄位可以直接讀，不能照抄現行寫法。必須另外定義一個會 `get()`
+parent 文件、用 `parent.data` 判斷權限的 helper，邏輯要跟現行 read 規則完全一致
+（manager 全讀 / 提交人讀自己的 / 被指派的設計師讀自己的 / 負責區域的 planner 讀）：
+
+```
+function canReadRequestAttachments(requestId) {
+  return exists(/databases/$(database)/documents/requests/$(requestId))
+    && canReadRequestAttachmentsAs(email(), get(/databases/$(database)/documents/requests/$(requestId)).data);
+}
+function canReadRequestAttachmentsAs(e, parent) {
+  return isManager()
+    || (whitelisted() && parent.submittedBy == e)
+    || (whitelisted() && e in parent.get('assignedDesigners', []))
+    || (whitelisted() && parent.region in myRegions());
+}
+```
+
+**跟現行行為一致性的重點**：
+- `isManager()`/`whitelisted()`/`myRegions()` **直接重用現行 `firestore.rules` 已有的**
+  函式，不重新發明一套——這三個函式內部已經各自處理好「白名單 + `active != false`」的判斷
+  （`whitelisted()` 內部會 `exists()`/`get()` 查 `users/{email()}`，`email()` 內部用
+  `request.auth.token.get('email', '').lower()`，對沒有 email claim 的登入方式安全地退回
+  空字串而不是直接噴錯）。舊帳號、`active == false`、缺 email claim 這些邊界情況的行為，
+  跟現行 `requests/{id}` 的 read 規則**完全相同**，因為呼叫的是同一組函式，不是重新實作。
+- 這裡**沒有**額外呼叫 `signedIn() && email() != ''`——因為 `isManager()`/`whitelisted()`
+  已經各自在內部檢查這件事，額外呼叫只是重複計算、增加運算式成本，不是安全性差異。
+- **實作時要用 Emulator 分別測試 single-document `get()` 跟 collection query 兩種存取
+  模式**：`onSnapshot`/`getDocs` 對整個 `attachments` 子集合下 query 時，Rules 引擎對
+  collection query 的每一份候選文件都要各自通過 `allow read`（包含它各自觸發的
+  `get(parent)` 呼叫）；要確認實測時不只測「已知 slot id 的單一 `get()`」，也要測「對整個
+  子集合下 query」這個情境下的實際運算式成本與 `get()` 呼叫次數，兩者在 Firestore Rules
+  的計費/限制模型下不一定等價，不能只驗證一種存取模式就假設另一種也沒問題。
+
+## 6. schemaVersion：明確版本旗標，取代「子集合是否為空」的判斷
 
 **原草稿的錯誤設計**：「子集合為空時 fallback 讀舊 `attachments` 陣列」。這在下面這個情境
 會出錯：文件已完成遷移 → 使用者刪除全部新附件 → 子集合合法地變成空 → 但舊陣列欄位仍有
@@ -231,14 +304,14 @@ requests/{requestId} {
 - `attachmentsSchemaVersion == 2`：一律只讀新子集合，**即使子集合目前是空的，也絕對不
   fallback 讀舊陣列**——空子集合在版本 2 就是「真的沒有附件」的正確表示。
 - 這個欄位**只能在遷移腳本完成「所有 10 個 slot 都已寫入且跟舊陣列逐項比對一致」之後**才
-  設定成 `2`（見第 11 節的一致性檢查）——不是遷移腳本開始處理就設，是驗證通過才設，這是
+  設定成 `2`（見第 13 節的一致性檢查）——不是遷移腳本開始處理就設，是驗證通過才設，這是
   這個欄位唯一的寫入時機。
 - **Rollback 時如何恢復讀取來源**：把該文件的 `attachmentsSchemaVersion` 寫回 `1`（或整個
   刪除這個欄位）。因為遷移階段全程保留舊陣列欄位不刪除（見第 12 節），這個回退是單純的
   欄位寫入，不需要任何資料搬回去，前端/Functions 的讀取邏輯看到 `1` 就會自動切回讀舊陣列。
   子集合裡已經遷移好的文件不需要清掉，之後要重新切回版本 2 可以直接複用。
 
-## 6. slot 的 reservation 流程（取代「先查空 slot 再 setDoc」的競態設計）
+## 7. slot 的 reservation 流程（取代「先查空 slot 再 setDoc」的競態設計）
 
 **原草稿的競態問題**：「前端查詢空 slot → 找第一個空位 → setDoc」——兩個並行的客戶端
 （例如使用者連續點兩次上傳，或兩個分頁）可能查到同一個空 slot，後寫者會覆蓋前者的
@@ -247,24 +320,72 @@ requests/{requestId} {
 **第一輪修正的殘留問題**：第一輪把「stale takeover」也寫成 transaction `create()`——但
 `create()` 的語意是「這個文件目前不存在」，一個 stale 的 `uploading` reservation文件
 **是存在的**（只是逾時），對已存在的文件呼叫 `create()` 會直接失敗，不會有任何「接管」
-效果。這一輪修正：初次 reservation 用 `create()`，接管 stale reservation 必須用
+效果。
+
+**第三輪修正：前端 Firebase JavaScript(Web) SDK 的 `Transaction` 根本沒有 `create()` 這個
+方法**——`firebase/firestore` 的 Web SDK `Transaction` 只有 `get()`/`set()`/`update()`/
+`delete()` 四個方法（`create()` 是 Admin SDK/某些其他語言 SDK 才有的，Web SDK 沒有這個
+API，本文件第一、二輪的示意寫法用了 Web SDK 不存在的方法名稱，必須修正，即使只是設計文件
+也不能寫成看起來能直接照抄執行、實際上會噴 `TypeError: tx.create is not a function` 的
+程式碼）。正確寫法是 `tx.get()` 讀一次，判斷文件是否存在，不存在才 `tx.set()`：
+
+```js
+async function reserveSlot(db, slotRef, reservationData) {
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(slotRef)
+    if (snap.exists()) {
+      throw new SlotOccupiedError() // 這個 slot 已經有人在用，換下一個 slot 重試
+    }
+    tx.set(slotRef, reservationData)
+  })
+}
+```
+
+**transaction 一定要先 `get()`，再 `set()`，順序不能反過來**——`runTransaction` 的
+callback 裡，所有 `get()` 呼叫都必須在任何 `set()`/`update()`/`delete()` 呼叫之前完成
+（這是 Firestore transaction 本身的 API 限制，不是這個設計額外加的規則）。**若另一個
+client 在這個 transaction 提交前修改了同一份文件**（例如 B 也在同一時間嘗試 reservation
+同一個 slot，並且先一步 commit 成功），Firestore 會偵測到版本衝突，**自動重新執行整個
+transaction callback**（不是拋錯給呼叫端自己重試——`runTransaction` 本身內建這個重跑機制）：
+重新執行時，`tx.get(slotRef)` 會讀到「文件已經存在」（因為 B 已經 set 進去了），
+`snap.exists()` 為真，丟出 `SlotOccupiedError`，`runTransaction` 把這個錯誤往外傳給呼叫端。
+**呼叫端接到 `SlotOccupiedError` 之後，正確的處理是換下一個 slot 重試，不是對同一個 slot
+再呼叫一次 `reserveSlot`**（同一個 slot 再試一次，結果一樣是被佔用，沒有意義）。
+
+初次 reservation 用「`get()` 確認不存在 → `set()`」；接管 stale reservation 必須用
 `update()`，且兩者都要靠一個全新、不可預測的 `reservationId` 來防止「舊 uploader 晚到」
 把新的 reservation 弄壞。
 
+**Rules 的 `allow create` 不需要因為前端改用 `set()` 就跟著放寬**——Firestore 的
+`allow create`/`allow update` 是**伺服器端**依「這次寫入的目標文件，在寫入前是否已經存在」
+自動判斷的，跟前端呼叫的是 SDK 的哪個方法名稱（`set()`/`update()`/`create()`）完全無關：
+即使前端呼叫 `setDoc()`/`tx.set()`，只要目標文件先前不存在，Firestore 仍然是對照
+`allow create` 規則判斷；文件已存在時的 `set()`（未加 `{merge:true}` 時是整份覆蓋）則對照
+`allow update` 規則判斷。第 2 節的 `allow create`/`allow update` 拆分完全不用因為這一輪
+把 SDK 呼叫從（不存在的）`create()` 改成 `get()+set()` 而修改。
+
 **修正設計：reservation → upload → finalize 三階段（貫穿 `reservationId`）**
 
-1. **初次 Reservation（Firestore transaction，`create()`）**：在 transaction 內先 `get`
-   該 slot 文件，確認不存在，`create()`：
-   ```
-   {
-     objectName, name, storagePath,               // 見第 1 節，這些欄位建立當下就完整已知
-     createdAt: serverTimestamp(), createdBy: email(),
-     reservationId: crypto.randomUUID(),           // 前端產生，全新、不可預測
-     status: 'uploading',
-   }
+1. **初次 Reservation（Firestore transaction，`tx.get()` + `tx.set()`，見上方對
+   Web SDK 沒有 `create()` 的修正說明）**：
+   ```js
+   const reservationId = crypto.randomUUID() // 全新、不可預測，前端產生
+   const objectName = safeFileName(file.name, slotIndex)
+   const storagePath = `attachments/${requestId}/${reservationId}/${objectName}`
+   await runTransaction(db, async (tx) => {
+     const snap = await tx.get(slotRef)
+     if (snap.exists()) throw new SlotOccupiedError()
+     tx.set(slotRef, {
+       objectName, name: file.name, storagePath,
+       createdAt: serverTimestamp(), createdBy: email(),
+       reservationId,
+       status: 'uploading',
+     })
+   })
    ```
    （這時還沒有 `url`/`size`，因為檔案還沒上傳；把這次產生的 `reservationId` 存在這個
-   上傳流程的本地變數裡，後面 finalize/rollback 都要用它。）
+   上傳流程的本地變數裡，後面 finalize/rollback 都要用它。`SlotOccupiedError` 拋出後，
+   呼叫端要換下一個 slot 重試，見上方「transaction 一定要先 get 再 set」的說明。）
 2. **Transaction 成功後才上傳 Storage**——reservation 失敗（slot 已存在且不是 stale，見
    下方第 8 點）就換下一個 slot 重試，不會上傳到會變成孤兒的路徑。
 3. **上傳成功後 finalize（`update()`，且必須明確帶上 `reservationId`）**：
@@ -286,9 +407,10 @@ requests/{requestId} {
    `ready` 之後要換掉這個附件，必須先 `delete` 再走一次完整的 reservation 流程，不能直接
    `update` 一個 `ready` 的文件。
 6. **同一個 slot 的並行「初次」reservation 只能有一個成功**：靠 Firestore transaction 的
-   `create()` 語意本身保證——transaction 讀到「不存在」才能 `create()`，兩個並行
-   transaction 對同一個不存在的文件都想 `create()` 時，Firestore 會讓其中一個因為版本
-   衝突而重試/失敗，不是應用層邏輯自己判斷。
+   樂觀鎖機制本身保證——兩個並行 transaction 對同一個 slot 各自 `tx.get()` 都讀到「不存在」，
+   都打算 `tx.set()`，但 Firestore 只會讓其中一個先提交成功；另一個因為版本衝突被自動重跑
+   （見上方「transaction 一定要先 get 再 set」的說明），重跑時 `tx.get()` 會讀到「已經存在」，
+   丟出 `SlotOccupiedError`，不是應用層邏輯自己判斷「誰先誰後」。
 7. **同一個 slot 的並行「接管」也只能有一個成功**：接管走的是 `update()`，Rules 條件裡的
    `isStaleUploadingReservation()` 讀到的 `resource.data.createdAt`/`status` 在同一個
    transaction 裡是一致的快照，兩個並行的接管 transaction 對同一份 `resource` 版本各自
@@ -325,7 +447,36 @@ requests/{requestId} {
    reservation」——這件事在 Firestore 的 delete 語意下無法用 Rules 表達，只能在呼叫端用
    transaction 前置條件擋。同樣的 Storage 物件清理（如果已經上傳了一部分）也要在同一個
    transaction 確認 reservationId 相符「之後」才執行，避免刪到接管者剛上傳好的檔案。
-10. **Firestore transaction 跟 Storage upload 沒辦法形成單一跨服務的原子交易**——這是
+10. **光靠「transaction 內比對 reservationId 才刪 Firestore 文件」還不夠——Storage 物件本身
+    也必須是每次 reservation 全域唯一的路徑**（第三輪修正，見第 1 節、第 2 節）：即使第 9
+    點已經確保 A 不會誤刪 B 的 Firestore reservation *文件*，A 手上記住的 Storage
+    `storagePath` 字串，如果只跟 `requestId`/`objectName` 有關（不含 `reservationId`），
+    B 接管同一個 slot 後上傳的檔案完全可能落在**同一個路徑**上——這時 A 對 Storage 執行
+    `deleteObject(storagePath)` 是純粹的 Storage 操作，**完全不受 Firestore transaction
+    保護**，會直接刪掉 B 剛上傳好的檔案（即使 Firestore 文件層面的 reservationId 比對完全
+    正確）。修正：`storagePath` 固定為 `attachments/{requestId}/{reservationId}/{objectName}`
+    （見第 1 節的資料結構），這樣：
+    - A 記住的 `storagePath` 永遠是 `.../${RID_A}/...`，B 接管後使用的是全新的
+      `.../${RID_B}/...`——兩者在 Storage 上是完全不同的物件路徑，A 的 `deleteObject`
+      物理上就刪不到 B 的檔案，不需要依賴任何執行時序或額外比對。
+    - 這比「只比對 Firestore 文件的 reservationId」更根本：Firestore 文件層面的比對只能防止
+      誤刪*紀錄*，防不了誤刪 Storage *物件本身*，因為兩個操作(刪 Firestore 文件、刪 Storage
+      物件)不在同一個事務裡；讓路徑本身包含 reservationId，才能讓「刪除」這個動作對 Storage
+      而言天生就是精準指向自己那份 reservation，不需要靠時序或額外檢查來保證安全。
+    - 詳見下方時序案例 3。
+
+    **對現行 Storage Rules / 前端 URL validator / Cloud Functions path validator 的未來
+    設計影響（本輪只更新這裡的設計說明，不實際修改這三處正式程式）**：現行 `attachments/`
+    路徑固定是 3 段（`attachments/{requestId}/{filename}`），`storage.rules`、
+    `src/utils/attachmentUrl.js`（`getSafeAttachmentUrl`）、`functions/index.js` 的
+    `isAttachmentPathForRequest`（`parts.length === 3 && parts[0] === 'attachments' &&
+    parts[1] === docId`）都是照這個 3 段結構寫的。方案 A 一旦真的實作，路徑會變成 4 段
+    （多插入 `{reservationId}`），這三處都需要對應調整為「4 段，且第 2 段(`reservationId`)
+    存在、第 1 段是 `requestId`、最後一段是合法檔名」的判斷，而不是繼續假設固定 3 段。
+    這只是設計階段先標注影響範圍，實際的 Storage Rules 路徑比對規則、前端/Functions 的
+    path-parsing 邏輯調整，要留到真正決定實作方案 A、並取得核准之後才動手，本輪不觸碰
+    這三個正式檔案。
+11. **Firestore transaction 跟 Storage upload 沒辦法形成單一跨服務的原子交易**——這是
     Firestore/Storage 分屬不同服務的根本限制，不是這個設計的缺陷。因此失敗補償
     **必須是冪等、可重試、且帶著 `reservationId` 一起判斷**：
     - 刪除一個不存在的 reservation 文件、或刪除一個不存在的 Storage 物件，都必須是
@@ -335,13 +486,15 @@ requests/{requestId} {
       的情況——這需要列出 `attachments/{requestId}/` 底下的 Storage 物件，比對 Firestore
       子集合，抓出不一致的孤兒物件並清除，是第 8 點排程清理 Function 的延伸工作項目）。
       每次重試補償都要重新用第 9 點的 transaction 前置條件確認 `reservationId` 仍然相符，
-      不能假設「我第一次檢查過就永遠有效」。
+      不能假設「我第一次檢查過就永遠有效」——即使有第 10 點的路徑唯一性保護，Firestore
+      文件層面的補償仍然需要 reservationId 比對，兩者是互補的兩層防護，不是其中一個可以
+      取代另一個。
 
 **時序案例 1：uploader A 逾時，B 接管，A 晚到才 finalize**
 
 | 時間 | 事件 |
 |---|---|
-| t=0 | A 對 slot `3` 做初次 reservation：`create()`，`reservationId=RID_A`，`status:'uploading'` |
+| t=0 | A 對 slot `3` 做初次 reservation：`tx.get()` 確認不存在後 `tx.set()`，`reservationId=RID_A`，`status:'uploading'`，`storagePath=attachments/{requestId}/RID_A/{objectName}` |
 | t=0~11min | A 的上傳因網路問題卡住，遲遲沒有 finalize |
 | t=11min | B 查詢可用 slot，看到 slot `3` 是 `uploading` 且 `createdAt` 已超過 10 分鐘逾時 → B 送出接管 `update()`：`reservationId=RID_B`（全新產生），符合第 2 節 `allow update` 的「stale takeover」分支（`request.resource.data.reservationId != resource.data.reservationId` 且 `isStaleUploadingReservation()` 成立），成功。此時 slot `3` 的 `reservationId` 已經是 `RID_B` |
 | t=15min | A 的上傳終於完成，A 呼叫 finalize：`update(slotRef, { url, size, status:'ready', reservationId: RID_A })`——**因為第 3 點要求 finalize 必須明確帶上 `reservationId`**，這裡送出的是 `RID_A`（A 記得的、自己 reservation 時的值） |
@@ -356,15 +509,35 @@ requests/{requestId} {
 | t=11min | B 接管（同案例 1），`reservationId` 變成 `RID_B` |
 | t=12min | A 的延遲清理邏輯終於執行，走第 9 點的 transaction：`tx.get(slotRef)` 讀到目前的 `reservationId` 是 `RID_B`，跟 A 記得的 `RID_A` 不相符 → **transaction 判斷「no-op」，不執行 `tx.delete()`**，B 的新 reservation 完全不受影響 |
 
-兩個案例都證明：**只要 finalize 明確帶上 `reservationId`、cleanup 一定經過「transaction 內
-先比對 `reservationId` 再決定要不要動作」這兩個實作前提成立，舊 uploader 晚到就不可能
-finalize、覆蓋或刪除新的 reservation**——這兩個前提本身是這個設計唯一的正確性基礎，必須在
-實作/程式碼審查階段明確驗收，不能只看 Rules 邏輯就假設一定安全。
+**時序案例 3：A 刪除 reservation 後，B 立即重用同一個 slot，A 的 Storage cleanup 晚到執行**
+（第三輪新增——這是案例 2 的延伸，特別針對「Firestore 文件層面比對過了，但 Storage 物件
+清理本身沒有事務保護」這個問題）
 
-## 7. 前端讀寫流程
+| 時間 | 事件 |
+|---|---|
+| t=0 | A 對 slot `3` 做初次 reservation：`reservationId=RID_A`，`storagePath=attachments/{requestId}/RID_A/report.pdf` |
+| t=0~5s | A 已經把檔案上傳到 `attachments/{requestId}/RID_A/report.pdf`，但緊接著判斷這次上傳應該取消（例如使用者在上傳完成前按了取消），A 依第 9 點的 transaction 前置條件確認 `reservationId` 仍是 `RID_A`、確實是自己的 reservation，成功刪除 Firestore 文件——**但 A 對 Storage 物件的 `deleteObject('attachments/{requestId}/RID_A/report.pdf')` 因為網路問題還沒送出/還沒完成，停在佇列裡** |
+| t=5s | B 立即查詢到 slot `3` 現在不存在(已被 A 刪除)，送出全新的初次 reservation：`reservationId=RID_B`，`storagePath=attachments/{requestId}/RID_B/report.pdf`——**注意路徑最後一段檔名恰好也叫 `report.pdf`（使用者剛好上傳同名檔案，這是完全合理、會發生的情況）**，但因為路徑包含 `reservationId`，跟 A 的路徑 `.../RID_A/...` 是完全不同的物件 |
+| t=5s | B 上傳成功，Storage 上同時存在兩個物件：`.../RID_A/report.pdf`(A 的，即將被清掉的孤兒)跟 `.../RID_B/report.pdf`(B 的，有效) |
+| t=8s | A 排隊中的 `deleteObject('attachments/{requestId}/RID_A/report.pdf')` 終於送達 Storage 並執行——**因為這個路徑跟 B 的 `.../RID_B/report.pdf` 是不同物件，這次刪除只會刪到 A 自己上傳、本來就該被清掉的那份，完全不會影響 B 剛上傳好的 `.../RID_B/report.pdf`** |
+
+**為什麼「Storage path 對每個 reservation 全域唯一」能擋下這個問題**：案例 3 裡，即使 A 的
+Storage 清理動作在時間上「晚到」、跟 B 的重用動作交錯，**兩者操作的根本就是不同的物理
+路徑**——這不是靠時序運氣或額外的執行時檢查達成的安全，而是路徑設計本身讓「A 能刪到的
+東西」跟「B 正在使用的東西」永遠不可能是同一個物件，即使兩者剛好選了同一個 `objectName`
+（同名檔案）也一樣。這跟時序案例 1/2 的保護機制（transaction 內比對 `reservationId`）是
+互補的兩層：文件層面靠 `reservationId` 比對，Storage 物件層面靠路徑本身天生不重疊。
+
+三個案例都證明：**只要 finalize 明確帶上 `reservationId`、cleanup 一定經過「transaction 內
+先比對 `reservationId` 再決定要不要動作」、且 Storage path 本身編入 `reservationId` 這三個
+實作前提都成立，舊 uploader 晚到就不可能 finalize、覆蓋、刪除新的 Firestore reservation，
+也不可能刪到新 reservation 已經上傳好的 Storage 物件**——這三個前提是這個設計唯一的正確性
+基礎，必須在實作/程式碼審查階段明確驗收，不能只看 Rules 邏輯就假設一定安全。
+
+## 8. 前端讀寫流程
 
 - **建立需求**（`RequestNewPage.jsx`）：`addDoc` 建立文件（不需要 `attachments` 欄位，新
-  文件直接是 `attachmentsSchemaVersion: 2`）→ 對每個要上傳的檔案走第 6 節的
+  文件直接是 `attachmentsSchemaVersion: 2`）→ 對每個要上傳的檔案走第 7 節的
   reservation → upload → finalize 流程。
 - **讀取/顯示**（`RequestDetailModal.jsx`、`ReviewPage.jsx`、`RequestsTablePage.jsx`）：先
   讀 parent 文件的 `attachmentsSchemaVersion`，`1` 就讀舊陣列欄位，`2` 就對子集合下
@@ -373,14 +546,14 @@ finalize、覆蓋或刪除新的 reservation**——這兩個前提本身是這�
   不需要改）。
 - **刪除單筆「已完成」附件**（使用者主動點刪除一個 `status == 'ready'` 的附件）：直接
   `deleteDoc` 該 slot 文件 + `deleteObject` 對應的 Storage 物件（用 `storagePath` 定位，
-  不是用 `name`）——這是使用者明確的操作，不涉及 reservation 競態，不需要走第 6 節第 9 點
+  不是用 `name`）——這是使用者明確的操作，不涉及 reservation 競態，不需要走第 7 節第 9 點
   的 transaction 比對流程；不再需要「整個陣列重寫、少一筆」的做法。
 - **清理自己失敗的 reservation**（`status == 'uploading'` 的半成品，因為自己上傳失敗要
-  rollback）：**不是**直接 `deleteDoc`，必須走第 6 節第 9 點的 transaction 前置條件（先比對
+  rollback）：**不是**直接 `deleteDoc`，必須走第 7 節第 9 點的 transaction 前置條件（先比對
   `reservationId` 是否還是自己記得的那個值，不符合就 no-op），避免刪到已經被別人接管的
   reservation。
 
-## 8. Functions 如何取得附件
+## 9. Functions 如何取得附件
 
 `functions/index.js` 目前讀 `after.attachments`（Firestore trigger 的文件快照）的地方：
 `buildHtml`（通知信）、`previewFile`（下載代理）、`resolveAttachmentPath`。改成：
@@ -395,7 +568,7 @@ finalize、覆蓋或刪除新的 reservation**——這兩個前提本身是這�
   `db.collection('requests').doc(docId).collection('attachments').doc(idxStr).get()`（先查
   parent 的 `attachmentsSchemaVersion` 決定要不要走這條路徑）。
 
-## 9. 半成品文件的清理 / 回滾設計（方案比較，選定建議方案）
+## 10. 半成品文件的清理 / 回滾設計（方案比較，選定建議方案）
 
 **背景限制**：Security Rules 的 `exists()` 只能檢查完整文件路徑是否存在，**不能**查詢
 「整個 `attachments` 子集合是否為空」——沒有這種聚合查詢能力，不能寫成
@@ -457,7 +630,7 @@ expression 數量是不同的限制維度，但一樣是要小心的資源）。
   2. 對每一筆先刪除對應的 Storage 物件（用 `storagePath`），再刪除該 Firestore 子文件。
   3. **清理必須可重試、能處理部分失敗**：用 `Promise.allSettled` 逐筆處理，不因為某一筆
      Storage 刪除失敗就整批放棄；失敗的筆數記錄下來（`logger.error`），交由排程 function
-     （第 6 節第 8 點提到的孤兒清理排程）之後重新掃描補clean。
+     （第 7 節第 8 點提到的孤兒清理排程）之後重新掃描補clean。
   4. **順序與失敗策略**：先刪 Storage 物件、成功後再刪 Firestore 子文件（不是反過來）——
      如果反過來先刪 Firestore 子文件、Storage 刪除又失敗，會留下「沒有任何 Firestore 紀錄
      指向、但實際存在」的孤兒 Storage 物件，且因為 Firestore 紀錄已經沒了，之後的排程
@@ -466,7 +639,7 @@ expression 數量是不同的限制維度，但一樣是要小心的資源）。
      沒刪乾淨」的情況高，所以選擇先刪 Storage、Firestore 紀錄留到最後一步才刪，讓「有
      紀錄但清理未完成」是唯一需要重試處理的中間狀態）。
 
-## 10. 遷移批次與可重試設計
+## 11. 遷移批次與可重試設計
 
 - 用一次性 Cloud Function（`onCall`，manager-only，或一次性 script 透過 Admin SDK 執行，
   **需另外核准**）分批處理：每批用 Firestore 查詢抓 N 筆（例如 50 筆）
@@ -477,7 +650,7 @@ expression 數量是不同的限制維度，但一樣是要小心的資源）。
      （舊資料沒有獨立的 `objectName` 欄位，用 `storagePath.split('/')` 取最後一段；沒有
      `storagePath` 的舊資料用 `derivePathFromUrl` 同等邏輯反推，跟現行前端
      `RequestNewPage.jsx` 的既有備援邏輯一致）。
-  3. 逐項比對子集合寫入結果跟原陣列是否一致（見第 11 節）。
+  3. 逐項比對子集合寫入結果跟原陣列是否一致（見第 13 節）。
   4. 全部一致後，才把該筆文件的 `attachmentsSchemaVersion` 設成 `2`。
 - 用 `attachmentsSchemaVersion`（不是額外的 `attachmentsMigrated` 布林欄位——兩者擇一，
   這裡統一用前者）當作 checkpoint：整個遷移可以中斷、重跑，只會重複處理「還不是版本 2」
@@ -485,39 +658,39 @@ expression 數量是不同的限制維度，但一樣是要小心的資源）。
 - 每批之間有明確的成功/失敗計數回報，失敗的文件 id 記錄下來，方便針對性重跑，不需要整批
   重來。
 
-## 11. Rollback 方法（整體遷移層級）
+## 12. Rollback 方法（整體遷移層級）
 
 - 因為遷移階段全程保留舊 `attachments` 陣列欄位（不會因為遷移完成就刪除，刪除是額外一次
-  核准的清理步驟，見第 14 節），rollback 只需要：
-  1. 把已遷移文件的 `attachmentsSchemaVersion` 寫回 `1`（見第 5 節「Rollback 時如何恢復
+  核准的清理步驟，見第 15 節），rollback 只需要：
+  1. 把已遷移文件的 `attachmentsSchemaVersion` 寫回 `1`（見第 6 節「Rollback 時如何恢復
      讀取來源」——前端/Functions 的讀取邏輯看到 `1` 就自動切回讀舊陣列，不需要搬任何資料）。
   2. 保留（不刪除）已寫入的子集合文件，之後要重新遷移可以直接複用，不用重新處理。
 - 只有在確認新流程穩定運作一段時間、且不再需要回退之後，才會有**額外一次**、**另外核准**
   的清理步驟去移除 `attachments` 陣列欄位。
 
-## 12. 遷移前後資料一致性檢查
+## 13. 遷移前後資料一致性檢查
 
 - 遷移腳本每處理完一筆文件，立即比對：子集合的 `ready` 文件數是否等於原陣列長度；逐一
   比對 `name`/`url`/`size`/`storagePath` 欄位是否跟陣列裡對應 index 的物件完全一致
-  （`objectName` 從 `storagePath`/`url` 反解，見第 10 節）。**全部比對通過才設定
-  `attachmentsSchemaVersion: 2`**——這是這個欄位唯一的寫入時機，見第 5 節。
+  （`objectName` 從 `storagePath`/`url` 反解，見第 11 節）。**全部比對通過才設定
+  `attachmentsSchemaVersion: 2`**——這是這個欄位唯一的寫入時機，見第 6 節。
 - 額外提供一個唯讀的稽核腳本（不寫入，只讀取+比對+回報），可以在遷移完成後、雙軌並存的
   任何時間點重新執行，找出「陣列與子集合不一致」的文件 id 清單。
 - 稽核腳本的執行本身（即使是唯讀）如果要對接正式 Firebase 專案，同樣需要另外核准。
 
-## 13. 舊版前端與新版資料的相容性
+## 14. 舊版前端與新版資料的相容性
 
 如果部署後有使用者還在跑舊版前端（快取的 SPA bundle 還沒更新）：
 
 - 舊版前端不認得 `attachmentsSchemaVersion` 欄位，會直接讀 `attachments` 陣列——只要遷移
-  階段全程保留、同步維護這個陣列欄位（見第 10 節「遷移批次」只是「寫入子集合」，不代表
+  階段全程保留、同步維護這個陣列欄位（見第 11 節「遷移批次」只是「寫入子集合」，不代表
   停止維護舊陣列；若後續有人在版本 2 的文件上新增/刪除附件，舊陣列要不要繼續同步是產品
   決策，最簡單的作法是版本 2 之後舊陣列欄位凍結不再更新，並在舊版前端明顯位置有「請更新
   頁面」的提示，這部分屬於實作階段的產品決策，本文件只標注需要決定，不代替決定）。
 - 舊版前端在「凍結」之後只會顯示遷移當下的陣列快照，不會顯示錯誤的資料，只是新增/刪除的
   附件不會反映上去，直到使用者重新整理拿到新版 bundle。
 
-## 14. 正式資料操作核准要求
+## 15. 正式資料操作核准要求
 
 以下任何一項都必須先取得明確的、針對這一項的核准，本文件不構成核准：
 
