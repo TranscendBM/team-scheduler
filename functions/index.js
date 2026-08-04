@@ -70,7 +70,10 @@ function parseAttachmentUrl(rawUrl) {
   return { path, url: u.toString() }
 }
 
-// 郵件內容組 <a href> 用：合法就回傳正規化過的網址字串，不合法回傳 null(不產生連結)
+// 郵件內容組 <a href> 用：合法就回傳正規化過的網址字串，不合法回傳 null(不產生連結)。
+// 注意：這裡只驗證「網址本身合不合法」(https/host/bucket/attachments 前綴)，不驗證
+// 這個附件是否屬於目前這封信要通知的 requestId —— 要連 requestId 一起驗證，
+// 請用下面的 safeAttachmentUrlForRequest()。
 export function safeAttachmentUrl(rawUrl) {
   const parsed = parseAttachmentUrl(rawUrl)
   return parsed ? parsed.url : null
@@ -104,6 +107,17 @@ export function resolveAttachmentPath(attachment, docId) {
   const path = attachment.storagePath !== undefined ? attachment.storagePath : urlPath
   if (!isAttachmentPathForRequest(path, docId)) return null
   return path
+}
+
+// 通知信附件連結用：跟 previewFile 用同一套 resolveAttachmentPath 驗證(https/host/bucket/
+// attachments 前綴、storagePath 若存在必須跟 url 解出的路徑完全一致、路徑精確符合
+// attachments/{requestId}/{檔名))，只是這裡回傳的是正規化過的網址字串(給 <a href> 用)，
+// 不是 Storage 路徑。刻意不直接呼叫 safeAttachmentUrl(a.url) —— 那個只驗證網址本身合不合法，
+// 不驗證是否屬於「這封信要通知的 requestId」，會讓使用者把別筆需求的附件網址塞進這筆需求的
+// attachments 欄位(或單純沿用到別筆需求)時，也產生看起來合法的連結。
+export function safeAttachmentUrlForRequest(attachment, requestId) {
+  const path = resolveAttachmentPath(attachment, requestId)
+  return path ? safeAttachmentUrl(attachment?.url) : null
 }
 
 // previewFile 的 proxy 路徑帶的是「完整 download token 的前 12 碼」(見 src/components/Attachments.jsx
@@ -372,8 +386,11 @@ function getMailer() {
   return createMailer({ user: SMTP_USER, pass: SMTP_PASS.value(), fromName: 'Team Scheduler' })
 }
 
-// export 供 test/buildHtml.test.js 做純函式測試（不連任何 Firebase 服務）
-export function buildHtml(r) {
+// export 供 test/buildHtml.test.js 做純函式測試（不連任何 Firebase 服務）。
+// requestId 是這封信要通知的那筆需求的文件 id(呼叫端一律傳 event.params.id)，
+// 用來確認每個附件的網址/storagePath 精確屬於「這筆」需求，不是隨便一個合法的
+// Firebase Storage 網址就產生連結(見 safeAttachmentUrlForRequest)。
+export function buildHtml(r, requestId) {
   const docTypes = (r.docTypes || []).join('、')
   // 需求簡述裡的網址要能點擊，其餘欄位都是純文字 escapeHtml 就好；用 { html } 包一層
   // 標記「這欄已經是安全的 HTML，不要再 escapeHtml 一次」，下面 tr 那段依此分流。
@@ -401,7 +418,7 @@ export function buildHtml(r) {
          <p style="font-family:${FONT};font-size:13px;color:#6b7280;margin:0 0 6px">附件</p>
          ${atts.map(a => {
            const label = `📄 ${escapeHtml(a.name)}`
-           const safeUrl = safeAttachmentUrl(a.url)
+           const safeUrl = safeAttachmentUrlForRequest(a, requestId)
            return safeUrl
              ? `<a href="${escapeHtml(safeUrl)}" style="font-family:${FONT};display:inline-block;margin:0 6px 6px 0;background:#f3f4f6;color:#374151;text-decoration:none;padding:6px 12px;border-radius:6px;font-size:12px">${label}</a>`
              : `<span style="font-family:${FONT};display:inline-block;margin:0 6px 6px 0;background:#f3f4f6;color:#9ca3af;padding:6px 12px;border-radius:6px;font-size:12px">${label}（連結無效）</span>`
@@ -445,7 +462,7 @@ export const notifyOnAssign = onDocumentUpdated(
         to: toEmails,
         cc,
         subject: `[設計需求] ${after.projectName || '新任務'}${after.urgent ? '（🔥急件）' : ''}`,
-        html: buildHtml(after),
+        html: buildHtml(after, event.params.id),
       })
       logger.info('已寄信', { to: toEmails, cc })
     } catch (e) {
@@ -500,7 +517,7 @@ export const notifyOnReassign = onDocumentUpdated(
         to: toEmails,
         cc,
         subject: `[設計需求] ${after.projectName || '任務'}${after.urgent ? '（🔥急件）' : ''}（${notification.changeLabels.join('、')}）`,
-        html: buildHtml(after),
+        html: buildHtml(after, event.params.id),
       })
       logger.info('已寄異動通知', { to: toEmails, cc, changeLabels: notification.changeLabels })
     } catch (e) {

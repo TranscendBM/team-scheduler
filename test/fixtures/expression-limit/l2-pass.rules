@@ -1,0 +1,55 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function email() { return request.auth.token.get('email', '').lower(); }
+    function whitelisted() {
+      return signedIn() && email() != ''
+        && exists(/databases/$(database)/documents/users/$(email()))
+        && get(/databases/$(database)/documents/users/$(email())).data.get('active', true) != false;
+    }
+
+    function isValidAttachment(a) {
+      return a.name is string && a.name.size() > 0 && a.name.size() <= 300
+        && a.url is string && a.url.size() > 0 && a.url.size() <= 2000
+        && a.size is number && a.size > 0 && a.size <= 10485760;
+    }
+    function isValidAttachments(atts) {
+      return atts is list && atts.size() <= 10
+        && (atts.size() < 1  || isValidAttachment(atts[0]))
+        && (atts.size() < 2  || isValidAttachment(atts[1]))
+        && (atts.size() < 3  || isValidAttachment(atts[2]))
+        && (atts.size() < 4  || isValidAttachment(atts[3]))
+        && (atts.size() < 5  || isValidAttachment(atts[4]))
+        && (atts.size() < 6  || isValidAttachment(atts[5]))
+        && (atts.size() < 7  || isValidAttachment(atts[6]))
+        && (atts.size() < 8  || isValidAttachment(atts[7]))
+        && (atts.size() < 9  || isValidAttachment(atts[8]))
+        && (atts.size() < 10 || isValidAttachment(atts[9]));
+    }
+    function isValidRequestCreateAtLevel(id) {
+
+      let d = request.resource.data;
+      return d.keys().size() == 11
+        && d.projectName is string && d.projectName.size() > 0 && d.projectName.size() <= 200
+        && d.region is string && d.region.size() > 0
+        && d.docTypes is list
+        && d.dueDate is string
+        && d.description is string
+        && d.urgent is bool
+        && isValidAttachments(d.attachments)
+        && d.submittedBy == email()
+        && d.submittedByName is string
+        && d.status == 'pending'
+        && d.createdAt == request.time;
+    }
+    match /users/{uid} {
+      allow read: if signedIn() && (uid == email() || isManager());
+      allow write: if isManager();
+    }
+
+    match /requests/{id} {
+      allow create: if whitelisted() && isValidRequestCreateAtLevel(id);
+    }
+  }
+}

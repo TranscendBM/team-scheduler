@@ -6,6 +6,7 @@ import { db, storage } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
 import { REGIONS, DOC_TYPES, MAX_ATTACHMENT_MB } from '../utils/requestConstants'
 import { attachmentKey, markRemoved, unmarkRemoved, keptAttachments, removedAttachments, commitWithDeferredDeletion } from '../utils/attachmentDraft'
+import { getSafeAttachmentUrl, resolveSafeAttachmentPath } from '../utils/attachmentUrl'
 
 const MAX_BYTES = MAX_ATTACHMENT_MB * 1024 * 1024
 const empty = { urgent: false, region: '', projectName: '', docTypes: [], dueDate: '', description: '' }
@@ -75,21 +76,21 @@ export default function RequestNewPage() {
   // 使用者反悔，把標記移除的附件加回來
   const restoreExisting = (att) => setRemovedKeys(prev => unmarkRemoved(prev, att))
 
-  // 舊資料可能沒有 storagePath(改版前上傳的附件)，退回用 download URL 反推路徑當備援
-  function derivePathFromUrl(url) {
-    try {
-      const m = String(url).match(/\/o\/([^?]+)/)
-      return m ? decodeURIComponent(m[1]) : null
-    } catch { return null }
-  }
-
   // Firestore 已經成功寫入、不再引用這些附件之後才呼叫:真的刪除 Storage 上的檔案。
-  // 單一檔案刪除失敗只記錄錯誤、不擋流程 —— 這時 Firestore 已經沒有引用了，
-  // 寧可留下孤兒檔案(之後可再清)，也不要反過來讓 metadata 壞掉或擋住使用者送出。
-  async function deleteAttachmentFiles(atts) {
+  // requestId 一定要傳入 —— 每個附件都要透過 resolveSafeAttachmentPath 重新驗證「這個附件的
+  // storagePath/url 是否真的屬於這筆 request」，不能直接信任 attachment.storagePath 或用寬鬆的
+  // 字串反推路徑就拿去刪。manager 可以刪任何 request 的附件，若不做這層驗證，壞掉或被竄改的
+  // metadata 可能讓 UI 對著 requestId A 卻刪到別筆 request 的物件(confused-deputy)。
+  // 驗證失敗(resolveSafeAttachmentPath 回傳 null)一律跳過、不呼叫 deleteObject，只記錄 warning、
+  // 允許留下孤兒檔案 —— 絕不能因為刪檔失敗就反過來影響已經成功寫入的 Firestore metadata。
+  // 單一檔案的 deleteObject 失敗(權限、檔案已不存在等)也只記錄 error、不擋流程。
+  async function deleteAttachmentFiles(atts, requestId) {
     await Promise.allSettled(atts.map(async (att) => {
-      const path = att.storagePath || derivePathFromUrl(att.url)
-      if (!path) return
+      const path = resolveSafeAttachmentPath(att, requestId)
+      if (!path) {
+        console.warn('附件路徑驗證失敗，跳過刪除(留下孤兒檔案，不信任未經驗證的路徑)', att.name, { requestId })
+        return
+      }
       try {
         await deleteObject(ref(storage, path))
       } catch (e) {
@@ -159,7 +160,7 @@ export default function RequestNewPage() {
             ...fields,
             attachments: [...keptAttachments(existingAtts, removedKeys), ...uploaded],
           }),
-          () => deleteAttachmentFiles(toRemove)
+          () => deleteAttachmentFiles(toRemove, editId)
         )
       } else {
         const docRef = await addDoc(collection(db, 'requests'), {
@@ -320,13 +321,16 @@ export default function RequestNewPage() {
             <ul className="mt-2 space-y-1">
               {existingAtts.map(a => {
                 const isRemoved = removedKeys.includes(attachmentKey(a))
+                const safeUrl = getSafeAttachmentUrl(a, editId)
                 return (
                   <li key={attachmentKey(a)}
                     className={`flex items-center justify-between text-xs rounded-lg px-3 py-1.5 ${isRemoved ? 'bg-red-50 text-red-300' : 'bg-gray-100 text-gray-600'}`}>
                     {isRemoved ? (
                       <span className="truncate line-through">📄 {a.name}（將於儲存後移除）</span>
+                    ) : safeUrl ? (
+                      <a href={safeUrl} target="_blank" rel="noreferrer noopener" className="truncate hover:underline">📄 {a.name}（已上傳）</a>
                     ) : (
-                      <a href={a.url} target="_blank" rel="noreferrer" className="truncate hover:underline">📄 {a.name}（已上傳）</a>
+                      <span className="truncate text-red-400" title="連結驗證失敗">📄 {a.name}（連結無效）</span>
                     )}
                     {isRemoved ? (
                       <button type="button" onClick={() => restoreExisting(a)} className="text-blue-400 hover:text-blue-600 ml-2">復原</button>

@@ -135,8 +135,14 @@ describe('requests create — 必要欄位/型別/允許欄位驗證', () => {
     }))
   })
 
-  it('attachments 元素夾帶允許清單以外的欄位會被擋', async () => {
-    await assertFails(addDoc(collection(dbAs(PLANNER_SD1), 'requests'), {
+  // 附件元素允許夾帶額外欄位(不再用 a.keys().size() 擋掉多餘 key)——這是刻意的取捨，見
+  // firestore.rules isValidAttachment 的說明：驗證 10 筆附件 x storagePath/requestId 綁定，
+  // 已經逼近 Firestore「單次請求最多 1000 個運算式」的上限，每個 a.keys() 呼叫都會再吃掉
+  // 僅存的一點預算，導致合法的 10 筆附件寫入被拒。額外欄位本身不是安全漏洞(前端/Cloud Function
+  // 都只會讀取 name/url/size/storagePath 這幾個已知欄位，不會信任或執行任何未知欄位的內容)，
+  // 只是資料整潔度考量，因此在兩者衝突時選擇犧牲這項檢查。
+  it('attachments 元素夾帶額外欄位不影響合法性(不再檢查多餘 key，這是為了在 10 筆附件時符合 Firestore 1000-expression 上限的取捨)', async () => {
+    await assertSucceeds(addDoc(collection(dbAs(PLANNER_SD1), 'requests'), {
       ...base, submittedBy: PLANNER_SD1,
       attachments: [{ name: 'a.pdf', url: 'https://example.com/a.pdf', size: 1024, evil: 'x' }],
     }))
@@ -173,13 +179,17 @@ describe('requests create — 必要欄位/型別/允許欄位驗證', () => {
     await assertSucceeds(addDoc(collection(dbAs(PLANNER_SD1), 'requests'), { ...base, submittedBy: PLANNER_SD1, attachments }))
   })
 
-  // storagePath 是選填欄位；規則層只驗證它是「合理長度的字串」，不驗證是否對應這個 request 的 id ——
-  // 那項檢查(storagePath 是否真的屬於這個 requestId)刻意移到 Cloud Function 的
-  // resolveAttachmentPath() 做(previewFile 會用它擋掉跨 request 的 storagePath)，因為在規則層
-  // 對最多 10 筆附件逐一做這種比對，不管用 regex 還是 split()，都會撞到 Firestore 規則
-  // 「單次請求最多 1000 個運算式」的上限，導致連合法寫入都被拒(CI 實測發生過)。
-  it('attachments storagePath 只驗證結構(合理長度的字串)，不管內容指到哪個 requestId 都成功', async () => {
-    await assertSucceeds(addDoc(collection(dbAs(PLANNER_SD1), 'requests'), {
+  // storagePath 是選填欄位，若存在必須精確符合 attachments/{這個 request 的 id}/{檔名}——
+  // 用 setDoc(已知 doc id)而不是 addDoc：addDoc 建立前不知道自動產生的 id，無法組出應該相符的 storagePath。
+  it('attachments storagePath 符合 attachments/{這個 request 的 id}/{檔名} 成功', async () => {
+    await assertSucceeds(setDoc(doc(dbAs(PLANNER_SD1), 'requests', 'req-known-1'), {
+      ...base, submittedBy: PLANNER_SD1,
+      attachments: [{ name: 'a.pdf', url: 'https://example.com/a.pdf', size: 1024, storagePath: 'attachments/req-known-1/a-123.pdf' }],
+    }))
+  })
+
+  it('attachments storagePath 指向別的 requestId 會被擋', async () => {
+    await assertFails(setDoc(doc(dbAs(PLANNER_SD1), 'requests', 'req-known-2'), {
       ...base, submittedBy: PLANNER_SD1,
       attachments: [{ name: 'a.pdf', url: 'https://example.com/a.pdf', size: 1024, storagePath: 'attachments/some-other-request/a-123.pdf' }],
     }))
@@ -191,6 +201,21 @@ describe('requests create — 必要欄位/型別/允許欄位驗證', () => {
       attachments: [{ name: 'a.pdf', url: 'https://example.com/a.pdf', size: 1024, storagePath: 12345 }],
     }))
   })
+
+  it('attachments storagePath 多一層子目錄（attachments/{id}/sub/a.pdf）會被擋', async () => {
+    await assertFails(setDoc(doc(dbAs(PLANNER_SD1), 'requests', 'req-known-3'), {
+      ...base, submittedBy: PLANNER_SD1,
+      attachments: [{ name: 'a.pdf', url: 'https://example.com/a.pdf', size: 1024, storagePath: 'attachments/req-known-3/sub/a.pdf' }],
+    }))
+  })
+
+  it('attachments storagePath 檔名區段為空字串（attachments/{id}/）會被擋', async () => {
+    await assertFails(setDoc(doc(dbAs(PLANNER_SD1), 'requests', 'req-known-4'), {
+      ...base, submittedBy: PLANNER_SD1,
+      attachments: [{ name: 'a.pdf', url: 'https://example.com/a.pdf', size: 1024, storagePath: 'attachments/req-known-4/' }],
+    }))
+  })
+
 })
 
 describe('requests 狀態機 — designer 只能單步推進', () => {
@@ -288,6 +313,29 @@ describe('requests — 提交人只能在 pending 時編輯自己的需求', () 
   it('提交人不能藉編輯偷改 status', async () => {
     await seedRequest('own-pending2', { submittedBy: PLANNER_SD1, region: 'SD1', status: 'pending', projectName: 'x' })
     await assertFails(updateDoc(doc(dbAs(PLANNER_SD1), 'requests', 'own-pending2'), { status: 'assigned' }))
+  })
+
+  // 舊資料相容性：docTypes 是後來才加的欄位，既有需求可能完全沒有這個欄位。
+  // request.resource.data.docTypes 直接存取在這種情況下會讓整條規則求值出錯，
+  // 必須用 .get('docTypes', []) 給預設值(見 firestore.rules 的說明)。
+  it('舊文件沒有 docTypes 欄位，提交人只修改允許欄位時仍成功', async () => {
+    await seedRequest('own-pending-no-doctypes', { submittedBy: PLANNER_SD1, region: 'SD1', status: 'pending', projectName: 'x' })
+    await assertSucceeds(updateDoc(doc(dbAs(PLANNER_SD1), 'requests', 'own-pending-no-doctypes'), { projectName: 'y' }))
+  })
+
+  it('docTypes 是合法 list 時編輯成功', async () => {
+    await seedRequest('own-pending-doctypes-list', { submittedBy: PLANNER_SD1, region: 'SD1', status: 'pending', projectName: 'x', docTypes: ['Banner'] })
+    await assertSucceeds(updateDoc(doc(dbAs(PLANNER_SD1), 'requests', 'own-pending-doctypes-list'), { docTypes: ['Banner', 'DM'] }))
+  })
+
+  it('docTypes 改成字串（不是 list）會被擋', async () => {
+    await seedRequest('own-pending-doctypes-string', { submittedBy: PLANNER_SD1, region: 'SD1', status: 'pending', projectName: 'x', docTypes: ['Banner'] })
+    await assertFails(updateDoc(doc(dbAs(PLANNER_SD1), 'requests', 'own-pending-doctypes-string'), { docTypes: 'Banner' }))
+  })
+
+  it('docTypes 改成 map（不是 list）會被擋', async () => {
+    await seedRequest('own-pending-doctypes-map', { submittedBy: PLANNER_SD1, region: 'SD1', status: 'pending', projectName: 'x', docTypes: ['Banner'] })
+    await assertFails(updateDoc(doc(dbAs(PLANNER_SD1), 'requests', 'own-pending-doctypes-map'), { docTypes: { a: 1 } }))
   })
 })
 

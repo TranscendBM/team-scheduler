@@ -51,12 +51,23 @@ jobs:
       - name: Build (test env vars, 不連正式 Firebase 專案)
         run: npm run build
 
+      # test:rules 除了跑 Firestore/Storage rules 測試，還會跑 functions/test/renameUserLogin.test.js
+      # 和 functions/test/resolveActivePlannerCcEmails.test.js 這兩個整合測試(直接 import firebase-admin)。
+      # 這個 job 跟下面的 functions job 是各自獨立的 runner，彼此的 node_modules 不會共用，
+      # 所以這裡一定要自己裝一次 functions/ 的依賴，不能假設 functions job 裝好的東西這裡看得到。
+      - name: Install functions dependencies (test:rules 的整合測試需要 firebase-admin)
+        run: npm ci --prefix functions
+
       - name: Rules tests (Firestore + Storage emulator)
         run: npm run test:rules
 
-      - name: npm audit (frontend)
-        run: npm audit
-        continue-on-error: true
+      # 不再對 frontend audit 用 continue-on-error 無條件放行——那樣會連未來新增的任何
+      # high/critical 漏洞都一併忽略，不只目前已評估過的 react-router GHSA。改用
+      # scripts/check-npm-audit.mjs 讀 scripts/audit-allowlist.json 這份「有記錄理由跟
+      # 到期日」的白名單：只有白名單內、且沒過期的 high 才會放行，critical 一律不放行，
+      # 白名單以外的任何 high/critical(或格式不符預期的 audit 輸出)都會讓這個 step 失敗。
+      - name: npm audit (frontend，經白名單檢查)
+        run: npm run audit:check
 
   functions:
     runs-on: ubuntu-latest
@@ -82,6 +93,7 @@ jobs:
       - name: Test
         run: npm test
 
+      # functions 目前是 0 vulnerabilities，沒有需要放行的已知風險，所以不用白名單機制——
+      # 拿掉 continue-on-error：以後這裡出現任何漏洞都應該讓 CI 失敗，不能被無條件蓋過去。
       - name: npm audit (functions)
         run: npm audit
-        continue-on-error: true
