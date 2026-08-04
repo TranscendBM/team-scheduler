@@ -2,7 +2,12 @@
 // validateAllowlistEntries(白名單 schema 驗證)、validateSpawnResult(spawnSync 結果驗證)。
 // 全部不會真的呼叫 npm audit、不會讀檔——直接餵捏造的 JSON/物件，涵蓋題目要求的所有情境。
 import { describe, it, expect } from 'vitest'
-import { evaluateAudit, validateAllowlistEntries, validateSpawnResult } from '../../scripts/check-npm-audit.mjs'
+import {
+  evaluateAudit,
+  validateAllowlistEntries,
+  validateSpawnResult,
+  parseGitHubAdvisoryUrl,
+} from '../../scripts/check-npm-audit.mjs'
 
 const ALLOWLIST = [
   {
@@ -242,7 +247,7 @@ describe('evaluateAudit — severity 正確性(先前兩個 fail-open bug 的迴
       vulnerabilities: {
         A: { name: 'A', severity: 'critical', via: ['B'] },
         B: { name: 'B', severity: 'high', via: ['C'] },
-        C: { name: 'C', severity: 'moderate', via: [advisoryObj('GHSA-chain-crit-001', 'moderate')] },
+        C: { name: 'C', severity: 'moderate', via: [advisoryObj('GHSA-chan-crit-0001', 'moderate')] },
       },
       critical: 1,
     })
@@ -472,6 +477,112 @@ describe('evaluateAudit — 白名單過期/套件不符', () => {
       metadata: { vulnerabilities: { info: 0, low: 0, moderate: 1, high: 0, critical: 0, total: 1 } },
     })
     expect(evaluateAudit(json, [], { now: new Date('2026-08-01') }).ok).toBe(true)
+  })
+})
+
+describe('parseGitHubAdvisoryUrl — 嚴格解析 GitHub advisory 網址(evil.example 偽造網址迴歸測試)', () => {
+  it('合法的 https://github.com/advisories/GHSA-xxxx-xxxx-xxxx → 解析成功', () => {
+    expect(parseGitHubAdvisoryUrl('https://github.com/advisories/GHSA-qwww-vcr4-c8h2')).toBe('GHSA-qwww-vcr4-c8h2')
+  })
+
+  it('偽造網址 evil.example 帶著同一個 GHSA id → 拒絕(先前版本的 fail-open bug：舊 regex 只看子字串，會誤判成合法)', () => {
+    expect(parseGitHubAdvisoryUrl('https://evil.example/advisories/GHSA-qwww-vcr4-c8h2')).toBe(null)
+  })
+
+  it('github.com.evil.example(字尾相同但其實是別的網域)→ 拒絕', () => {
+    expect(parseGitHubAdvisoryUrl('https://github.com.evil.example/advisories/GHSA-qwww-vcr4-c8h2')).toBe(null)
+  })
+
+  it('子網域(例如 attacker.github.com)→ 拒絕，hostname 必須精確等於 github.com', () => {
+    expect(parseGitHubAdvisoryUrl('https://attacker.github.com/advisories/GHSA-qwww-vcr4-c8h2')).toBe(null)
+  })
+
+  it('相對網址 → 拒絕(new URL 沒有 base，會直接丟例外，被 catch 到回傳 null)', () => {
+    expect(parseGitHubAdvisoryUrl('/advisories/GHSA-qwww-vcr4-c8h2')).toBe(null)
+  })
+
+  it('http(非 https)→ 拒絕', () => {
+    expect(parseGitHubAdvisoryUrl('http://github.com/advisories/GHSA-qwww-vcr4-c8h2')).toBe(null)
+  })
+
+  it('pathname 尾端多餘路徑段落(例如 /advisories/GHSA-xxxx/something)→ 拒絕', () => {
+    expect(parseGitHubAdvisoryUrl('https://github.com/advisories/GHSA-qwww-vcr4-c8h2/extra')).toBe(null)
+  })
+
+  it('pathname 前面多餘路徑段落(例如 /en/advisories/GHSA-xxxx)→ 拒絕', () => {
+    expect(parseGitHubAdvisoryUrl('https://github.com/en/advisories/GHSA-qwww-vcr4-c8h2')).toBe(null)
+  })
+
+  it('GHSA id 格式不合法(通不過既有 GHSA_RE)→ 拒絕', () => {
+    expect(parseGitHubAdvisoryUrl('https://github.com/advisories/GHSA-bad')).toBe(null)
+    expect(parseGitHubAdvisoryUrl('https://github.com/advisories/NOT-A-GHSA-ID')).toBe(null)
+  })
+
+  it('帶 query string → 保守拒絕(不接受任何額外參數)', () => {
+    expect(parseGitHubAdvisoryUrl('https://github.com/advisories/GHSA-qwww-vcr4-c8h2?utm_source=x')).toBe(null)
+  })
+
+  it('帶 hash → 保守拒絕', () => {
+    expect(parseGitHubAdvisoryUrl('https://github.com/advisories/GHSA-qwww-vcr4-c8h2#section')).toBe(null)
+  })
+
+  it('帶 username/password(https://user:pass@github.com/...)→ 拒絕', () => {
+    expect(parseGitHubAdvisoryUrl('https://user:pass@github.com/advisories/GHSA-qwww-vcr4-c8h2')).toBe(null)
+  })
+
+  it('非預設 port(例如 :8443)→ 拒絕', () => {
+    expect(parseGitHubAdvisoryUrl('https://github.com:8443/advisories/GHSA-qwww-vcr4-c8h2')).toBe(null)
+  })
+
+  it('明確指定 https 預設 port(:443)→ 正規化後視同沒有指定 port，仍然合法', () => {
+    expect(parseGitHubAdvisoryUrl('https://github.com:443/advisories/GHSA-qwww-vcr4-c8h2')).toBe('GHSA-qwww-vcr4-c8h2')
+  })
+
+  it('malformed URL(完全不是網址的字串)→ 安全回傳 null，不會噴錯', () => {
+    expect(parseGitHubAdvisoryUrl('not a url at all')).toBe(null)
+    expect(parseGitHubAdvisoryUrl('')).toBe(null)
+    expect(parseGitHubAdvisoryUrl(undefined)).toBe(null)
+    expect(parseGitHubAdvisoryUrl(null)).toBe(null)
+  })
+
+  it('javascript:/data: 偽造網址 → 拒絕(protocol 不是 https:)', () => {
+    expect(parseGitHubAdvisoryUrl('javascript:alert(1)')).toBe(null)
+    expect(parseGitHubAdvisoryUrl('data:text/html,x')).toBe(null)
+  })
+})
+
+describe('evaluateAudit — evil.example 偽造 advisory 網址搭配真實白名單(端對端 fail-open 迴歸測試)', () => {
+  it('advisory url 被偽造成 evil.example，即使 GHSA id 剛好對上白名單既有項目，也一律 fail closed', () => {
+    // 這裡的白名單項目跟 scripts/audit-allowlist.json 裡實際的項目一致(GHSA-qwww-vcr4-c8h2 /
+    // react-router / high)，模擬「白名單本身審核流程是正常的，但 npm audit 回傳的 advisory
+    // url 被偽造」這種情境 —— 修正前的舊 regex 只看子字串，一樣會抓出同一個 GHSA id，
+    // 進而被誤判成「這就是白名單審核過的那個 advisory」而放行。
+    const json = JSON.stringify({
+      auditReportVersion: 2,
+      vulnerabilities: {
+        'react-router': {
+          name: 'react-router',
+          severity: 'high',
+          isDirect: false,
+          via: [{
+            source: 1,
+            title: 'React Router: RSC Mode CSRF Bypass Allows Action Execution Before 400 Response',
+            url: 'https://evil.example/advisories/GHSA-qwww-vcr4-c8h2',
+            severity: 'high',
+          }],
+          effects: ['react-router-dom'],
+          range: '7.12.0 - 8.2.0',
+          nodes: ['node_modules/react-router'],
+        },
+      },
+      metadata: { vulnerabilities: { info: 0, low: 0, moderate: 0, high: 1, critical: 0, total: 1 } },
+    })
+    const result = evaluateAudit(json, ALLOWLIST, { now: new Date('2026-08-01') })
+    expect(result.ok).toBe(false)
+    expect(result.reasons.some((r) => r.includes('不是可信的 GitHub advisory 網址'))).toBe(true)
+    // 偽造網址解析不出可信的 GHSA id，這個 advisory 完全不會進入 advisories 清單，
+    // 而是變成 errors/reasons —— 不能因為「解析不出來」就悄悄放行。
+    expect(result.advisories.length).toBe(0)
   })
 })
 

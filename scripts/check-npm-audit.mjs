@@ -43,6 +43,46 @@ function higherSeverity(a, b) {
   return SEVERITY_RANK[a] >= SEVERITY_RANK[b] ? a : b
 }
 
+// 嚴格解析「GitHub Security Advisory 網址」，只接受精確符合
+// https://github.com/advisories/GHSA-xxxx-xxxx-xxxx 的網址，回傳 GHSA id；解析失敗一律回傳 null。
+//
+// 先前版本用 `item.url.match(/\/advisories\/(GHSA-[a-zA-Z0-9-]+)/)`——這是對整個字串做
+// 不限位置的子字串比對，不驗證 protocol/hostname/path 結構，所以像
+// https://evil.example/advisories/GHSA-qwww-vcr4-c8h2 這種偽造網址一樣會被抓出
+// GHSA-qwww-vcr4-c8h2，接著就可能剛好對上白名單裡同一個 GHSA/package 而被放行——
+// 白名單原本審核的是「真正的 GitHub advisory」，不是「任何網址只要子字串長得像」。
+//
+// 用 URL API 把每個欄位分開精確比對，不是憑一個 regex 從任意字串「抓出一段看起來像的」：
+// - protocol 必須恰好是 https:
+// - hostname 必須恰好是 github.com(不允許子網域，例如 github.com.evil.example 或
+//   attacker.github.com 都會被拒；也不允許 evil.example 這種完全不相關的網域)
+// - 不允許網址帶 username/password(https://user:pass@github.com/...)
+// - 不允許非預設 port(https 預設 443；URL 正規化後預設 port 會是空字串)
+// - 不允許帶 query/hash(保守拒絕，避免額外參數造成解讀歧義)
+// - pathname 必須精確符合 /advisories/GHSA-xxxx-xxxx-xxxx，不接受多餘的前後路徑段落
+// - 解析出的 GHSA id 仍要通過既有 GHSA_RE 驗證(格式必須是 4-4-4 的合法 GHSA id)
+// - `new URL()` 沒有給 base，本身就會讓相對路徑(例如 "/advisories/GHSA-xxxx")直接丟例外，
+//   一併在這裡被 try/catch 擋下來回傳 null，不需要另外判斷「是不是相對路徑」。
+export function parseGitHubAdvisoryUrl(rawUrl) {
+  if (typeof rawUrl !== 'string' || rawUrl === '') return null
+  let u
+  try {
+    u = new URL(rawUrl)
+  } catch {
+    return null
+  }
+  if (u.protocol !== 'https:') return null
+  if (u.hostname !== 'github.com') return null
+  if (u.username !== '' || u.password !== '') return null
+  if (u.port !== '') return null
+  if (u.search !== '' || u.hash !== '') return null
+  const m = u.pathname.match(/^\/advisories\/(GHSA-[a-zA-Z0-9-]+)$/)
+  if (!m) return null
+  const ghsaId = m[1]
+  if (!GHSA_RE.test(ghsaId)) return null
+  return ghsaId
+}
+
 function isNonNegativeInteger(v) {
   return typeof v === 'number' && Number.isInteger(v) && v >= 0
 }
@@ -181,9 +221,13 @@ function resolveAdvisoriesForPackage(pkgName, vulnerabilities, visited, inherite
         errors.push(`套件 "${pkgName}" 的 advisory 缺少 url，無法解析`)
         continue
       }
-      const m = item.url.match(/\/advisories\/(GHSA-[a-zA-Z0-9-]+)/)
-      if (!m) {
-        errors.push(`套件 "${pkgName}" 的 advisory url 無法解析出 GHSA id：${item.url}`)
+      const ghsaId = parseGitHubAdvisoryUrl(item.url)
+      if (!ghsaId) {
+        errors.push(
+          `套件 "${pkgName}" 的 advisory url 不是可信的 GitHub advisory 網址(必須精確符合 `
+          + `https://github.com/advisories/GHSA-xxxx-xxxx-xxxx，不接受子網域/偽造網域/`
+          + `query/hash/相對路徑/非預設 port)：${item.url}`,
+        )
         continue
       }
       if (item.severity !== undefined && !isKnownSeverity(item.severity)) {
@@ -196,7 +240,7 @@ function resolveAdvisoriesForPackage(pkgName, vulnerabilities, visited, inherite
       advisories.push({
         package: pkgName,
         severity: advisorySeverity,
-        ghsaId: m[1],
+        ghsaId,
         title: item.title || '(no title)',
         url: item.url,
       })

@@ -49,11 +49,11 @@ function isAttachmentPathForRequest(path, requestId) {
   return parts.length === 3 && parts[0] === 'attachments' && parts[1] === requestId && FILENAME_RE.test(parts[2])
 }
 
-// 給定一筆附件 metadata 跟它應該屬於的 requestId，回傳可以安全拿去 render(img src、iframe src、
-// a href、window.open)的網址字串；驗證失敗一律回傳 null —— 呼叫端必須完全不載入、不開啟、
-// 不產生可點擊連結，不能退而求其次顯示原始網址或部分渲染。
+// 核心驗證鏈，回傳這個附件「實際可以操作」(顯示連結、或刪除 Storage 物件)的 Storage 路徑；
+// 驗證失敗一律回傳 null —— 呼叫端必須完全不載入、不開啟、不產生可點擊連結、不呼叫 deleteObject，
+// 不能退而求其次顯示原始網址、部分渲染，或用寬鬆規則猜一個路徑出來刪。
 //
-// 驗證鏈：
+// 驗證鏈(跟 functions/index.js 的 resolveAttachmentPath 完全對應)：
 // 1) url 一定要先通過 parseAttachmentUrl(https/host/bucket/attachments 前綴)。
 // 2) 如果 storagePath 存在，必須跟「從已驗證 URL 解出的路徑」完全相等 —— 不相等就是可疑組合
 //    (合法網址搭配指向別的物件的 storagePath)，一律拒絕，不是「挑一個信任」。
@@ -61,10 +61,23 @@ function isAttachmentPathForRequest(path, requestId) {
 //    - 舊附件沒有 storagePath 時，仍然只信任「已驗證 URL 解出的路徑」，且一樣要綁定目前 requestId
 //      (不能因為沒有 storagePath 就跳過 requestId 檢查)。
 //    - 有 storagePath 時，兩邊都要對得上目前 requestId。
-export function getSafeAttachmentUrl(attachment, requestId) {
+//
+// 用在「刪除」這種有副作用的操作時尤其重要：manager 能刪任何 request 的附件，如果單純信任
+// attachment.storagePath 或用寬鬆的字串反推，等於讓 manager 端的 UI 有 confused-deputy 風險 ——
+// 惡意或壞掉的資料可能讓 UI 對著 requestId A 卻刪到 storagePath 指向 requestId B 的物件。
+export function resolveSafeAttachmentPath(attachment, requestId) {
   const parsed = parseAttachmentUrl(attachment?.url)
   if (!parsed) return null
   if (attachment?.storagePath !== undefined && attachment.storagePath !== parsed.path) return null
   if (!isAttachmentPathForRequest(parsed.path, requestId)) return null
-  return parsed.url
+  return parsed.path
+}
+
+// 給定一筆附件 metadata 跟它應該屬於的 requestId，回傳可以安全拿去 render(img src、iframe src、
+// a href、window.open)的網址字串；驗證失敗一律回傳 null。建立在 resolveSafeAttachmentPath 之上，
+// 兩者共用同一套驗證鏈，不會有「顯示的連結」跟「實際會被刪除的路徑」驗證標準不一致的情況。
+export function getSafeAttachmentUrl(attachment, requestId) {
+  const path = resolveSafeAttachmentPath(attachment, requestId)
+  if (!path) return null
+  return parseAttachmentUrl(attachment.url).url
 }

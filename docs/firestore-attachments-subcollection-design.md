@@ -704,24 +704,80 @@ expression 數量是不同的限制維度，但一樣是要小心的資源）。
 
 4. **Destination 存在性與一致性檢查(冪等的關鍵)**：
    - 複製前先檢查 destination path 是否已存在(對應「這是不是重跑」的情況)。
-   - **不存在** → 執行第 5 點的複製。
+   - **不存在** → 執行第 5 點的複製；複製時可以帶上第 1 點解析 source path 當下讀到的
+     source object `generation`(例如 `bucket.file(sourcePath, { generation:
+     sourceGeneration }).copy(...)`)，把「這次要複製的是哪一個 source 版本」釘死——這是
+     `generation` 唯一該被拿來做的事：**指定/釘住來源版本**，不是拿來跟 destination
+     比對是否相等(見下方修正)。
    - **已存在** → **不可盲目覆蓋**，必須驗證 destination object 的 `size` 與
-     `md5Hash`/`generation`(或等效的內容指紋 metadata)跟 source object 完全一致：
+     `md5Hash`(沒有 `md5Hash` 時退回 `crc32c`，或其他明確定義過的等效內容指紋)跟 source
+     object 完全一致：
      - 一致 → 視為「上次已經複製成功，這次重跑不用重新複製」，跳過複製，直接進入第 6 點
        (取得/確認下載 URL)。
      - **不一致 → 停止這筆附件的遷移並回報**(可能是 hash 碰撞、或曾經被別的東西寫過這個
        路徑這種不應該發生的情況)，不能因為路徑存在就假設內容一定對，更不能覆蓋掉一個
        來源不明的物件。
+
+   **修正(第五輪)：`generation` 絕對不能被拿來當內容一致性的比對依據**——`generation`
+   是「這個物件被寫入的版本識別碼」，**同一份內容再複製一次，destination 也會拿到一個
+   全新的 `generation`**，跟 source 的 `generation` 天生就不會相等(這不是例外情況，是
+   `generation` 的正常語意，每次寫入——包含 copy——都會產生新的 generation)。原草稿把
+   `generation` 跟 `md5Hash` 並列成「或等效的內容指紋」是錯誤的——`generation` 從來不是
+   內容指紋，拿它去跟 source 比對相等，會讓「這是不是同一份內容」這個判斷**恆為假**
+   (destination 的 generation 幾乎不可能等於 source 的 generation)，導致這裡的冪等檢查
+   形同虛設、每次重跑都被誤判成「不一致」而中止，即使內容其實完全沒問題。內容是否一致，
+   只能用 `size` + `md5Hash`(或 `crc32c`)這種**真正反映內容**的欄位判斷；`generation`/
+   `metageneration` 的正確用途是：`generation` 用來**釘住/指定要複製的 source 版本**
+   (上面已說明)，`metageneration` 用來當**後續 metadata 更新的並行控制 precondition**
+   (見下方第 6 點)——兩者都跟「內容是否相同」無關，不能混用。
 5. **Storage copy**：用**已核准的一次性 Admin migration function/script**（Admin SDK，
    例如 `bucket.file(sourcePath).copy(bucket.file(destinationPath))`）把 source object
    複製到 destination path——**這一步是實際的正式資料操作，執行前必須另外取得明確核准**
    （見第 15 節），本文件本身不構成這個核准。
-6. **新的下載 URL/token**：複製完成後，在 destination object 上設定新的
-   `firebaseStorageDownloadTokens` metadata(產生一個新 token，不是沿用 source 的
-   token)，組出新的下載 URL(`https://firebasestorage.googleapis.com/v0/b/{bucket}/o/
-   {encodeURIComponent(destinationPath)}?alt=media&token={newToken}`)——**新舊
-   `storagePath`/`url` 不會相同，也不應該要求它們相同**，這正是本輪要修正的錯誤預期。
-7. **寫入子集合 `ready` 文件**，欄位對應第 1 節的 schema：
+6. **下載 URL/token 必須是 retry-safe 的**：
+
+   **修正(第五輪)：原草稿「複製完成後一律產生新 token」在重跑時會撤銷已經寫進
+   Firestore、甚至可能已經被使用者瀏覽器開啟/快取/分享出去的舊下載連結**——`token`
+   一換，舊 URL 立刻失效，這是不該發生的副作用，也違反「遷移可以安全重跑」這個第 11
+   節開頭就強調的前提。正確流程：
+
+   - **先讀 destination object 目前的 metadata**，檢查 `firebaseStorageDownloadTokens`
+     是否已經有值：
+     - **已經有合法 token** → 直接沿用，**不重新產生**。這對應「上次執行到這裡才中斷、
+       這次重跑」的情況——token 不變，代表任何已經寫進 Firestore、甚至已經被使用者複製
+       走的舊下載連結，重跑之後仍然有效，不會被靜默撤銷。
+     - **完全沒有 token**(destination 是這次才複製出來、或先前中斷在 token 設定之前)
+       → 產生一個新 token，寫入 metadata。
+   - **寫入 token metadata 時，用 `ifMetagenerationMatch` 帶上剛剛讀到的
+     `metageneration` 當 precondition**：如果兩個遷移程序(或一次遷移程序被意外並行
+     執行兩次)同時處理同一筆附件，其中一個會贏得這次 metadata 寫入，另一個的
+     `ifMetagenerationMatch` 會因為 metageneration 已經被贏家改變而失敗——**輸家收到
+     precondition 失敗後，必須重新讀一次 destination metadata、採用贏家已經寫入的
+     token**，不能重試覆蓋(重試覆蓋只會產生第二個 token，讓贏家先前可能已經用掉/寫進
+     Firestore 的 token 失效，等於繞了一圈還是撞回同一個問題)。這正是 `metageneration`
+     該有的用途：**metadata 更新的並行控制 precondition**，不是拿來跟 source 的
+     `generation` 比對(見上方第 4 點的修正)。
+   - 組出下載 URL 用的是**這次確認/沿用的 token**(不管是既有的還是新產生的)：
+     `https://firebasestorage.googleapis.com/v0/b/{bucket}/o/
+     {encodeURIComponent(destinationPath)}?alt=media&token={token}`——**新舊
+     `storagePath`/`url` 本來就不會相同(destination 是新的四段路徑)，這點維持本文件
+     先前輪次的修正結論不變；這一輪修正的是另一個獨立問題：「同一個 destination 重跑
+     時，token 不應該每次都換」。
+7. **寫入子集合 `ready` 文件前，先確認這個 slot 是否已經存在(修正(第五輪)新增——這一步
+   原草稿沒有，直接寫會讓重跑時覆蓋掉已經正確的文件、甚至改掉 `createdAt`)**：
+   - **slot 不存在** → 正常寫入(下方的完整欄位)。
+   - **slot 已存在，且欄位(`storagePath`/`url`/`size`/`objectName`/`reservationId`)
+     跟這次打算寫入的值完全一致** → **保留原文件，不重寫**，尤其**不可以覆蓋
+     `createdAt`**(`createdAt` 語意上代表這份 reservation 文件第一次被建立的時間，重跑
+     不是「重新建立」，覆蓋掉會讓這個欄位失去意義)，也不需要重新寫入 `url`(即使因為
+     上方第 6 點的修正，token 沒變、算出來的 URL 字串理論上會相同，仍然不必多做一次
+     寫入)。
+   - **slot 已存在，但欄位跟這次打算寫入的值不一致** → **停止這筆附件的遷移並回報**，
+     不可以盲目覆蓋(這種不一致通常代表 bug——例如確定性 `migrationReservationId` 算法
+     被改過，或曾經有非預期的手動寫入)，覆蓋一份「看起來已經 ready」但實際上跟目前來源
+     對不上的文件，風險比中止並要求人工排查更高。
+
+   確認可以寫入(或需要初次寫入)後，欄位對應第 1 節的 schema：
    ```js
    {
      name: oldAttachment.name,              // 沿用舊資料的顯示名稱
@@ -782,6 +838,27 @@ expression 數量是不同的限制維度，但一樣是要小心的資源）。
   `ready` 文件寫入失敗」(例如腳本在兩步之間當掉)，重跑時：第 11 節第 4 點的「destination
   已存在」分支會被觸發，驗證內容一致後跳過重新複製，直接補寫 Firestore 文件——不需要
   額外的復原邏輯，這正是「確定性 ID + 存在性檢查」這個設計要達成的效果。
+- **時序案例(第五輪新增)：Storage copy 成功、token 設定成功、Firestore `ready` 文件寫入
+  成功，但版本切換前被中斷，之後重跑**——證明第 11 節第 4/6/7 點的修正合起來能保證
+  「重跑不會撤銷 token、不會改動 `createdAt`、不會產生第二個 Storage 物件」：
+
+  | 時間 | 事件 |
+  |---|---|
+  | t=0 | 遷移程序處理某份 request 的第 2 筆舊附件(slot `1`)：source path 解析成功，`migrationReservationId` 確定性算出 |
+  | t=0 | destination path 尚不存在 → 執行 Storage copy，成功(`attachments/{requestId}/{migrationReservationId}/report.pdf` 產生，`generation=G1`) |
+  | t=0 | destination metadata 目前沒有 `firebaseStorageDownloadTokens` → 依第 11 節第 6 點，產生新 token `T1`，用 `ifMetagenerationMatch` 寫入成功(`metageneration=M1`) |
+  | t=0 | 用 `T1` 組出下載 URL，依第 11 節第 7 點確認 slot `1` 目前不存在 → 正常寫入子集合 `ready` 文件：`{ storagePath, url: '...token=T1', size, createdAt: <t=0>, reservationId: migrationReservationId, ... status:'ready' }` |
+  | t=0 | 遷移程序在**繼續處理下一筆附件時**當掉(例如程序被強制終止)——這份 request 的 `attachmentsSchemaVersion` 完全還沒被觸碰，第 13a 節的 transaction 版本切換這時候根本還沒被呼叫到(要等所有附件都處理完才會嘗試切換) |
+  | t=10min | 排程/人工重新觸發同一份 request 的遷移(重跑) |
+  | t=10min | 處理 slot `1` 時，第 11 節第 4 點「destination 存在性檢查」發現 destination path 已存在(`generation=G1` 的那個物件還在)，讀取它的 `size`/`md5Hash` 跟 source 比對 → **一致**(比對用的是 `size`/`md5Hash`，不是 `generation`，所以即使 destination 的 `generation` 是複製當時產生的 `G1`、跟 source 的 generation 本來就不同，也不會被誤判成「不一致」) → **跳過 Storage copy** |
+  | t=10min | 第 6 點：讀 destination metadata，發現 `firebaseStorageDownloadTokens` 已經有值(`T1`) → **直接沿用 `T1`，不產生新 token** |
+  | t=10min | 第 7 點：讀 slot `1`，發現文件已存在，欄位(`storagePath`/`url`(帶著 `T1`)/`size`/`objectName`/`reservationId`)跟這次要寫入的值完全一致 → **保留原文件，不重寫，`createdAt` 維持 t=0 那次寫入的值** |
+
+  **結果**：token 沒有被撤銷(`T1` 全程未變，任何已經拿到 t=0 那個下載連結的人仍然能用)、
+  `createdAt` 沒有被改成 t=10min(仍然是 t=0，正確反映這份 reservation 文件真正的建立
+  時間)、Storage 上**沒有產生第二個物件**(destination path 從頭到尾只有 t=0 那次複製
+  產生的 `generation=G1` 這一個物件，重跑沒有再複製一次)。
+
 - **孤兒 destination object 的偵測**：如果腳本在「複製成功」之後、「寫入 Firestore 之前」
   就徹底中止且從未重跑（不是上面「有重跑」的情況），會留下一個有 Storage object、但沒有
   對應 Firestore `ready` 文件的孤兒。因為 `migrationReservationId` 是從
@@ -824,6 +901,153 @@ expression 數量是不同的限制維度，但一樣是要小心的資源）。
   任何時間點重新執行，找出「陣列與子集合不一致」的文件 id 清單，以及第 12 節提到的孤兒
   destination object 清單。
 - 稽核腳本的執行本身（即使是唯讀）如果要對接正式 Firebase 專案，同樣需要另外核准。
+
+## 13a. schemaVersion 切換必須用 Firestore transaction 保護(修正(第五輪)：原設計的競態漏洞)
+
+**原設計的問題**：第 6 節、第 13 節描述「所有一致性檢查通過後，設定
+`attachmentsSchemaVersion: 2`」，但沒有規定「檢查」跟「設定」之間是不是同一個原子操作。
+遷移腳本實際執行時，第 13 節列出的 9 項檢查(逐筆比對 name/size、Storage object
+存在性與內容指紋、storagePath 格式...)勢必需要多次個別的讀取，這些讀取如果跟最後
+寫入 `attachmentsSchemaVersion: 2` 不是同一個 transaction，就會有一段「檢查通過之後、
+真正寫入之前」的空窗期——舊前端(仍在使用尚未部署新 schemaVersion 邏輯的瀏覽器分頁)
+如果剛好在這個空窗期對 `attachments` 陣列送出寫入(例如提交人在 pending 狀態下新增一筆
+附件，見第 4 節 `canEditRequestAttachmentsAs` 對 pending 狀態的 submitter 是允許寫的)，
+遷移腳本用的是「檢查當下」的快照，完全不知道 parent 文件已經在檢查之後、切換之前又被
+改過，切換動作依然會照原計畫執行，導致：`attachmentsSchemaVersion` 被設成 `2`，但
+子集合裡缺少舊前端剛剛新增的那一筆附件——使用者剛上傳的附件在切版本後直接消失(不是
+遺失資料，資料還在舊 `attachments` 陣列裡，但版本 2 的讀取邏輯完全不看那個陣列，等同
+「使用者看不到自己剛上傳的附件」)。
+
+**修正：切換動作本身必須是單一 Firestore transaction，在 transaction 內重新讀取
+(不是沿用檢查階段的舊快照)parent 文件與所有預期的子集合 slot，全部條件仍然成立才寫入**：
+
+```js
+async function switchToSchemaVersion2(db, requestId, migrationSnapshot) {
+  // migrationSnapshot 是遷移「開始」處理這份 request 時拍下的快照：
+  // { attachments: [...], parentUpdateTime: <當時讀到的 parent DocumentSnapshot.updateTime> }
+  // 這是遷移流程開始時的快照，不是「檢查階段」重新讀過的版本——用途正是要在 transaction
+  // 內拿它跟「現在」的 parent 文件比對，抓出檢查通過後才發生的變動。
+  await db.runTransaction(async (tx) => {
+    const parentRef = db.collection('requests').doc(requestId)
+
+    // ── 以下全部是 get()，必須排在這個 transaction 裡任何 write 之前
+    //    (Firestore transaction 的 API 限制：所有讀取要先於所有寫入完成) ──
+    const parentSnap = await tx.get(parentRef)
+
+    const currentVersion = parentSnap.get('attachmentsSchemaVersion') ?? 1
+    if (currentVersion !== 1) {
+      throw new MigrationAbortError(
+        `parent 目前 attachmentsSchemaVersion=${currentVersion}，不是預期的 1(可能已經被` +
+        '其他遷移程序切換過，或曾經被回退過又被別的流程重新切換)，中止，不強行覆蓋')
+    }
+
+    // 用 Admin SDK DocumentSnapshot.updateTime 當精確的「這份文件自快照後是否被寫過」
+    // precondition——這是 Firestore 原生的文件版本戳記，任何一次成功寫入(不管改哪個
+    // 欄位)都會讓它前進，不需要額外自己維護一個計數/版本欄位(等效的作法是自行維護一個
+    // `migrationRevision` 欄位，每次遷移相關寫入都遞增，兩者擇一皆可，這裡選用
+    // `updateTime` 是因為它是 Firestore 原生機制，不需要額外欄位跟寫入)。
+    if (!parentSnap.updateTime.isEqual(migrationSnapshot.parentUpdateTime)) {
+      throw new MigrationAbortError(
+        'parent 文件的 updateTime 跟遷移開始時的快照不同，代表這段期間有其他寫入(很可能是' +
+        '舊前端寫了 attachments 陣列)，中止，必須從全新快照重新遷移這份 request')
+    }
+
+    // updateTime 比對已經足以偵測「任何寫入」，這裡對 attachments 陣列內容再做一次逐項
+    // 比對，是防禦性的第二層，兩者互補，不是其中一個可以取代另一個。
+    const currentAttachments = parentSnap.get('attachments') ?? []
+    if (!deepEqual(currentAttachments, migrationSnapshot.attachments)) {
+      throw new MigrationAbortError('parent 的 attachments 陣列內容跟快照不同，中止')
+    }
+
+    const expectedCount = migrationSnapshot.attachments.length
+    const slotRefs = Array.from({ length: expectedCount }, (_, i) =>
+      parentRef.collection('attachments').doc(String(i)))
+    // 多讀一個「預期範圍之外」的 slot(index == expectedCount)，確認沒有被多塞一筆——
+    // 例如舊前端在遷移期間新增了第 N+1 筆。理論上 attachments 陣列比對已經涵蓋這個
+    // 情況，這裡是顯式的第二層防護。
+    const extraSlotRef = parentRef.collection('attachments').doc(String(expectedCount))
+    const [slotSnaps, extraSlotSnap] = await Promise.all([
+      Promise.all(slotRefs.map((ref) => tx.get(ref))),
+      tx.get(extraSlotRef),
+    ])
+
+    if (extraSlotSnap.exists) {
+      throw new MigrationAbortError(`偵測到 slot ${expectedCount} 存在(超出預期數量)，中止`)
+    }
+
+    for (let i = 0; i < expectedCount; i++) {
+      const snap = slotSnaps[i]
+      const source = migrationSnapshot.attachments[i]
+      if (!snap.exists) {
+        throw new MigrationAbortError(`slot ${i} 不存在，遷移尚未完成，中止`)
+      }
+      const data = snap.data()
+      if (data.status !== 'ready') {
+        throw new MigrationAbortError(`slot ${i} 狀態是 ${data.status}(不是 ready)，中止`)
+      }
+      if (data.name !== source.name || data.size !== source.size) {
+        throw new MigrationAbortError(`slot ${i} 的 name/size 跟來源附件不一致，中止`)
+      }
+    }
+
+    // ── 以上全部條件成立，這裡才是這個 transaction 唯一的 write ──
+    tx.update(parentRef, { attachmentsSchemaVersion: 2 })
+  })
+}
+```
+
+**中止之後怎麼辦**：`MigrationAbortError` 不是「重試同一個 transaction」就能解決(重試
+只是重新執行同一段程式碼，讀到的 parent 文件狀態不會因為重試而改變)，正確處理是**整份
+request 的遷移從第 11 節第 1 點重新開始**(重新拍一次快照、重新走一次「解析 source →
+確認 destination → 更新子集合 ready 文件」——第 11 節第 4 點的存在性/一致性檢查加上第
+7 點的既有文件比對，讓這次重跑不會重複複製、重複寫入已經正確的部分，只會處理真正
+「跟新快照不一致」的差異，例如舊前端新增的那一筆附件)。**絕對不能拿舊快照硬切版本**——
+這正是原設計缺漏的地方。
+
+**部署順序/遷移鎖問題(需求明確要求不能用「待定」帶過)**：
+
+上面的 transaction 只能*偵測*空窗期內的舊前端寫入並中止，不能*阻止*舊前端寫入本身
+(舊前端不知道遷移這件事、也不會被遷移腳本通知要暫停)。要讓「中止後重跑」這個安全網
+不會變成無限迴圈(舊前端持續活躍、每次都剛好卡進空窗期)，必須從結構上限縮舊前端*能夠*
+寫入 `attachments` 陣列的情況，而不是只靠事後偵測：
+
+1. **利用現有 Rules 既有的限制**：第 4 節 `canEditRequestAttachmentsAs` 顯示，`attachments`
+   陣列只有在 `parent.status == 'pending'` 時，submitter 才能寫。**`status != 'pending'`
+   的 request 完全不可能發生這個競態**(不管前端新舊，Rules 本身就擋掉了對 `attachments`
+   的寫入)——這批 request 可以在任何時間點安全遷移，上面的 transaction 檢查對它們來說
+   永遠會通過(除非有 bug)，純粹是防禦性的，不是真正需要靠它擋下什麼。
+2. **`status == 'pending'` 的 request 才是真正有競態風險的子集**：這批 request 的遷移，
+   **必須排在「新版前端(不再送出舊 `attachments` 陣列寫入路徑、改用第 7 節 reservation
+   流程)已經完整上線、且已經給足夠時間讓所有使用中的舊前端分頁過期/使用者重新整理」
+   之後才開始**——這是明確的**部署順序要求**，不是遷移腳本自己的邏輯能保證的事，必須
+   寫進遷移的 runbook：先部署新前端 + 等待一段觀察期(依 SPA 快取策略/使用者平均 session
+   長度抓一個合理值)，才能對 `status == 'pending'` 的 request 執行遷移。
+3. **即使做到第 2 點，仍保留 transaction 中止+重跑這個安全網**，作為「萬一有人開著離線
+   分頁很久才重新連線」這種邊界情況的最後防線，而不是唯一防線——**兩層防護互補**：
+   部署順序從根源上讓「舊前端還在寫」這件事在正常操作下不會發生，transaction 則確保
+   萬一真的發生了，也不會讓遷移用一份過期快照錯誤地切版本。
+4. **重跑次數與人工介入**：遷移腳本對同一份 request 的 transaction 中止重跑，應該有
+   一個合理上限(例如 3 次)；超過上限仍然持續被中止，代表有不符預期的持續寫入(可能是
+   舊前端比預期活躍更久、或部署順序沒有被正確遵守)，這時應該停止自動重跑、記錄下來
+   交由人工排查，而不是無限重試耗用資源。
+
+**時序案例(第五輪新增)：遷移讀到快照 A → 舊前端在期間新增附件 B → 嘗試切版本被
+transaction 擋下**
+
+| 時間 | 事件 |
+|---|---|
+| t=0 | 某份 `status == 'pending'` 的 request，舊 `attachments` 陣列有 2 筆附件。遷移腳本開始處理這份 request：拍下快照 A(`migrationSnapshot = { attachments: [a0, a1], parentUpdateTime: U0 }`) |
+| t=0~2min | 遷移腳本依第 11 節流程，把 2 筆舊附件分別複製到子集合 slot `0`、`1`，全部寫入 `ready` 狀態成功 |
+| t=1min | (跟遷移腳本的處理並行)一個還在使用舊版快取前端的使用者分頁，對這份 request 送出「新增第 3 個附件」的請求——舊前端不知道遷移正在進行，直接對 `attachments` 陣列做 `update(requestRef, { attachments: [...old, newAttachment] })`，這次寫入完全合法(Rules 允許 pending 狀態的 submitter 這樣做)，成功，parent 文件的 `updateTime` 從 `U0` 前進到 `U1` |
+| t=2min | 遷移腳本完成第 13 節列出的一致性檢查(比對到的還是快照 A 那 2 筆，因為腳本手上只有 t=0 拍的快照，不知道 t=1min 發生了新增)，準備呼叫上面的 `switchToSchemaVersion2(db, requestId, migrationSnapshot /* 快照 A */)` |
+| t=2min | transaction 內 `tx.get(parentRef)` 重新讀到**目前**的 parent 文件：`updateTime = U1`，跟 `migrationSnapshot.parentUpdateTime`(`U0`)不相等 → **拋出 `MigrationAbortError`，`attachmentsSchemaVersion` 完全沒有被寫入**，這份 request 仍然停留在版本 1(讀舊陣列)，使用者剛新增的第 3 筆附件(在舊陣列裡)仍然看得到 |
+| t=2min | 遷移腳本捕捉到 `MigrationAbortError`，記錄「這份 request 需要重跑」，**不重試同一個快照**，等待下一輪遷移批次重新處理這份 request：重新讀 parent 文件拍快照 B(`attachments` 現在是 3 筆、`parentUpdateTime = U1`)，對新增的第 3 筆附件走完整的第 11 節流程(前 2 筆因為 destination 已存在且內容一致，第 4 點會跳過重新複製)，全部 3 筆都 ready 後，重新嘗試 `switchToSchemaVersion2`(這次 transaction 內讀到的 `updateTime` 如果仍然是 `U1`，比對通過，成功切換到版本 2) |
+
+**這個時序案例證明**：即使遷移腳本的一致性檢查(第 13 節)是在「檢查當下看起來一切正常」
+的情況下完成的，只要中間有任何一次舊前端寫入插入，最終的 transaction 一定會偵測到並
+中止，不會用一份已經過期的快照把 `attachmentsSchemaVersion` 錯誤地切成 2——這正是
+第 13a 節要解決的問題，也是「檢查」跟「切換」必須是同一個 transaction、而不是「檢查
+完再另外寫入」兩個獨立步驟的根本原因。
 
 ## 14. 舊版前端與新版資料的相容性
 
