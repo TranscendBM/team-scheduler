@@ -716,6 +716,236 @@ export const notifyUpcomingLeave = onSchedule(
   }
 )
 
+// ── 秀展清單同步：Google Sheet 是資料來源，Firestore projects 只是唯讀鏡像 ────────
+// 背景：秀展的「基本資料」(名稱/日期/地點/預算…) 改由 Google Sheet 維護，不想要使用者
+// 同時在 App 跟 Sheet 兩邊輸入。但「負責人與設計師指派」(assignments)明確留在 Firebase，
+// 這裡的同步邏輯絕對不能覆蓋掉 assignments，見下方 syncTradeshowsFromSheet 的 merge 寫法。
+//
+// Sheet 目前是「有連結就能看」的公開權限，不需要 service account／OAuth，直接用
+// Google Sheets 的 gviz CSV 匯出端點抓資料即可。
+
+const TRADESHOW_SHEET_ID = '1AwarIPqHyzilc-U1gjtg8rAfJ-MwrwyZmQ2PGV-InhQ'
+
+// 跟 src/utils/officeCurrency.js 的 OFFICE_CURRENCY 內容必須保持一致，兩邊改動要同步——
+// functions/ 是獨立部署單元(Firebase 部署時只會打包 functions/ 目錄本身)，不能 import
+// 專案根目錄 src/ 底下的檔案，只能各自維護一份。
+const OFFICE_CURRENCY = {
+  TW: 'TWD', HQ: 'TWD',
+  US: 'USD', GM: 'EUR', NL: 'EUR', UK: 'GBP', JP: 'JPY', KR: 'KRW',
+  BJ: 'CNY', SH: 'CNY', SZ: 'CNY',
+}
+
+function tradeshowSheetCsvUrl(tabName) {
+  return `https://docs.google.com/spreadsheets/d/${TRADESHOW_SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tabName)}`
+}
+
+// 手刻一個小型、正確處理引號/跳脫/欄位內換行的 CSV parser(不引入新的 npm 依賴)。
+// Google Sheets 匯出的 CSV 表頭本身就是多行(儲存格內有換行、用雙引號包住)，一般
+// `.split(',')`/`.split('\n')` 的簡化寫法會在表頭那一行就整個解析錯亂，這裡用真正逐字元
+// 掃描、追蹤是否在引號內來判斷:在引號內的逗號/換行都是欄位內容的一部分，不是分隔符。
+export function parseCsv(text) {
+  const rows = []
+  let row = []
+  let field = ''
+  let inQuotes = false
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++ } // 引號內的 "" 是跳脫過的單一 "
+        else inQuotes = false
+      } else {
+        field += c
+      }
+    } else if (c === '"') {
+      inQuotes = true
+    } else if (c === ',') {
+      row.push(field); field = ''
+    } else if (c === '\n' || c === '\r') {
+      if (c === '\r' && text[i + 1] === '\n') i++ // CRLF 當一個換行處理，不要多算一列空白
+      row.push(field); field = ''
+      rows.push(row); row = []
+    } else {
+      field += c
+    }
+  }
+  if (field !== '' || row.length > 0) { row.push(field); rows.push(row) } // 收尾(最後一行沒有結尾換行)
+  return rows.filter((r) => r.length > 1 || r[0] !== '') // 過濾掉整列都是空字串的空白列
+}
+
+// Google Sheets 的 gviz CSV 端點對「不存在的分頁名稱」不會回傳錯誤，而是靜默 fallback
+// 回傳試算表裡第一個分頁的內容(已用 curl 對正式 Sheet 實測證實，不是理論疑慮)——如果不擋
+// 這一層，未來年份的分頁還沒建立時，會把完全無關的分頁(例如「秀展數量與目標」)內容誤判成
+// 秀展資料寫進 Firestore。用「表頭第二欄是不是 'Status'、第三欄是不是 'Date'」當防線，
+// 不符合就整個分頁跳過，不處理任何一列。
+export function looksLikeTradeshowHeader(headerRow) {
+  return headerRow?.[1]?.trim() === 'Status' && headerRow?.[2]?.trim() === 'Date'
+}
+
+// 把 Sheet 裡 "1/11~1/13"(或 "10/1-10/2"、全形"～")這種「月/日~月/日」格式 + 分頁對應的
+// 西元年，轉成 { startDate, endDate } 這組 ISO 日期字串。已對正式 Sheet 實測過真實資料，
+// 分隔符同時存在 "~" 跟 "-" 兩種寫法，都要接受。沒有範圍(單一 "M/D")時，起訖日相同。
+// 結束月份比起始月份小 → 判定跨年(例如 12/30~1/2)，結束日期算在下一年。
+export function parseSheetDateRange(raw, year) {
+  const cleaned = String(raw ?? '').trim().replace(/～/g, '~').replace(/\s+/g, '')
+  if (!cleaned) return null
+  const sep = cleaned.includes('~') ? '~' : (cleaned.includes('-') ? '-' : null)
+  const [startPart, endPart] = sep ? cleaned.split(sep) : [cleaned, undefined]
+  const start = parseMonthDay(startPart, year)
+  if (!start) return null
+  if (!endPart) return { startDate: start, endDate: start }
+  const startMonth = parseInt(start.slice(5, 7), 10)
+  // 結束日只寫「日」沒有「月」的簡寫(例如 "4/23~24"、"5/13-15" 代表 5/13~5/15)，
+  // 沿用起始月份——正式 Sheet 的 2025 分頁有實際案例，不是理論上的格式。
+  const endMD = /^\d{1,2}$/.test(endPart) ? `${startMonth}/${endPart}` : endPart
+  let end = parseMonthDay(endMD, year)
+  if (!end) return null
+  if (parseInt(end.slice(5, 7), 10) < startMonth) end = parseMonthDay(endMD, year + 1)
+  return { startDate: start, endDate: end }
+}
+
+function parseMonthDay(mdStr, year) {
+  const m = String(mdStr ?? '').match(/^(\d{1,2})\/(\d{1,2})$/)
+  if (!m) return null
+  const month = parseInt(m[1], 10)
+  const day = parseInt(m[2], 10)
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
+// 多行儲存格清乾淨成單行顯示用文字(Sheet 裡地點/Show Type 欄位偶爾會有欄位內換行，
+// 例如 "Shanghai, \nChina")，全形/半形都清掉多餘空白。
+function cleanCell(v) {
+  return String(v ?? '').replace(/\s*[\r\n]+\s*/g, ' ').trim()
+}
+
+function parseSheetNumber(v) {
+  const n = parseFloat(String(v ?? '').replace(/,/g, ''))
+  return Number.isFinite(n) ? n : undefined
+}
+
+// Sheet 一列(cells，已經過 parseCsv 拆好的字串陣列)轉成要 upsert 進 Firestore `projects`
+// 的資料物件；欄位對應跟位置都以 functions/index.js 之外、src/components/TradeshowEditModal.jsx
+// 現有的 project schema 為準(name/type/status/startDate/endDate/location/showType/office/
+// year/boothFormat/boothDimensions/boothSqm/currency/rentLocal/rentUSD/decorLocal/decorUSD/
+// prLocal/prUSD/visitors/exhibitors)，讓 App 既有頁面完全不用改就能讀到這份資料。
+// 刻意不包含 assignments/artworkDone/boothSize —— 這些是 App 內手動維護的欄位，同步邏輯
+// 只能新增/更新「Sheet 有提供」的欄位，不能覆蓋掉這些欄位(見呼叫端的 merge 寫法)。
+// 欄位順序: A 名稱 / B 狀態 / C 日期 / D office / E 地點 / F Show Type / G 攤位形式 /
+// H 攤位大小 / I m² / J 攤位數量(App 沒有對應欄位，略過) / K~L 攤位租金 / M~N 裝潢費用 /
+// O~P PR預算 / Q Visitors / R Exhibitor
+export function mapSheetRowToProject(cells, year) {
+  const [
+    rawName, rawStatus, rawDate, rawOffice, rawLocation, rawShowType,
+    rawBoothFormat, rawBoothDimensions, rawBoothSqm, , // 略過 J(攤位數量)
+    rawRentLocal, rawRentUSD, rawDecorLocal, rawDecorUSD, rawPrLocal, rawPrUSD, rawVisitors, rawExhibitors,
+  ] = cells
+  const name = cleanCell(rawName)
+  if (!name) return null
+  const range = parseSheetDateRange(rawDate, year)
+  if (!range) return null
+
+  const office = cleanCell(rawOffice)
+  const data = {
+    name,
+    type: 'tradeshow',
+    startDate: range.startDate,
+    endDate: range.endDate,
+    office,
+    location: cleanCell(rawLocation),
+    showType: cleanCell(rawShowType),
+    boothFormat: cleanCell(rawBoothFormat),
+    boothDimensions: cleanCell(rawBoothDimensions),
+    year,
+  }
+  const status = cleanCell(rawStatus)
+  if (status) data.status = status
+  if (office && OFFICE_CURRENCY[office]) data.currency = OFFICE_CURRENCY[office]
+
+  const numericFields = {
+    boothSqm: rawBoothSqm, rentLocal: rawRentLocal, rentUSD: rawRentUSD,
+    decorLocal: rawDecorLocal, decorUSD: rawDecorUSD, prLocal: rawPrLocal, prUSD: rawPrUSD,
+    visitors: rawVisitors, exhibitors: rawExhibitors,
+  }
+  for (const [key, raw] of Object.entries(numericFields)) {
+    const n = parseSheetNumber(raw)
+    if (n !== undefined) data[key] = n
+  }
+  return data
+}
+
+// 每 30 分鐘同步一次 Google Sheet 的秀展清單(使用者說 Sheet 會一直更新，希望不用等太久)。
+// 每個分頁(年份)各自獨立處理，單一分頁失敗(讀取異常、表頭不符預期)只跳過那一頁，
+// 不會讓其他年份的同步跟著失敗。
+//
+// 比對既有 Firestore 文件用「type + year + name 完全相同」——不是自建一個 deterministic id，
+// 這樣不管這筆秀展原本是手動在 App 建立、還是先前同步建立的，只要名稱與 Sheet 一致就會更新
+// 同一份文件，不會產生重複的秀展。代價：Sheet 上改了秀展名稱會被當成「新的一筆」，舊的那筆
+// 會留著不再更新(不自動刪除，避免同步腳本誤刪資料)，這是已知、刻意的取捨。
+//
+// 每筆更新一律用 { merge: true }，只寫入 Sheet 有提供的欄位，assignments/artworkDone/
+// boothSize 等 App 專屬欄位完全不會被這裡的寫入動到。
+export const syncTradeshowsFromSheet = onSchedule(
+  { schedule: '*/30 * * * *', timeZone: 'Asia/Taipei', region: 'asia-east1' },
+  async () => {
+    const currentYear = new Date().getFullYear()
+    const years = [currentYear - 1, currentYear, currentYear + 1]
+    let created = 0, updated = 0, skippedRows = 0
+
+    for (const year of years) {
+      const tabName = `TS Attend ${year}`
+      let csvText
+      try {
+        const res = await fetch(tradeshowSheetCsvUrl(tabName))
+        if (!res.ok) {
+          logger.warn(`秀展 Sheet 分頁讀取失敗：${tabName}`, { status: res.status })
+          continue
+        }
+        csvText = await res.text()
+      } catch (e) {
+        logger.warn(`秀展 Sheet 分頁讀取發生例外：${tabName}`, e.message)
+        continue
+      }
+
+      const rows = parseCsv(csvText)
+      if (!looksLikeTradeshowHeader(rows[0])) {
+        logger.warn(`秀展 Sheet 分頁「${tabName}」表頭不符預期(可能該年份分頁還不存在)，整頁跳過`)
+        continue
+      }
+
+      for (const cells of rows.slice(1)) {
+        const data = mapSheetRowToProject(cells, year)
+        if (!data) { skippedRows++; continue }
+        try {
+          const existing = await db.collection('projects')
+            .where('type', '==', 'tradeshow')
+            .where('year', '==', year)
+            .where('name', '==', data.name)
+            .limit(1)
+            .get()
+          if (!existing.empty) {
+            await existing.docs[0].ref.set(data, { merge: true })
+            updated++
+          } else {
+            await db.collection('projects').add({
+              ...data,
+              assignments: [],
+              status: data.status || '提案通過',
+              source: 'google-sheet',
+              createdAt: new Date().toISOString(),
+            })
+            created++
+          }
+        } catch (e) {
+          logger.error(`秀展同步寫入失敗：${data.name}`, e.message)
+        }
+      }
+    }
+
+    logger.info('秀展 Google Sheet 同步完成', { created, updated, skippedRows })
+  }
+)
+
 // 附件預覽代理:提供「無 %-編碼」的乾淨網址給 Office 線上檢視器
 // (Firebase 下載連結路徑含 %2F,Office viewer 會 file not found)
 // 路徑格式:/previewFile/{docId}/{附件index}/{token前12碼} — 逐檔驗證,非公開整個 bucket
