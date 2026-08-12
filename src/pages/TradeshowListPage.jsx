@@ -5,6 +5,7 @@ import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
 import TradeshowEditModal from '../components/TradeshowEditModal'
 import { sortByOfficeOrder } from '../utils/officeCurrency'
+import { assignedPersonIds, hasAssignedPerson } from '../utils/tradeshowAssignments'
 
 const fmtNum = (n) => (n || n === 0) ? Math.round(n).toLocaleString() : ''
 const fmtMoney = (n) => (n || n === 0) ? Math.round(n).toLocaleString() : ''
@@ -51,6 +52,8 @@ export default function TradeshowListPage() {
   const [year, setYear] = useState(new Date().getFullYear())
   const [officeFilters, setOfficeFilters] = useState([])   // 空陣列 = 不篩選（全部）
   const [statusFilters, setStatusFilters] = useState([])
+  const [plannerFilters, setPlannerFilters] = useState([])   // 存 personId
+  const [designerFilters, setDesignerFilters] = useState([])
   const [editing, setEditing] = useState(null)     // 編輯中的秀展（null = 未開啟）
   const [creating, setCreating] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState(null)
@@ -70,14 +73,22 @@ export default function TradeshowListPage() {
   const offices = sortByOfficeOrder([...new Set(projects.filter(p => p.year === year).map(p => p.office).filter(Boolean))])
   const statuses = [...new Set(projects.filter(p => p.year === year).map(p => effectiveStatus(p)).filter(Boolean))].sort()
 
+  const personName = id => people.find(p => p.id === id)?.name || id
+  // 只列出「這個年度實際有被指派到某場秀展」的人，跟 offices/statuses 篩選器同一套邏輯——
+  // 選項是空的篩選沒有意義，也不用管 people 集合裡沒被指派過的人。
+  const yearProjects = projects.filter(p => p.year === year)
+  const plannerOptions = assignedPersonIds(yearProjects, 'planner').sort((a, b) => personName(a).localeCompare(personName(b)))
+  const designerOptions = assignedPersonIds(yearProjects, 'designer').sort((a, b) => personName(a).localeCompare(personName(b)))
+
   function toggleFilter(setFn, value) {
     setFn(cur => cur.includes(value) ? cur.filter(v => v !== value) : [...cur, value])
   }
 
-  const filtered = projects
-    .filter(p => p.year === year)
+  const filtered = yearProjects
     .filter(p => officeFilters.length === 0 || officeFilters.includes(p.office))
     .filter(p => statusFilters.length === 0 || statusFilters.includes(effectiveStatus(p)))
+    .filter(p => plannerFilters.length === 0 || hasAssignedPerson(p, 'planner', plannerFilters))
+    .filter(p => designerFilters.length === 0 || hasAssignedPerson(p, 'designer', designerFilters))
     .sort((a, b) => (a.startDate || '').localeCompare(b.startDate || ''))
 
   async function handleDelete(id) {
@@ -122,8 +133,8 @@ export default function TradeshowListPage() {
           className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white">
           {years.map(y => <option key={y} value={y}>{y}</option>)}
         </select>
-        {(officeFilters.length > 0 || statusFilters.length > 0) && (
-          <button onClick={() => { setOfficeFilters([]); setStatusFilters([]) }}
+        {(officeFilters.length > 0 || statusFilters.length > 0 || plannerFilters.length > 0 || designerFilters.length > 0) && (
+          <button onClick={() => { setOfficeFilters([]); setStatusFilters([]); setPlannerFilters([]); setDesignerFilters([]) }}
             className="text-xs text-gray-500 hover:text-gray-600">✕ 清除篩選</button>
         )}
       </div>
@@ -140,7 +151,7 @@ export default function TradeshowListPage() {
         ))}
       </div>
 
-      <div className="flex flex-wrap items-center gap-1.5 mb-4">
+      <div className="flex flex-wrap items-center gap-1.5 mb-2">
         <span className="text-xs text-gray-500 mr-1">狀態</span>
         {statuses.map(s => (
           <button key={s} onClick={() => toggleFilter(setStatusFilters, s)}
@@ -151,6 +162,34 @@ export default function TradeshowListPage() {
           </button>
         ))}
       </div>
+
+      {plannerOptions.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 mb-2">
+          <span className="text-xs text-gray-500 mr-1">負責 Planner</span>
+          {plannerOptions.map(id => (
+            <button key={id} onClick={() => toggleFilter(setPlannerFilters, id)}
+              className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                plannerFilters.includes(id) ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+              }`}>
+              {personName(id)}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {designerOptions.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 mb-4">
+          <span className="text-xs text-gray-500 mr-1">負責設計師</span>
+          {designerOptions.map(id => (
+            <button key={id} onClick={() => toggleFilter(setDesignerFilters, id)}
+              className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                designerFilters.includes(id) ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+              }`}>
+              {personName(id)}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto">
         <table className="text-sm border-collapse">
