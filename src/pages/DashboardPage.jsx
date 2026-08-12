@@ -5,6 +5,7 @@ import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
 import { statusMeta } from '../utils/requestConstants'
 import { TYPE_COLORS, TYPE_LABELS } from '../utils/milestoneUtils'
+import { addDays, showCountdown } from '../utils/tradeshowCountdown'
 import RequestDetailModal from '../components/RequestDetailModal'
 
 const PROJECT_TYPES = ['event', 'award', 'design', 'seasonal_kv']
@@ -12,11 +13,7 @@ const PROJECT_LINK = { event: '/projects/event', award: '/projects/award', desig
 const LEAVE_COLORS = { '特休': '#8b5cf6', '病假': '#f59e0b', '事假': '#6b7280', '出差': '#0ea5e9', '其他': '#d1d5db' }
 
 function todayStr() { return new Date().toISOString().slice(0, 10) }
-function addDaysStr(days) {
-  const d = new Date()
-  d.setDate(d.getDate() + days)
-  return d.toISOString().slice(0, 10)
-}
+function addDaysStr(days) { return addDays(todayStr(), days) }
 
 // 主管儀表板：活動／報獎／設計三個獨立區塊共用的卡片渲染（純函式，非元件，避免每次 render 都重新定義元件）
 function projectBlock(icon, label, list, linkTo, emptyText) {
@@ -31,9 +28,8 @@ function projectBlock(icon, label, list, linkTo, emptyText) {
             <Link key={p.id} to={linkTo}
               className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors">
               <p className="text-sm font-medium text-gray-800 truncate flex-1 min-w-0">{p.name}</p>
-              <span className="text-xs text-gray-500 whitespace-nowrap ml-2">
-                {p.startDate ? `${p.startDate}${p.endDate ? ' ~ ' + p.endDate : ''}` : ''}
-              </span>
+              {/* 活動／報獎／設計只需要看到最後截止日，起始日不重要，故只顯示 endDate(沒有才退回 startDate) */}
+              <span className="text-xs text-gray-500 whitespace-nowrap ml-2">{p.endDate || p.startDate || ''}</span>
             </Link>
           ))}
         </div>
@@ -244,15 +240,32 @@ export default function DashboardPage() {
               <p className="text-sm text-gray-500 py-4 text-center">近三個月沒有秀展</p>
             ) : (
               <div className="space-y-2 max-h-80 overflow-y-auto">
-                {companyUpcomingShows.map(p => (
-                  <div key={p.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-50">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-800 truncate">{p.name}</p>
-                      <p className="text-xs text-gray-500">{p.office || ''} {p.location || ''}</p>
+                {companyUpcomingShows.map(p => {
+                  const cd = showCountdown(p, today)
+                  return (
+                    <div key={p.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-50">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-gray-800 truncate">{p.name}</p>
+                        <p className="text-xs text-gray-500">{p.office || ''} {p.location || ''}</p>
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                        {cd.weekTag && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-600 whitespace-nowrap">
+                            {cd.weekTag}
+                          </span>
+                        )}
+                        {cd.ongoing ? (
+                          <span className="text-xs font-medium text-blue-600 whitespace-nowrap">進行中</span>
+                        ) : cd.label ? (
+                          <span className="text-xs font-semibold text-red-600 whitespace-nowrap">{cd.label}</span>
+                        ) : (
+                          <span className="text-xs text-gray-500 whitespace-nowrap">還有 {cd.days} 天</span>
+                        )}
+                        <span className="text-xs text-gray-500 whitespace-nowrap">{p.startDate}{p.endDate ? `~${p.endDate}` : ''}</span>
+                      </div>
                     </div>
-                    <span className="text-xs text-gray-500 whitespace-nowrap ml-2">{p.startDate}{p.endDate ? `~${p.endDate}` : ''}</span>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>

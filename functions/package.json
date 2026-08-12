@@ -8,7 +8,7 @@
   "main": "index.js",
   "scripts": {
     "lint": "node --check index.js",
-    "test": "node --test test/buildHtml.test.js test/previewFile.test.js test/notifications.test.js",
+    "test": "node --test test/buildHtml.test.js test/previewFile.test.js test/notifications.test.js test/leaveReminder.test.js",
     "test:integration": "node --test --test-concurrency=1 test/renameUserLogin.test.js test/resolveActivePlannerCcEmails.test.js"
   },
   "dependencies": {

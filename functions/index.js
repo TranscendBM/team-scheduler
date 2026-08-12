@@ -615,6 +615,107 @@ export const cleanupOldAttachments = onSchedule(
   }
 )
 
+// ── 休假預排：休假前一週提醒主管 ──────────────────────────────────
+const LEAVE_REMINDER_DAYS = 7
+
+// dateStr 加上 days 天，回傳新的 YYYY-MM-DD 字串。全程用 UTC 解析/運算/序列化(明確加 Z、
+// 用 getUTCDate)——dateStr 只是單純的日曆日期字串，不帶時區語意，如果用不加 Z 的寫法解析成
+// 「本機時區的當地午夜」再用 .toISOString()(輸出 UTC)序列化回字串，只要執行環境的系統時區
+// 不是 UTC，換算回去就會少一天(這是在前端 src/utils/tradeshowCountdown.js 實測抓到的真實
+// bug，不是理論疑慮，這裡照同樣的修正方式寫，避免踩同一個坑)。
+export function addDaysToDateStr(dateStr, days) {
+  const d = new Date(`${dateStr}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
+// 明確鎖定 Asia/Taipei 時區算「今天」的日期字串，不依賴 Cloud Functions 執行環境實際的系統
+// 時區(雖然預設是 UTC，但明確鎖定比依賴這個假設更保險)——休假的 startDate 是使用者在台灣
+// 時區輸入的日曆日期，「今天」也應該用同一個時區判斷，兩邊基準不一致就可能提前/延後一天寄信。
+export function taipeiTodayStr() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Taipei' }).format(new Date())
+}
+
+// 純函式：從 leaves 集合裡，找出「今天」剛好是「休假開始日往前推 days 天」的休假記錄，
+// 用來決定今天該不該寄提醒信、該提醒哪些人快要休假。today/days 都從外面傳入，方便測試不用
+// mock 時間或 Date。
+export function findLeavesStartingInDays(leaves, todayStr, days) {
+  const target = addDaysToDateStr(todayStr, days)
+  return leaves.filter((l) => l?.startDate === target)
+}
+
+// 休假前一週提醒信給主管：列出「N 天後即將開始休假」的同仁名單。純函式方便測試，
+// 不連任何 Firebase 服務。所有欄位都來自 Firestore(使用者透過 LeavePage.jsx 表單輸入)，
+// 不是程式寫死的可信資料，一律要 escapeHtml，避免同仁備註欄位被拿去注入標籤。
+export function buildLeaveReminderHtml(leaves, days) {
+  const rows = leaves.map((l) => {
+    const range = l.startDate === l.endDate ? l.startDate : `${l.startDate} ~ ${l.endDate}`
+    return `<tr style="border-bottom:1px solid #f0f0f0">
+       <td style="font-family:${FONT};padding:8px 12px;font-weight:500;font-size:13px">${escapeHtml(l.personName || '')}</td>
+       <td style="font-family:${FONT};padding:8px 12px;font-size:13px">${escapeHtml(l.type || '')}</td>
+       <td style="font-family:${FONT};padding:8px 12px;font-size:13px;white-space:nowrap">${escapeHtml(range)}</td>
+       <td style="font-family:${FONT};padding:8px 12px;color:#6b7280;font-size:13px">${escapeHtml(l.note || '')}</td>
+     </tr>`
+  }).join('')
+  return `
+  <div style="font-family:${FONT};color:#1f2937;max-width:560px;margin:auto;padding:24px">
+    <div style="background:#f5f3ff;border-left:4px solid #8b5cf6;padding:14px 18px;border-radius:8px;margin-bottom:18px">
+      <h2 style="font-family:${FONT};margin:0 0 4px;font-size:17px">🏖️ 休假預排提醒</h2>
+      <p style="font-family:${FONT};margin:0;color:#6b7280;font-size:13px">以下同仁將於 ${days} 天後開始休假，請提前留意人力調度</p>
+    </div>
+    <table style="font-family:${FONT};width:100%;border-collapse:collapse;font-size:13px;border:1px solid #f0f0f0;border-radius:8px;overflow:hidden">
+      <thead>
+        <tr style="background:#f9fafb">
+          <th style="font-family:${FONT};text-align:left;padding:8px 12px;color:#6b7280;font-size:12px">姓名</th>
+          <th style="font-family:${FONT};text-align:left;padding:8px 12px;color:#6b7280;font-size:12px">假別</th>
+          <th style="font-family:${FONT};text-align:left;padding:8px 12px;color:#6b7280;font-size:12px">日期</th>
+          <th style="font-family:${FONT};text-align:left;padding:8px 12px;color:#6b7280;font-size:12px">備註</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <a href="${SITE}/#/leave" style="font-family:${FONT};display:inline-block;margin-top:20px;background:#8b5cf6;color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-size:14px">查看休假預排 →</a>
+    <p style="font-family:${FONT};color:#9ca3af;font-size:12px;margin-top:24px">此信由 Team Scheduler 於每天排程檢查時自動寄出。</p>
+    ${LOGO_HTML}
+  </div>`
+}
+
+// 每天 09:00(台灣時間)檢查是否有同仁的休假將於 7 天後開始，寄提醒信給所有啟用中的主管。
+// 9:00(上班時間)而非凌晨，是因為這封信是給人看的提醒，排在上班時間寄送才容易被看到，
+// 不像 cleanupOldAttachments/updateExchangeRates 那種背景維護工作，凌晨執行不影響任何人。
+export const notifyUpcomingLeave = onSchedule(
+  { schedule: '0 9 * * *', timeZone: 'Asia/Taipei', region: 'asia-east1', secrets: [SMTP_PASS] },
+  async () => {
+    const today = taipeiTodayStr()
+    const snap = await db.collection('leaves').get()
+    const leaves = snap.docs.map((d) => d.data())
+    const targets = findLeavesStartingInDays(leaves, today, LEAVE_REMINDER_DAYS)
+    if (targets.length === 0) {
+      logger.info(`沒有同仁的休假將於 ${LEAVE_REMINDER_DAYS} 天後開始，略過寄信`)
+      return
+    }
+    const managers = await getManagerEmails()
+    if (managers.length === 0) {
+      logger.warn('找不到任何啟用中的主管信箱，略過休假提醒信', { count: targets.length })
+      return
+    }
+    const mailer = getMailer()
+    try {
+      await mailer.send({
+        to: managers,
+        subject: `[休假預排提醒] ${targets.length} 位同仁將於 ${LEAVE_REMINDER_DAYS} 天後開始休假`,
+        html: buildLeaveReminderHtml(targets, LEAVE_REMINDER_DAYS),
+      })
+      logger.info('已寄休假提醒信', { to: managers, count: targets.length })
+    } catch (e) {
+      logger.error('休假提醒信寄送失敗', e)
+      throw e
+    } finally {
+      await mailer.close()
+    }
+  }
+)
+
 // 附件預覽代理:提供「無 %-編碼」的乾淨網址給 Office 線上檢視器
 // (Firebase 下載連結路徑含 %2F,Office viewer 會 file not found)
 // 路徑格式:/previewFile/{docId}/{附件index}/{token前12碼} — 逐檔驗證,非公開整個 bucket
