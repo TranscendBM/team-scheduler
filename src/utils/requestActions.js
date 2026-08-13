@@ -42,3 +42,37 @@ export function sortByDueDate(requests, direction) {
     direction === 'desc' ? b.dueDate.localeCompare(a.dueDate) : a.dueDate.localeCompare(b.dueDate))
   return [...withDate, ...withoutDate]
 }
+
+// 需求總表「依設計師分組」用：一筆需求可能同時指派給多位設計師(assignedDesigners 是陣列)，
+// 每位都要能在自己的分組底下看到這筆需求 —— 不能只認第一個。assignedDesignersNames 是跟
+// assignedDesigners 同長度、同順序的顯示名稱陣列(見 ReviewPage.jsx 的 namesOf()，逐一
+// map 產生)，缺的話退回用 email 前綴當顯示名稱。
+export function designerNamesFor(r) {
+  const emails = r?.assignedDesigners || []
+  if (emails.length === 0) return ['未指派']
+  return emails.map((email, i) => r.assignedDesignersNames?.[i] || String(email || '—').split('@')[0])
+}
+
+// 把一批需求依設計師分組，回傳 [[設計師名稱, 這位設計師的需求陣列], ...] 依 designerOrder
+// 排序(不在清單內的依字母序排在後面，'未指派' 永遠排最後)。
+// 修正重點(先前的 bug)：多位設計師的需求會出現在「每一位」設計師的分組裡，不是只掛在
+// assignedDesigners[0] 底下——原本的寫法只取陣列第一個當分組依據，導致同一筆需求被指派給
+// 兩位設計師時，只有排在陣列前面的那位看得到。
+export function groupByDesigner(list, designerOrder = []) {
+  const groups = new Map()
+  for (const r of list || []) {
+    for (const name of designerNamesFor(r)) {
+      if (!groups.has(name)) groups.set(name, [])
+      groups.get(name).push(r)
+    }
+  }
+  const rank = (name) => {
+    const i = designerOrder.indexOf(name)
+    if (i !== -1) return i
+    return name === '未指派' ? 999 : 500
+  }
+  return [...groups.entries()].sort((a, b) => {
+    const ra = rank(a[0]), rb = rank(b[0])
+    return ra !== rb ? ra - rb : a[0].localeCompare(b[0])
+  })
+}

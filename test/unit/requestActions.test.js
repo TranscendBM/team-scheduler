@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getRequestAction, groupRequestsForList, sortByDueDate } from '../../src/utils/requestActions.js'
+import { getRequestAction, groupRequestsForList, sortByDueDate, designerNamesFor, groupByDesigner } from '../../src/utils/requestActions.js'
 
 const DESIGNER = 'designer.a@example.com'
 const OTHER_DESIGNER = 'designer.b@example.com'
@@ -152,5 +152,68 @@ describe('sortByDueDate — 我的需求依交期排序', () => {
     const originalOrder = original.map(r => r.id)
     sortByDueDate(original, 'asc')
     expect(original.map(r => r.id)).toEqual(originalOrder)
+  })
+})
+
+describe('designerNamesFor / groupByDesigner — 需求總表依設計師分組(迴歸測試：多位設計師的需求先前只會出現在第一位底下)', () => {
+  it('單一設計師：回傳一個名字', () => {
+    const r = { assignedDesigners: ['a@x.com'], assignedDesignersNames: ['Sherry'] }
+    expect(designerNamesFor(r)).toEqual(['Sherry'])
+  })
+
+  it('多位設計師：回傳全部名字，不是只有第一個', () => {
+    const r = { assignedDesigners: ['a@x.com', 'b@x.com'], assignedDesignersNames: ['Sherry', 'Tingwei'] }
+    expect(designerNamesFor(r)).toEqual(['Sherry', 'Tingwei'])
+  })
+
+  it('沒有 assignedDesignersNames 時退回用 email 前綴當名字', () => {
+    const r = { assignedDesigners: ['sherry.chen@example.com', 'tingwei.lin@example.com'] }
+    expect(designerNamesFor(r)).toEqual(['sherry.chen', 'tingwei.lin'])
+  })
+
+  it('沒有指派任何設計師 → 未指派', () => {
+    expect(designerNamesFor({ assignedDesigners: [] })).toEqual(['未指派'])
+    expect(designerNamesFor({})).toEqual(['未指派'])
+    expect(designerNamesFor(null)).toEqual(['未指派'])
+  })
+
+  it('對應真實回報案例："MVP / AD獎盃 製作" 同時指派給兩位設計師，兩人的分組都要看得到這筆需求(先前的 bug：只有陣列第一個看得到)', () => {
+    const mvpAward = {
+      id: 'mvp-award', projectName: 'MVP / AD獎盃 製作',
+      assignedDesigners: ['sherry@example.com', 'tingwei@example.com'],
+      assignedDesignersNames: ['Sherry', 'Tingwei'],
+    }
+    const otherReq = {
+      id: 'other', projectName: '別的需求',
+      assignedDesigners: ['sherry@example.com'], assignedDesignersNames: ['Sherry'],
+    }
+    const groups = groupByDesigner([mvpAward, otherReq], ['Sherry', 'Tingwei'])
+    const groupMap = Object.fromEntries(groups)
+    expect(groupMap.Sherry.map(r => r.id)).toContain('mvp-award')
+    expect(groupMap.Tingwei.map(r => r.id)).toContain('mvp-award')
+    expect(groupMap.Sherry.map(r => r.id)).toContain('other')
+    expect(groupMap.Tingwei.map(r => r.id)).not.toContain('other') // Tingwei 沒被指派這筆，不該出現在他的分組
+  })
+
+  it('分組依 designerOrder 排序，不在清單內的依字母序排在後面，未指派永遠排最後', () => {
+    const reqs = [
+      { assignedDesigners: ['z@x.com'], assignedDesignersNames: ['Zoe'] },       // 不在 order 裡
+      { assignedDesigners: ['a@x.com'], assignedDesignersNames: ['Abby'] },      // order[1]
+      { assignedDesigners: [] },                                                 // 未指派
+      { assignedDesigners: ['s@x.com'], assignedDesignersNames: ['Sherry'] },    // order[0]
+    ]
+    const groups = groupByDesigner(reqs, ['Sherry', 'Abby'])
+    expect(groups.map(([name]) => name)).toEqual(['Sherry', 'Abby', 'Zoe', '未指派'])
+  })
+
+  it('designerOrder 沒給時(預設空陣列)仍能正常分組，只是排序退回字母序', () => {
+    const reqs = [{ assignedDesigners: ['b@x.com'], assignedDesignersNames: ['Bob'] }]
+    const groups = groupByDesigner(reqs)
+    expect(groups.map(([name]) => name)).toEqual(['Bob'])
+  })
+
+  it('空陣列／undefined 輸入都安全回傳空陣列，不會噴錯', () => {
+    expect(groupByDesigner([])).toEqual([])
+    expect(groupByDesigner(undefined)).toEqual([])
   })
 })

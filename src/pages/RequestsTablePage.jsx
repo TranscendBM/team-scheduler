@@ -4,7 +4,7 @@ import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationsContext'
 import { STATUS, statusMeta, STATUS_TIMESTAMP } from '../utils/requestConstants'
-import { getRequestAction } from '../utils/requestActions'
+import { getRequestAction, groupByDesigner } from '../utils/requestActions'
 import RequestDetailModal from '../components/RequestDetailModal'
 import Attachments from '../components/Attachments'
 
@@ -20,26 +20,6 @@ const SORTS = [
 
 // 專案列表依設計師分組的固定順序，不在清單內的設計師依字母序排在後面，未指派排最後
 const DESIGNER_ORDER = ['Sherry', 'Tingwei', 'Yuna', 'Abby']
-function designerGroupKey(r) {
-  return r.assignedDesignersNames?.[0] || (r.assignedDesigners?.[0] ? shortEmail(r.assignedDesigners[0]) : '') || '未指派'
-}
-function designerRank(name) {
-  const i = DESIGNER_ORDER.indexOf(name)
-  if (i !== -1) return i
-  return name === '未指派' ? 999 : 500
-}
-function groupByDesigner(list) {
-  const groups = new Map()
-  for (const r of list) {
-    const key = designerGroupKey(r)
-    if (!groups.has(key)) groups.set(key, [])
-    groups.get(key).push(r)
-  }
-  return [...groups.entries()].sort((a, b) => {
-    const ra = designerRank(a[0]), rb = designerRank(b[0])
-    return ra !== rb ? ra - rb : a[0].localeCompare(b[0])
-  })
-}
 
 export default function RequestsTablePage() {
   const { role, email, regions } = useAuth()
@@ -305,7 +285,7 @@ export default function RequestsTablePage() {
           {active.length === 0 ? (
             table([], false, '目前沒有進行中的需求')
           ) : (
-            groupByDesigner(active).map(([designer, list]) => (
+            groupByDesigner(active, DESIGNER_ORDER).map(([designer, list]) => (
               <div key={designer} className="mb-6">
                 <h2 className="text-sm font-semibold text-gray-600 mb-2">{designer}（{list.length}）</h2>
                 {table(list, false, '')}
@@ -316,7 +296,7 @@ export default function RequestsTablePage() {
           {done.length > 0 && (
             <>
               <h2 className="text-sm font-medium text-gray-500 mt-8 mb-3">已結案（{done.length}）</h2>
-              {groupByDesigner(done).map(([designer, list]) => (
+              {groupByDesigner(done, DESIGNER_ORDER).map(([designer, list]) => (
                 <div key={designer} className="mb-4">
                   <h3 className="text-xs font-medium text-gray-500 mb-2">{designer}（{list.length}）</h3>
                   {table(list, true, '')}
