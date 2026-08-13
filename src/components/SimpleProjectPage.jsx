@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
-import { TYPE_COLORS } from '../utils/milestoneUtils'
+import { PHASE_DOT, projectPhase } from '../utils/milestoneUtils'
 
 const emptyForm = {
   name: '', subtype: '', startDate: '', endDate: '', location: '',
@@ -102,7 +102,6 @@ export default function SimpleProjectPage({ type, typeLabel, subtypeOptions, sub
   const designers = people.filter(p => p.role === 'designer')
   const planners = people.filter(p => p.role === 'planner')
   const canSave = !!form.name && !!form.startDate && !!form.endDate
-  const typeColor = TYPE_COLORS[type] || '#6B7280'
 
   return (
     <div className="flex flex-col h-full">
@@ -153,12 +152,16 @@ export default function SimpleProjectPage({ type, typeLabel, subtypeOptions, sub
                     const person = people.find(pe => pe.id === a.personId)
                     return person ? { ...person, role: a.role } : null
                   }).filter(Boolean)
-                  const expired = p.endDate && p.endDate < todayStr
+                  const phase = projectPhase(p, todayStr)
+                  const expired = phase === 'ended'
+                  const dot = phase ? PHASE_DOT[phase] : null
                   return (
                     <tr key={p.id} onClick={() => openEdit(p)}
                       className={`cursor-pointer hover:bg-blue-50 ${i % 2 ? 'bg-gray-50/50' : 'bg-white'}`}>
                       <td className={`px-3 py-2 border-r border-gray-100 sticky left-0 bg-inherit font-medium whitespace-nowrap ${expired ? 'text-gray-500' : 'text-gray-800'}`}>
-                        <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: typeColor }} />
+                        {dot && (
+                          <span className="inline-block w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: dot.color }} title={dot.label} />
+                        )}
                         {p.name}
                       </td>
                       <td className={`px-3 py-2 whitespace-nowrap ${expired ? 'text-gray-500' : 'text-gray-600'}`}>{p.subtype || '—'}</td>

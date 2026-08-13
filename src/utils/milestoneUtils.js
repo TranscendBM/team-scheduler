@@ -47,6 +47,21 @@ export const TYPE_LABELS = {
   design: '設計類',
 }
 
+// 專案列表(活動/報獎/設計)名稱前面的圓點：依起訖日期算出目前階段，而不是「這個類型」
+// 固定不變的顏色(同一頁每一列原本都一樣，沒有資訊量)。共用給 SimpleProjectPage.jsx
+// (活動/報獎)跟 DesignPage.jsx(設計，因為 KV 自動排程邏輯而獨立成另一個元件，UI 卻是同一套)。
+export const PHASE_DOT = {
+  ongoing: { color: '#10B981', label: '進行中' },   // 綠色
+  upcoming: { color: '#93C5FD', label: '尚未開始' }, // 灰藍
+  ended: { color: '#D1D5DB', label: '已結束' },      // 淺灰，呼應同一列文字變淡的處理
+}
+export function projectPhase(p, today) {
+  if (!p?.startDate || !p?.endDate) return null
+  if (p.startDate <= today && today <= p.endDate) return 'ongoing'
+  if (today < p.startDate) return 'upcoming'
+  return 'ended'
+}
+
 export const TYPE_BG = {
   tradeshow: 'bg-blue-100 text-blue-700',
   event: 'bg-orange-100 text-orange-700',
