@@ -30,3 +30,15 @@ export function groupRequestsForList(requests) {
       (b.completedAt?.seconds || b.createdAt?.seconds || 0) - (a.completedAt?.seconds || a.createdAt?.seconds || 0))
   return { active, completed }
 }
+
+// 「我的需求」列表依交期排序(近到遠 asc／遠到近 desc)。dueDate 是 'yyyy-mm-dd' 字串，
+// 字串排序天生就等於日期排序，不需要轉成 Date 物件。沒填交期的一律排到最後面(不管哪個
+// 方向)——「未指定」不是「最近」也不是「最遠」，跟其他有交期的項目沒有比較意義，
+// 硬要排進去只會讓使用者誤以為它是最近或最遠的一筆。
+export function sortByDueDate(requests, direction) {
+  const withDate = (requests || []).filter((r) => r.dueDate)
+  const withoutDate = (requests || []).filter((r) => !r.dueDate)
+  withDate.sort((a, b) =>
+    direction === 'desc' ? b.dueDate.localeCompare(a.dueDate) : a.dueDate.localeCompare(b.dueDate))
+  return [...withDate, ...withoutDate]
+}

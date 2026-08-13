@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getRequestAction, groupRequestsForList } from '../../src/utils/requestActions.js'
+import { getRequestAction, groupRequestsForList, sortByDueDate } from '../../src/utils/requestActions.js'
 
 const DESIGNER = 'designer.a@example.com'
 const OTHER_DESIGNER = 'designer.b@example.com'
@@ -108,6 +108,49 @@ describe('groupRequestsForList — 我的需求列表，已結案分組排到最
     ]
     const originalOrder = original.map(r => r.id)
     groupRequestsForList(original)
+    expect(original.map(r => r.id)).toEqual(originalOrder)
+  })
+})
+
+describe('sortByDueDate — 我的需求依交期排序', () => {
+  const far = { id: 'far', dueDate: '2026-12-01' }
+  const near = { id: 'near', dueDate: '2026-08-01' }
+  const mid = { id: 'mid', dueDate: '2026-10-01' }
+
+  it('asc(近到遠):交期字串由小到大，最快到期的排最前面', () => {
+    const result = sortByDueDate([far, near, mid], 'asc')
+    expect(result.map(r => r.id)).toEqual(['near', 'mid', 'far'])
+  })
+
+  it('desc(遠到近):交期由大到小，最晚到期的排最前面', () => {
+    const result = sortByDueDate([far, near, mid], 'desc')
+    expect(result.map(r => r.id)).toEqual(['far', 'mid', 'near'])
+  })
+
+  it('沒有交期的一律排最後面，不管哪個方向(不是「最近」也不是「最遠」)', () => {
+    const noDate = { id: 'no-date' }
+    const ascResult = sortByDueDate([noDate, far, near], 'asc')
+    expect(ascResult[ascResult.length - 1].id).toBe('no-date')
+    const descResult = sortByDueDate([noDate, far, near], 'desc')
+    expect(descResult[descResult.length - 1].id).toBe('no-date')
+  })
+
+  it('多筆沒有交期的維持彼此的相對順序(穩定排序)', () => {
+    const nd1 = { id: 'nd1' }
+    const nd2 = { id: 'nd2' }
+    const result = sortByDueDate([nd1, near, nd2], 'asc')
+    expect(result.map(r => r.id)).toEqual(['near', 'nd1', 'nd2'])
+  })
+
+  it('空陣列／undefined 輸入都安全回傳空陣列，不會噴錯', () => {
+    expect(sortByDueDate([], 'asc')).toEqual([])
+    expect(sortByDueDate(undefined, 'asc')).toEqual([])
+  })
+
+  it('不會修改傳入的原始陣列', () => {
+    const original = [far, near]
+    const originalOrder = original.map(r => r.id)
+    sortByDueDate(original, 'asc')
     expect(original.map(r => r.id)).toEqual(originalOrder)
   })
 })
