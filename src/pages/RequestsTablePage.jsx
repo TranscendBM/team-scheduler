@@ -6,7 +6,6 @@ import { useNotifications } from '../contexts/NotificationsContext'
 import { STATUS, statusMeta, STATUS_TIMESTAMP } from '../utils/requestConstants'
 import { getRequestAction, groupByDesigner } from '../utils/requestActions'
 import RequestDetailModal from '../components/RequestDetailModal'
-import Attachments from '../components/Attachments'
 
 const shortEmail = (e) => (e || '—').split('@')[0]
 const submitterName = (r) => r.submittedByName || shortEmail(r.submittedBy)
@@ -154,11 +153,6 @@ export default function RequestsTablePage() {
             {r.urgent && !faded && <span className="text-red-500 mr-1">🔥</span>}
             {r.projectName || r.title}
           </div>
-          {r.attachments?.length > 0 && (
-            <div className="mt-1" onClick={e => e.stopPropagation()}>
-              <Attachments items={r.attachments} requestId={r.id} />
-            </div>
-          )}
         </td>
         <td className="px-3 py-2.5 text-xs truncate">{r.region}</td>
         <td className="px-3 py-2.5 text-xs whitespace-nowrap">{r.dueDate || '—'}</td>
