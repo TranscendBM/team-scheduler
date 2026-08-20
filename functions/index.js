@@ -392,6 +392,12 @@ function getMailer() {
 // Firebase Storage 網址就產生連結(見 safeAttachmentUrlForRequest)。
 export function buildHtml(r, requestId) {
   const docTypes = (r.docTypes || []).join('、')
+  // 指派設計師署名：優先用 assignedDesignersNames(跟 assignedDesigners 同長度、同順序的
+  // 顯示名稱陣列，見 ReviewPage.jsx 的 namesOf())，沒有才退回顯示 email——CC 名單裡的
+  // 提交人/主管/planner 沒有登入 App 也能一眼看出這筆需求指派給誰，不用另外進系統查。
+  const designerNames = (r.assignedDesignersNames?.length ? r.assignedDesignersNames : (r.assignedDesigners || []))
+    .filter(Boolean)
+    .join('、')
   // 需求簡述裡的網址要能點擊，其餘欄位都是純文字 escapeHtml 就好；用 { html } 包一層
   // 標記「這欄已經是安全的 HTML，不要再 escapeHtml 一次」，下面 tr 那段依此分流。
   const rows = [
@@ -400,6 +406,7 @@ export function buildHtml(r, requestId) {
     ['稿件類型', docTypes],
     ['交期', r.dueDate || '未指定'],
     ['急件', r.urgent ? '🔥 是' : '否'],
+    ['指派設計師', designerNames || '（尚未指派）'],
     ['需求簡述', r.description ? { html: linkifyHtml(r.description) } : '（無）'],
     ['審核備註', r.reviewNote || '（無）'],
     ['注意事項', r.comment || '（無）'],

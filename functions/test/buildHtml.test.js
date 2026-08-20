@@ -112,6 +112,38 @@ test('buildHtml 急件會顯示 🔥 標記', () => {
   assert.ok(html.includes('🔥 是'))
 })
 
+test('buildHtml：指派設計師署名，多位設計師用頓號連接', () => {
+  const html = buildHtml({
+    projectName: 'x',
+    assignedDesigners: ['sherry@example.com', 'tingwei@example.com'],
+    assignedDesignersNames: ['Sherry', 'Tingwei'],
+  })
+  assert.ok(html.includes('指派設計師'))
+  assert.ok(html.includes('Sherry、Tingwei'))
+})
+
+test('buildHtml：沒有 assignedDesignersNames 時退回顯示 email', () => {
+  const html = buildHtml({ projectName: 'x', assignedDesigners: ['sherry@example.com'] })
+  assert.ok(html.includes('sherry@example.com'))
+})
+
+test('buildHtml：完全沒有指派設計師時顯示「尚未指派」，不會是空白或 undefined', () => {
+  const html = buildHtml({ projectName: 'x' })
+  assert.ok(html.includes('指派設計師'))
+  assert.ok(html.includes('（尚未指派）'))
+  assert.ok(!html.includes('undefined'))
+})
+
+test('buildHtml：設計師姓名裡的 HTML 特殊字元會被逸出，不會被注入標籤', () => {
+  const html = buildHtml({
+    projectName: 'x',
+    assignedDesigners: ['a@example.com'],
+    assignedDesignersNames: ['<img src=x onerror=alert(1)>'],
+  })
+  assert.ok(!html.includes('<img src=x onerror=alert(1)>'))
+  assert.ok(html.includes('&lt;img'))
+})
+
 test('buildHtml 合法的 Firebase Storage 附件網址(屬於目前 requestId)會被列成連結，檔名同樣逸出特殊字元', () => {
   const html = buildHtml({
     projectName: 'x',
