@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
@@ -14,6 +15,7 @@ const emptyForm = {
 //   subtypeFieldLabel、sortBy（列表排序依據欄位，預設 startDate；報獎依 endDate=截止日期排序）
 export default function SimpleProjectPage({ type, typeLabel, subtypeOptions, subtypeFieldLabel, sortBy = 'startDate' }) {
   const { isManager } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [projects, setProjects] = useState([])
   const [people, setPeople] = useState([])
   const [showModal, setShowModal] = useState(false)
@@ -31,6 +33,21 @@ export default function SimpleProjectPage({ type, typeLabel, subtypeOptions, sub
       setPeople(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
     return () => { u1(); u2() }
   }, [type])
+
+  // 從甘特圖等外部連結帶 ?open=id 進來時，直接開該筆的編輯視窗（連年度/已結束篩選都一併切過去，不然可能篩選不到那一列）
+  useEffect(() => {
+    const openId = searchParams.get('open')
+    if (!openId) return
+    const target = projects.find(p => p.id === openId)
+    if (target) {
+      queueMicrotask(() => {
+        openEdit(target)
+        setFilterYear(target.year || new Date().getFullYear())
+        setShowCompleted(true)
+        setSearchParams({}, { replace: true })
+      })
+    }
+  }, [searchParams, projects, setSearchParams])
 
   function openCreate() {
     setEditProject(null)

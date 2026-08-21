@@ -1,8 +1,21 @@
 import { useEffect, useState, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { collection, onSnapshot, doc, getDoc } from 'firebase/firestore'
 import { db } from '../firebase'
 import { buildBarsForPerson, buildRequestBarsForDesigner, TYPE_LABELS, DEFAULT_RULES, LOADING_COLORS } from '../utils/milestoneUtils'
 import { ACTIVE_STATUSES } from '../utils/requestConstants'
+
+// 工作條點下去要跳去哪個頁面(帶 ?open=id，目的頁自己找到該筆資料並開啟編輯/詳情視窗)
+const ROUTE_FOR_TYPE = {
+  tradeshow: '/tradeshow-list',
+  event: '/projects/event',
+  award: '/projects/award',
+  design: '/projects/design',
+  request: '/requests',
+}
+
+// 繁忙度熱力圖達到這個週計數就視為「過載」——對應 BUSY_COLORS 從藍色系轉黃橘紅的門檻，跟既有視覺語言一致
+const OVERLOAD_THRESHOLD = 6
 
 const LEAVE_COLORS = {
   '特休': '#8b5cf6',
@@ -90,6 +103,7 @@ const SHIMMER_CSS = `
 `
 
 export default function GanttPage() {
+  const navigate = useNavigate()
   const [people, setPeople] = useState([])
   const [projects, setProjects] = useState([])
   const [leaves, setLeaves] = useState([])
@@ -100,7 +114,20 @@ export default function GanttPage() {
   const [anchor, setAnchor] = useState(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d })
   const [tooltip, setTooltip] = useState(null)
   const [filterRole, setFilterRole] = useState('all')
+  const [showOverloadPanel, setShowOverloadPanel] = useState(false)
   const scrollRef = useRef(null)
+  const rowRefs = useRef(new Map())
+
+  function goToBar(bar) {
+    const route = ROUTE_FOR_TYPE[bar.type]
+    if (!route || !bar.projectId) return
+    navigate(`${route}?open=${encodeURIComponent(bar.projectId)}`)
+  }
+
+  function scrollToPerson(personId) {
+    setShowOverloadPanel(false)
+    rowRefs.current.get(personId)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
 
   useEffect(() => {
     const unsub1 = onSnapshot(collection(db, 'people'), snap => {
@@ -242,8 +269,13 @@ export default function GanttPage() {
     const hasLeaves = personLeaves.length > 0
     const rowH = Math.max(MIN_ROW_HEIGHT, numLanes * (LANE_HEIGHT + LANE_GAP) + ROW_PADDING + BUSY_HEIGHT + 6 + (hasLeaves ? LEAVE_BAR_HEIGHT + 4 : 0))
     const busyWeeks = calcBusyWeeks(bars, viewStart, totalDays)
-    return { person, bars, barLane, numLanes, rowH, busyWeeks, personLeaves }
+    const peakBusy = busyWeeks.length > 0 ? Math.max(...busyWeeks) : 0
+    return { person, bars, barLane, numLanes, rowH, busyWeeks, peakBusy, personLeaves }
   })
+
+  const overloaded = personData
+    .filter(pd => pd.peakBusy >= OVERLOAD_THRESHOLD)
+    .sort((a, b) => b.peakBusy - a.peakBusy)
 
   return (
     <div className="flex flex-col h-full">
@@ -255,6 +287,29 @@ export default function GanttPage() {
           <p className="text-sm text-gray-500">{filteredPeople.length} 位成員</p>
         </div>
         <div className="flex items-center gap-4">
+          {/* Overload warning */}
+          {overloaded.length > 0 && (
+            <div className="relative">
+              <button onClick={() => setShowOverloadPanel(v => !v)}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium bg-red-50 text-red-700 border border-red-200 hover:bg-red-100">
+                ⚠️ {overloaded.length} 位過載
+              </button>
+              {showOverloadPanel && (
+                <>
+                  <div className="fixed inset-0 z-30" onClick={() => setShowOverloadPanel(false)} />
+                  <div className="absolute right-0 top-full mt-1 w-56 bg-white rounded-lg shadow-xl border border-gray-200 z-40 py-1">
+                    {overloaded.map(pd => (
+                      <button key={pd.person.id} onClick={() => scrollToPerson(pd.person.id)}
+                        className="w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-gray-50">
+                        <span className="text-gray-700">{pd.person.name}</span>
+                        <span className="text-red-600 font-medium">{pd.peakBusy} 件並行</span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
           {/* Busy legend */}
           <div className="flex items-center gap-1.5 text-xs text-gray-500">
             <span>繁忙度</span>
@@ -330,8 +385,9 @@ export default function GanttPage() {
               </div>
 
               {/* People rows */}
-              {personData.map(({ person, bars, barLane, rowH, busyWeeks, personLeaves }, pi) => (
-                <div key={person.id} className={`flex border-b ${pi % 2 === 0 ? 'bg-white' : 'bg-gray-50/60'}`}
+              {personData.map(({ person, bars, barLane, rowH, busyWeeks, peakBusy, personLeaves }, pi) => (
+                <div key={person.id} ref={el => rowRefs.current.set(person.id, el)}
+                  className={`flex border-b ${pi % 2 === 0 ? 'bg-white' : 'bg-gray-50/60'}`}
                   style={{ height: rowH }}>
 
                   {/* Name column */}
@@ -339,7 +395,12 @@ export default function GanttPage() {
                     style={{ width: LEFT_WIDTH }}>
                     <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1.5 ${person.role === 'designer' ? 'bg-purple-400' : 'bg-teal-400'}`} />
                     <div className="min-w-0">
-                      <p className="text-base font-semibold text-gray-800 truncate">{person.name}</p>
+                      <p className="text-base font-semibold text-gray-800 truncate flex items-center gap-1">
+                        {person.name}
+                        {peakBusy >= OVERLOAD_THRESHOLD && (
+                          <span title={`本期最多同時 ${peakBusy} 件`} className="text-red-500 text-sm leading-none">⚠️</span>
+                        )}
+                      </p>
                       <p className="text-xs text-gray-500">{person.role === 'designer' ? '設計師' : 'Planner'}</p>
                       {bars.length > 0 && (
                         <p className="text-xs text-gray-500 mt-0.5">{bars.length} 個專案</p>
@@ -440,6 +501,7 @@ export default function GanttPage() {
                           }}
                           onMouseEnter={(e) => setTooltip({ bar, x: e.clientX, y: e.clientY })}
                           onMouseLeave={() => setTooltip(null)}
+                          onClick={() => goToBar(bar)}
                         >
                           {/* Breathing overlay for in-progress */}
                           {isInProgress && !bar.artworkDone && <div className="gantt-breathe-overlay" />}
@@ -523,6 +585,7 @@ export default function GanttPage() {
               ))}
             </div>
           )}
+          <p className="text-gray-500 mt-2 pt-2 border-t border-gray-700">點擊查看詳情 →</p>
         </div>
       )}
       {tooltip && tooltip.leave && (

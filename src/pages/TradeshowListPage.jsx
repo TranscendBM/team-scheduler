@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { collection, onSnapshot, deleteDoc, doc } from 'firebase/firestore'
 import * as XLSX from '@e965/xlsx'
 import { db } from '../firebase'
@@ -47,6 +48,7 @@ const COLUMNS = [
 
 export default function TradeshowListPage() {
   const { isManager } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [projects, setProjects] = useState([])
   const [people, setPeople] = useState([])
   const [year, setYear] = useState(new Date().getFullYear())
@@ -65,6 +67,20 @@ export default function TradeshowListPage() {
       setPeople(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
     return () => { u1(); u2() }
   }, [])
+
+  // 從甘特圖等外部連結帶 ?open=id 進來時，直接開該筆的編輯視窗（連年度篩選都一併切過去，不然可能篩選不到那一列）
+  useEffect(() => {
+    const openId = searchParams.get('open')
+    if (!openId) return
+    const target = projects.find(p => p.id === openId)
+    if (target) {
+      queueMicrotask(() => {
+        setEditing(target)
+        setYear(target.year)
+        setSearchParams({}, { replace: true })
+      })
+    }
+  }, [searchParams, projects, setSearchParams])
 
   const years = [...new Set(projects.map(p => p.year).filter(Boolean))].sort()
   if (!years.includes(year)) years.push(year)

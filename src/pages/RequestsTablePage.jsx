@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { collection, query, where, onSnapshot, doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
@@ -23,6 +24,7 @@ const DESIGNER_ORDER = ['Sherry', 'Tingwei', 'Yuna', 'Abby']
 export default function RequestsTablePage() {
   const { role, email, regions } = useAuth()
   const { newIds, markSeen } = useNotifications()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [rows, setRows] = useState([])
   const [busy, setBusy] = useState(null)
   const [detail, setDetail] = useState(null)
@@ -76,11 +78,24 @@ export default function RequestsTablePage() {
     setBusy(null)
   }
 
-  function openDetail(r) {
+  const openDetail = useCallback((r) => {
     setDetail(r)
     setModalDeleteConfirm(false)
     markSeen(r.id)
-  }
+  }, [markSeen])
+
+  // 從甘特圖等外部連結帶 ?open=id 進來時，直接開該筆的詳情視窗
+  useEffect(() => {
+    const openId = searchParams.get('open')
+    if (!openId) return
+    const target = rows.find(r => r.id === openId)
+    if (target) {
+      queueMicrotask(() => {
+        openDetail(target)
+        setSearchParams({}, { replace: true })
+      })
+    }
+  }, [searchParams, rows, setSearchParams, openDetail])
 
   // 篩選
   const allDesignerOpts = [...new Map(rows.flatMap(r =>

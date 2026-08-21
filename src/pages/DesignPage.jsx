@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDoc, setDoc } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
@@ -22,6 +23,7 @@ function addDays(dateStr, days) {
 // 設計類專案管理（含季節KV自動排程）。獨立於活動/報獎頁，各自維護互不干擾
 export default function DesignPage() {
   const { isManager } = useAuth()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [projects, setProjects] = useState([])
   const [people, setPeople] = useState([])
   const [rules, setRules] = useState(DEFAULT_RULES)
@@ -50,6 +52,21 @@ export default function DesignPage() {
     loadSettings()
     return () => { u1(); u2() }
   }, [])
+
+  // 從甘特圖等外部連結帶 ?open=id 進來時，直接開該筆的編輯視窗（連年度/已結束篩選都一併切過去，不然可能篩選不到那一列）
+  useEffect(() => {
+    const openId = searchParams.get('open')
+    if (!openId) return
+    const target = projects.find(p => p.id === openId)
+    if (target) {
+      queueMicrotask(() => {
+        openEdit(target)
+        setFilterYear(target.year || new Date().getFullYear())
+        setShowCompleted(true)
+        setSearchParams({}, { replace: true })
+      })
+    }
+  }, [searchParams, projects, setSearchParams])
 
   const allDesignSubtypes = [
     ...DEFAULT_DESIGN_SUBTYPES,
