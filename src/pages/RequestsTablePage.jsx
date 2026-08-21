@@ -33,6 +33,7 @@ export default function RequestsTablePage() {
   const [fRegions, setFRegions] = useState([])
   const [sort, setSort] = useState('due-asc')
   const [modalDeleteConfirm, setModalDeleteConfirm] = useState(false)
+  const [doneOpen, setDoneOpen] = useState(false)   // 已結案區塊預設收起
 
   useEffect(() => {
     let q
@@ -304,8 +305,12 @@ export default function RequestsTablePage() {
 
           {done.length > 0 && (
             <>
-              <h2 className="text-sm font-medium text-gray-500 mt-8 mb-3">已結案（{done.length}）</h2>
-              {groupByDesigner(done, DESIGNER_ORDER).map(([designer, list]) => (
+              <button onClick={() => setDoneOpen(v => !v)}
+                className="flex items-center gap-1.5 text-sm font-medium text-gray-500 mt-8 mb-3 hover:text-gray-700">
+                <span className={`inline-block transition-transform ${doneOpen ? 'rotate-90' : ''}`}>▶</span>
+                已結案（{done.length}）
+              </button>
+              {doneOpen && groupByDesigner(done, DESIGNER_ORDER).map(([designer, list]) => (
                 <div key={designer} className="mb-4">
                   <h3 className="text-xs font-medium text-gray-500 mb-2">{designer}（{list.length}）</h3>
                   {table(list, true, '')}
