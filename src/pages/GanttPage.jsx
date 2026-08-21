@@ -13,6 +13,16 @@ const LEAVE_COLORS = {
 }
 
 const MONTHS = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月']
+const WEEKDAYS = ['一', '二', '三', '四', '五', '六', '日']
+
+// 週一為一週起始
+function startOfWeek(d) {
+  const x = new Date(d)
+  const day = x.getDay()
+  x.setDate(x.getDate() + ((day === 0 ? -6 : 1) - day))
+  x.setHours(0, 0, 0, 0)
+  return x
+}
 const LANE_HEIGHT = 28   // height per bar lane
 const LANE_GAP = 4       // gap between lanes
 const ROW_PADDING = 12   // top + bottom padding per row
@@ -86,7 +96,8 @@ export default function GanttPage() {
   const [requests, setRequests] = useState([])
   const [users, setUsers] = useState([])
   const [rules, setRules] = useState(DEFAULT_RULES)
-  const [year, setYear] = useState(new Date().getFullYear())
+  const [viewMode, setViewMode] = useState('year') // 'year' | 'month' | 'week'
+  const [anchor, setAnchor] = useState(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d })
   const [tooltip, setTooltip] = useState(null)
   const [filterRole, setFilterRole] = useState('all')
   const scrollRef = useRef(null)
@@ -127,27 +138,80 @@ export default function GanttPage() {
     return u?.email || null
   }
 
-  const viewStart = new Date(year, 0, 1)
-  const viewEnd = new Date(year, 11, 31)
+  let viewStart, viewEnd
+  if (viewMode === 'month') {
+    viewStart = new Date(anchor.getFullYear(), anchor.getMonth(), 1)
+    viewEnd = new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0)
+  } else if (viewMode === 'week') {
+    viewStart = startOfWeek(anchor)
+    viewEnd = new Date(viewStart); viewEnd.setDate(viewEnd.getDate() + 6)
+  } else {
+    viewStart = new Date(anchor.getFullYear(), 0, 1)
+    viewEnd = new Date(anchor.getFullYear(), 11, 31)
+  }
   const totalDays = Math.round((viewEnd - viewStart) / 86400000) + 1
   const todayDate = new Date(); todayDate.setHours(0, 0, 0, 0)
+  const isTodayInView = todayDate >= viewStart && todayDate <= viewEnd
 
   function dayOffset(date) {
     return Math.round((new Date(date) - viewStart) / 86400000)
   }
   function pct(days) { return (days / totalDays) * 100 }
 
+  function goPrev() {
+    setAnchor(a => {
+      const d = new Date(a)
+      if (viewMode === 'month') d.setMonth(d.getMonth() - 1)
+      else if (viewMode === 'week') d.setDate(d.getDate() - 7)
+      else d.setFullYear(d.getFullYear() - 1)
+      return d
+    })
+  }
+  function goNext() {
+    setAnchor(a => {
+      const d = new Date(a)
+      if (viewMode === 'month') d.setMonth(d.getMonth() + 1)
+      else if (viewMode === 'week') d.setDate(d.getDate() + 7)
+      else d.setFullYear(d.getFullYear() + 1)
+      return d
+    })
+  }
+  function goToday() {
+    const d = new Date(); d.setHours(0, 0, 0, 0); setAnchor(d)
+  }
+
+  const periodLabel = viewMode === 'month'
+    ? `${anchor.getFullYear()}年${anchor.getMonth() + 1}月`
+    : viewMode === 'week'
+      ? `${viewStart.getMonth() + 1}/${viewStart.getDate()} – ${viewEnd.getMonth() + 1}/${viewEnd.getDate()}`
+      : `${anchor.getFullYear()}`
+
+  // 依目前 viewMode 產生時間軸刻度：年→12個月、月→每天、週→7天
+  const ticks = viewMode === 'year'
+    ? MONTHS.map((label, i) => {
+        const s = new Date(anchor.getFullYear(), i, 1)
+        const e = new Date(anchor.getFullYear(), i + 1, 0)
+        return { key: i, label, start: s, days: Math.round((e - s) / 86400000) + 1 }
+      })
+    : viewMode === 'month'
+      ? Array.from({ length: viewEnd.getDate() }, (_, i) => {
+          const s = new Date(anchor.getFullYear(), anchor.getMonth(), i + 1)
+          return { key: i, label: String(i + 1), start: s, days: 1 }
+        })
+      : Array.from({ length: 7 }, (_, i) => {
+          const s = new Date(viewStart); s.setDate(s.getDate() + i)
+          return { key: i, label: `週${WEEKDAYS[i]} ${s.getMonth() + 1}/${s.getDate()}`, start: s, days: 1 }
+        })
+
   useEffect(() => {
     if (scrollRef.current) {
-      // 自成一套計算(不依賴外層 dayOffset/totalDays 閉包)，只需要 year，避免每次 render 都要把它們列入 deps 而重跑
-      const vs = new Date(year, 0, 1)
-      const days = Math.round((new Date(year, 11, 31) - vs) / 86400000) + 1
-      const todayOff = Math.round((new Date() - vs) / 86400000)
+      const todayOff = Math.round((todayDate - viewStart) / 86400000)
       const cw = scrollRef.current.clientWidth - LEFT_WIDTH
-      const todayPx = (todayOff / days) * (scrollRef.current.scrollWidth - LEFT_WIDTH)
-      scrollRef.current.scrollLeft = Math.max(0, todayPx - cw / 2)
+      const todayPx = (todayOff / totalDays) * (scrollRef.current.scrollWidth - LEFT_WIDTH)
+      scrollRef.current.scrollLeft = isTodayInView ? Math.max(0, todayPx - cw / 2) : 0
     }
-  }, [year, people.length])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode, anchor.getTime(), people.length])
 
   const filteredPeople = people
     .filter(p => filterRole === 'all' || p.role === filterRole)
@@ -156,8 +220,7 @@ export default function GanttPage() {
       return a.name.localeCompare(b.name, 'zh-TW')
     })
 
-  const todayOffset = dayOffset(new Date())
-  const isCurrentYear = year === new Date().getFullYear()
+  const todayOffset = dayOffset(todayDate)
 
   const LEAVE_BAR_HEIGHT = 14
 
@@ -211,11 +274,21 @@ export default function GanttPage() {
               </button>
             ))}
           </div>
-          {/* Year */}
+          {/* View mode */}
+          <div className="flex rounded-lg border border-gray-200 overflow-hidden text-sm">
+            {[['year', '年'], ['month', '月'], ['week', '週']].map(([val, label]) => (
+              <button key={val} onClick={() => setViewMode(val)}
+                className={`px-3 py-1.5 ${viewMode === val ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+          {/* Period nav */}
           <div className="flex items-center gap-1">
-            <button onClick={() => setYear(y => y - 1)} className="p-1.5 rounded hover:bg-gray-100 text-gray-600">‹</button>
-            <span className="font-semibold text-gray-800 w-12 text-center">{year}</span>
-            <button onClick={() => setYear(y => y + 1)} className="p-1.5 rounded hover:bg-gray-100 text-gray-600">›</button>
+            <button onClick={goPrev} className="p-1.5 rounded hover:bg-gray-100 text-gray-600">‹</button>
+            <button onClick={goToday} className="px-2 py-1 rounded hover:bg-gray-100 text-xs text-gray-500 border border-gray-200">今天</button>
+            <span className="font-semibold text-gray-800 text-center px-1" style={{ minWidth: 90 }}>{periodLabel}</span>
+            <button onClick={goNext} className="p-1.5 rounded hover:bg-gray-100 text-gray-600">›</button>
           </div>
         </div>
       </div>
@@ -239,19 +312,17 @@ export default function GanttPage() {
                   <span className="text-xs font-medium text-gray-500">成員</span>
                 </div>
                 <div className="flex-1 relative overflow-hidden">
-                  {MONTHS.map((m, i) => {
-                    const ms = new Date(year, i, 1)
-                    const me = new Date(year, i + 1, 0)
-                    const left = pct(dayOffset(ms))
-                    const width = pct(Math.round((me - ms) / 86400000) + 1)
+                  {ticks.map((t) => {
+                    const left = pct(dayOffset(t.start))
+                    const width = pct(t.days)
                     return (
-                      <div key={i} className="absolute top-0 border-r border-gray-200 flex items-center justify-center"
+                      <div key={t.key} className="absolute top-0 border-r border-gray-200 flex items-center justify-center"
                         style={{ left: `${left}%`, width: `${width}%`, height: HEADER_HEIGHT }}>
-                        <span className="text-xs font-medium text-gray-600">{m}</span>
+                        <span className="text-xs font-medium text-gray-600 truncate px-0.5">{t.label}</span>
                       </div>
                     )
                   })}
-                  {isCurrentYear && (
+                  {isTodayInView && (
                     <div className="absolute top-0 bottom-0 w-0.5 bg-red-400 z-30"
                       style={{ left: `${pct(todayOffset)}%` }} />
                   )}
@@ -278,14 +349,14 @@ export default function GanttPage() {
 
                   {/* Timeline area */}
                   <div className="flex-1 relative overflow-hidden">
-                    {/* Month grid lines */}
-                    {MONTHS.map((_, i) => {
-                      const left = pct(dayOffset(new Date(year, i, 1)))
-                      return <div key={i} className="absolute top-0 bottom-0 w-px bg-gray-100" style={{ left: `${left}%` }} />
+                    {/* Grid lines */}
+                    {ticks.map((t) => {
+                      const left = pct(dayOffset(t.start))
+                      return <div key={t.key} className="absolute top-0 bottom-0 w-px bg-gray-100" style={{ left: `${left}%` }} />
                     })}
 
                     {/* Today line */}
-                    {isCurrentYear && (
+                    {isTodayInView && (
                       <div className="absolute top-0 bottom-0 w-0.5 bg-red-200 z-10"
                         style={{ left: `${pct(todayOffset)}%` }} />
                     )}
