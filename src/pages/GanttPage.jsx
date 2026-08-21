@@ -14,8 +14,8 @@ const ROUTE_FOR_TYPE = {
   request: '/requests',
 }
 
-// 繁忙度熱力圖達到這個週計數就視為「過載」——對應 BUSY_COLORS 從藍色系轉黃橘紅的門檻，跟既有視覺語言一致
-const OVERLOAD_THRESHOLD = 6
+// 繁忙度熱力圖達到這個週計數就視為「過載」
+const OVERLOAD_THRESHOLD = 8
 
 const LEAVE_COLORS = {
   '特休': '#8b5cf6',
