@@ -1,7 +1,8 @@
 import { useEffect, useState, useRef } from 'react'
 import { collection, onSnapshot, doc, getDoc } from 'firebase/firestore'
 import { db } from '../firebase'
-import { buildBarsForPerson, TYPE_LABELS, DEFAULT_RULES, LOADING_COLORS } from '../utils/milestoneUtils'
+import { buildBarsForPerson, buildRequestBarsForDesigner, TYPE_LABELS, DEFAULT_RULES, LOADING_COLORS } from '../utils/milestoneUtils'
+import { ACTIVE_STATUSES } from '../utils/requestConstants'
 
 const LEAVE_COLORS = {
   '特休': '#8b5cf6',
@@ -82,6 +83,7 @@ export default function GanttPage() {
   const [people, setPeople] = useState([])
   const [projects, setProjects] = useState([])
   const [leaves, setLeaves] = useState([])
+  const [requests, setRequests] = useState([])
   const [rules, setRules] = useState(DEFAULT_RULES)
   const [year, setYear] = useState(new Date().getFullYear())
   const [tooltip, setTooltip] = useState(null)
@@ -98,12 +100,18 @@ export default function GanttPage() {
     const unsub3 = onSnapshot(collection(db, 'leaves'), snap => {
       setLeaves(snap.docs.map(d => ({ id: d.id, ...d.data() })))
     })
+    // 設計發稿需求(給設計師的工作量用)——Firestore Rules 對 requests 是逐筆授權(manager 全讀，
+    // 其他角色只讀得到自己送出/被指派/負責區域的那些)，非 manager 開這頁看到的會是自己權限
+    // 範圍內的子集，不是全公司完整資料；manager 看到的才是完整的人力狀況判斷依據。
+    const unsub4 = onSnapshot(collection(db, 'requests'), snap => {
+      setRequests(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    })
     const loadRules = async () => {
       const rDoc = await getDoc(doc(db, 'settings', 'milestoneRules'))
       if (rDoc.exists()) setRules({ ...DEFAULT_RULES, ...rDoc.data() })
     }
     loadRules()
-    return () => { unsub1(); unsub2(); unsub3() }
+    return () => { unsub1(); unsub2(); unsub3(); unsub4() }
   }, [])
 
   const viewStart = new Date(year, 0, 1)
@@ -142,7 +150,10 @@ export default function GanttPage() {
 
   // Pre-compute per person
   const personData = filteredPeople.map(person => {
-    const bars = buildBarsForPerson(person.id, projects, rules).filter(b => {
+    const requestBars = person.role === 'designer'
+      ? buildRequestBarsForDesigner(person.email, requests, ACTIVE_STATUSES)
+      : []
+    const bars = [...buildBarsForPerson(person.id, projects, rules), ...requestBars].filter(b => {
       const s = new Date(b.workStart), e = new Date(b.workEnd)
       return s <= viewEnd && e >= viewStart
     })

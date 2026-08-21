@@ -37,6 +37,7 @@ export const TYPE_COLORS = {
   award: '#10B981',
   seasonal_kv: '#EC4899',   // legacy – kept for backward compat
   design: '#6366F1',        // new: 設計類（含季節KV、型錄、桌曆…）
+  request: '#F43F5E',       // 設計發稿需求(requests 集合)，甘特圖用，跟其他四種顏色明顯區分
 }
 
 export const TYPE_LABELS = {
@@ -45,6 +46,7 @@ export const TYPE_LABELS = {
   award: '報獎',
   seasonal_kv: 'Seasonal KV',
   design: '設計類',
+  request: '設計發稿需求',
 }
 
 // 專案列表(活動/報獎/設計)名稱前面的圓點：依起訖日期算出目前階段，而不是「這個類型」
@@ -140,6 +142,48 @@ export function getKVMilestones(eventDate, rules) {
   return [
     { key: 'kvRelease', date: subWeeks(new Date(eventDate), r.kvRelease), label: '發佈KV' },
   ]
+}
+
+// requests 集合裡的欄位(reviewedAt/createdAt)是 Firestore Timestamp(有 .toDate())或
+// 純 { seconds } 物件(視讀取路徑而定)，這裡統一轉成 Date，缺欄位/格式不明就回傳 null。
+function tsToDate(ts) {
+  if (!ts) return null
+  if (typeof ts.toDate === 'function') return ts.toDate()
+  if (typeof ts.seconds === 'number') return new Date(ts.seconds * 1000)
+  const d = new Date(ts)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+// 「設計發稿需求」(requests 集合)只計入設計師的工作量、不計入 planner——planner 是提交
+// 需求的人，不是執行設計的人。只有 ACTIVE_STATUSES(assigned/in_progress/reviewing)才算
+// 目前的工作量，已結案/已駁回/待審核都不佔用甘特圖上的時段。
+// workStart 用 reviewedAt(需求被核准指派給設計師的時間點，firestore.rules 的
+// isApproveTransition 保證這個狀態下一定有值)，缺的話退回 createdAt 當保守估計；
+// workEnd 用 dueDate——沒有 dueDate 就沒辦法畫出一個有意義的區間，直接跳過這筆。
+export function buildRequestBarsForDesigner(personEmail, requests, activeStatuses) {
+  if (!personEmail) return []
+  const bars = []
+  for (const r of requests || []) {
+    if (!activeStatuses.includes(r.status)) continue
+    if (!(r.assignedDesigners || []).includes(personEmail)) continue
+    if (!r.dueDate) continue
+    const workStart = tsToDate(r.reviewedAt) || tsToDate(r.createdAt)
+    if (!workStart) continue
+    bars.push({
+      projectId: r.id,
+      projectName: r.projectName || r.title || '（未命名需求）',
+      type: 'request',
+      role: 'designer',
+      workStart,
+      workEnd: new Date(r.dueDate),
+      color: TYPE_COLORS.request,
+      milestones: [],
+      loadingLevel: null,
+      boothSize: null,
+      artworkDone: false,
+    })
+  }
+  return bars
 }
 
 /**
