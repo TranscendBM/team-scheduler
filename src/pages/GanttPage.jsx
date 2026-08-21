@@ -84,6 +84,7 @@ export default function GanttPage() {
   const [projects, setProjects] = useState([])
   const [leaves, setLeaves] = useState([])
   const [requests, setRequests] = useState([])
+  const [users, setUsers] = useState([])
   const [rules, setRules] = useState(DEFAULT_RULES)
   const [year, setYear] = useState(new Date().getFullYear())
   const [tooltip, setTooltip] = useState(null)
@@ -100,19 +101,31 @@ export default function GanttPage() {
     const unsub3 = onSnapshot(collection(db, 'leaves'), snap => {
       setLeaves(snap.docs.map(d => ({ id: d.id, ...d.data() })))
     })
-    // 設計發稿需求(給設計師的工作量用)——Firestore Rules 對 requests 是逐筆授權(manager 全讀，
-    // 其他角色只讀得到自己送出/被指派/負責區域的那些)，非 manager 開這頁看到的會是自己權限
-    // 範圍內的子集，不是全公司完整資料；manager 看到的才是完整的人力狀況判斷依據。
+    // 設計發稿需求(給設計師的工作量用)。這頁固定 manager 專用，isManager() 對 requests 全表有讀取權限。
     const unsub4 = onSnapshot(collection(db, 'requests'), snap => {
       setRequests(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    })
+    // requests.assignedDesigners 存的是登入用 Gmail(users 的 doc id)，不是 people.email(公司信箱)——
+    // 兩者是不同值(見 PeoplePage.jsx 的說明)，要靠 users.notifyEmail 對回 people.email 才能換算。
+    // 這頁固定 manager 專用，讀 users 全表不會有權限問題。
+    const unsub5 = onSnapshot(collection(db, 'users'), snap => {
+      setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })))
     })
     const loadRules = async () => {
       const rDoc = await getDoc(doc(db, 'settings', 'milestoneRules'))
       if (rDoc.exists()) setRules({ ...DEFAULT_RULES, ...rDoc.data() })
     }
     loadRules()
-    return () => { unsub1(); unsub2(); unsub3(); unsub4() }
+    return () => { unsub1(); unsub2(); unsub3(); unsub4(); unsub5() }
   }, [])
+
+  // person.email(公司信箱) → 該員登入用 Gmail(requests.assignedDesigners 用這個比對)
+  function loginEmailFor(person) {
+    const companyEmail = (person.email || '').trim().toLowerCase()
+    if (!companyEmail) return null
+    const u = users.find(x => (x.notifyEmail || '').trim().toLowerCase() === companyEmail)
+    return u?.email || null
+  }
 
   const viewStart = new Date(year, 0, 1)
   const viewEnd = new Date(year, 11, 31)
@@ -151,7 +164,7 @@ export default function GanttPage() {
   // Pre-compute per person
   const personData = filteredPeople.map(person => {
     const requestBars = person.role === 'designer'
-      ? buildRequestBarsForDesigner(person.email, requests, ACTIVE_STATUSES)
+      ? buildRequestBarsForDesigner(loginEmailFor(person), requests, ACTIVE_STATUSES)
       : []
     const bars = [...buildBarsForPerson(person.id, projects, rules), ...requestBars].filter(b => {
       const s = new Date(b.workStart), e = new Date(b.workEnd)
