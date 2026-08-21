@@ -8,9 +8,9 @@ describe('canAccess', () => {
     }
   })
 
-  it('fixed 頁面（review/dashboard/tradeshow-assignments）designer/planner 永遠看不到，即使 perms 硬要覆蓋成 true', () => {
+  it('fixed 頁面（review/dashboard/tradeshow-assignments/gantt）designer/planner 永遠看不到，即使 perms 硬要覆蓋成 true', () => {
     const fixedKeys = PAGES.filter((p) => p.fixed).map((p) => p.key)
-    expect(fixedKeys).toEqual(expect.arrayContaining(['review', 'dashboard', 'tradeshow-assignments']))
+    expect(fixedKeys).toEqual(expect.arrayContaining(['review', 'dashboard', 'tradeshow-assignments', 'gantt']))
     for (const key of fixedKeys) {
       const perms = { [key]: { designer: true, planner: true } }
       expect(canAccess(perms, key, 'designer')).toBe(false)
@@ -18,11 +18,18 @@ describe('canAccess', () => {
     }
   })
 
-  it('review/dashboard/tradeshow-assignments 不應出現在可調整矩陣中', () => {
+  it('review/dashboard/tradeshow-assignments/gantt 不應出現在可調整矩陣中', () => {
     const adjustableKeys = ADJUSTABLE_PAGES.map((p) => p.key)
     expect(adjustableKeys).not.toContain('review')
     expect(adjustableKeys).not.toContain('dashboard')
     expect(adjustableKeys).not.toContain('tradeshow-assignments')
+    expect(adjustableKeys).not.toContain('gantt')
+  })
+
+  it('甘特圖是 manager 專用：判斷團隊人力狀況、且非 manager 讀 requests 全表本來就會被 Firestore 規則拒絕', () => {
+    expect(canAccess({}, 'gantt', 'manager')).toBe(true)
+    expect(canAccess({}, 'gantt', 'designer')).toBe(false)
+    expect(canAccess({}, 'gantt', 'planner')).toBe(false)
   })
 
   it('tradeshow-assignments 業務規則本來就是 manager-only：元件本身也硬性鎖定(TradeshowAssignmentsPage 對非 manager 顯示鎖定畫面)，矩陣與元件不會互相矛盾', () => {
@@ -37,13 +44,13 @@ describe('canAccess', () => {
   })
 
   it('沒有 perms 覆蓋時使用 defaults', () => {
-    expect(canAccess({}, 'gantt', 'designer')).toBe(true)   // defaults.designer = true
-    expect(canAccess({}, 'gantt', 'planner')).toBe(true)    // defaults.planner = true（planner 的工作排程也要看得到甘特圖）
+    expect(canAccess({}, 'tradeshow-list', 'designer')).toBe(true)   // defaults.designer = true
+    expect(canAccess({}, 'tradeshow-list', 'planner')).toBe(true)    // defaults.planner = true
   })
 
   it('perms 覆蓋可調整頁面的預設值', () => {
-    const perms = { gantt: { designer: false, planner: true } }
-    expect(canAccess(perms, 'gantt', 'designer')).toBe(false)
-    expect(canAccess(perms, 'gantt', 'planner')).toBe(true)
+    const perms = { 'tradeshow-list': { designer: false, planner: true } }
+    expect(canAccess(perms, 'tradeshow-list', 'designer')).toBe(false)
+    expect(canAccess(perms, 'tradeshow-list', 'planner')).toBe(true)
   })
 })

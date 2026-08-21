@@ -17,7 +17,8 @@ export const GROUPS = [
 export const PAGES = [
   // ── 總覽：個人儀表板（登入時的重點資訊）+ 甘特圖（planner/設計師工作排程）──
   { key: 'my-dashboard', path: '/dashboard-me', label: '我的儀表板', icon: '🏠', group: 'overview', defaults: { designer: true, planner: true } },
-  { key: 'gantt', path: '/gantt', label: '甘特圖', icon: '📊', group: 'overview', defaults: { designer: true, planner: true } },
+  // manager 專用：判斷團隊人力狀況，且非 manager 角色讀 requests 全表本來就會被 Firestore 規則整體拒絕（見檔頭說明）
+  { key: 'gantt', path: '/gantt', label: '甘特圖', icon: '📊', group: 'overview', fixed: 'manager' },
 
   // ── 秀展（獨立於排程管理之外，秀展是主要業務）──
   { key: 'tradeshow-analysis',    path: '/tradeshow-analysis',    label: '秀展分析',       icon: '📈', group: 'tradeshow', defaults: { designer: true,  planner: false } },
