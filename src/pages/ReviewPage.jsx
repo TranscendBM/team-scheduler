@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { statusMeta } from '../utils/requestConstants'
 import Attachments from '../components/Attachments'
 import Linkify from '../components/Linkify'
+import ShareLinkPanel from '../components/ShareLinkPanel'
 
 function fmt(ts) {
   if (!ts) return '—'
@@ -301,6 +302,11 @@ export default function ReviewPage() {
                   {r.attachments?.length > 0 && <div className="mt-2"><Attachments items={r.attachments} requestId={r.id} /></div>}
                 </div>
                 <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${meta.color}`}>{meta.label}</span>
+              </div>
+
+              {/* 分享連結：審核前後都能建立/使用，跟審核狀態無關 */}
+              <div className="mt-2">
+                <ShareLinkPanel requestId={r.id} shareToken={r.shareToken} shareExpiresAt={r.shareExpiresAt} />
               </div>
 
               {/* 待審核:核准/駁回 */}
