@@ -1,6 +1,7 @@
 import { statusMeta } from '../utils/requestConstants'
 import Attachments from './Attachments'
 import Linkify from './Linkify'
+import ShareLinkPanel from './ShareLinkPanel'
 
 function fmt(ts) {
   if (!ts) return null
@@ -18,8 +19,12 @@ function Row({ label, children, highlight }) {
   )
 }
 
-// 完整發稿內容彈窗。actions: 額外按鈕(選填)
-export default function RequestDetailModal({ r, onClose, actions }) {
+// 完整發稿內容彈窗。actions: 額外按鈕(選填)。shareable: 是否顯示「分享連結」面板
+// (預設 true)——透過分享連結本身開啟的唯讀檢視(SharedRequestPage)要傳 false，
+// 避免對「原本就沒有這筆需求檢視權限」的訪客顯示一個他們用不了的按鈕(建立/撤銷連結
+// 本身仍然需要原本的檢視權限，伺服器端 Cloud Function 會再檔一次，這裡只是不讓
+// UI 顯示出一個必然失敗的操作)。
+export default function RequestDetailModal({ r, onClose, actions, shareable = true }) {
   if (!r) return null
   const meta = statusMeta(r.status)
   return (
@@ -37,6 +42,12 @@ export default function RequestDetailModal({ r, onClose, actions }) {
           <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${meta.color}`}>{meta.label}</span>
           <button onClick={onClose} className="text-gray-500 hover:text-gray-500 text-lg leading-none">✕</button>
         </div>
+
+        {shareable && (
+          <div className="px-6 pt-3">
+            <ShareLinkPanel requestId={r.id} shareToken={r.shareToken} shareExpiresAt={r.shareExpiresAt} />
+          </div>
+        )}
 
         <dl className="px-6 py-3">
           <Row label="急件">{r.urgent ? '🔥 是(L/T 少於 5 個工作天)' : '否'}</Row>

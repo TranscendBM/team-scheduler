@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { onDocumentUpdated, onDocumentDeleted } from 'firebase-functions/v2/firestore'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
 import { onRequest, onCall, HttpsError } from 'firebase-functions/v2/https'
@@ -357,6 +358,175 @@ export async function renameUserLoginCore(firestoreDb, callerEmail, data) {
 export const renameUserLogin = onCall({ region: 'asia-east1' }, async (request) => {
   const callerEmail = (request.auth?.token?.email || '').trim().toLowerCase()
   return renameUserLoginCore(db, callerEmail, request.data)
+})
+
+// ── 需求分享連結：登入且在白名單內的任何組員都能看，不受原本 requests/{id} read 規則的
+// manager/提交人/被指派設計師/負責地區這幾種身分限制 ──────────────────────────
+//
+// 刻意不改 firestore.rules 的 requests/{id} read 規則去支援這個功能：那條規則已經很
+// 接近 Firestore「單次請求最多 1000 個運算式」的上限(見 docs/firestore-rules-expression-limit.md)，
+// 再加一條「比對分享 token」的 OR 分支會進一步吃掉本來就很緊的預算，且 Rules 語言本身也沒有
+// 乾淨的方式表達這件事(get() 只能讀文件本身欄位，讓「呼叫端聲稱的 token」跟「文件裡存的
+// token」比對，本質上等於要先對任何人開放讀取這份文件才能比對，等於繞了一圈又打開了讀取)。
+// 改用 Admin SDK 的 callable function：身分/token 驗證都在 Function 裡用 Firestore Admin
+// 查詢完成，完全不動 requests/{id} 的 Rules，也不影響既有測試過的 expression 成本。
+const SHARE_LINK_TTL_MS = 30 * 24 * 60 * 60 * 1000 // 預設有效期限 30 天
+
+// 跟 firestore.rules 的 requests/{id} allow read 規則(isManager/isDelegatedReviewer/
+// submittedBy/assignedDesigners/region)對應的判斷，這裡是「誰可以建立/撤銷分享連結」的
+// 權限——刻意限定跟「原本就看得到這份需求的人」一致，不額外放寬。因為走 Admin SDK 不受
+// Rules 限制，這裡必須手動重做一次一樣的檢查，不能假設「反正 Admin SDK 什麼都能讀」就跳過。
+async function canManageShareLink(firestoreDb, callerEmail, requestData) {
+  if (!callerEmail) return false
+  const userSnap = await firestoreDb.collection('users').doc(callerEmail).get()
+  if (!userSnap.exists) return false
+  const u = userSnap.data()
+  if (u.active === false) return false
+  if (u.role === 'manager') return true
+  if (requestData.submittedBy === callerEmail) return true
+  if ((requestData.assignedDesigners || []).includes(callerEmail)) return true
+  if ((u.regions || []).includes(requestData.region)) return true
+  // 臨時審核代理人：對應 firestore.rules isDelegatedReviewer()
+  const delegationSnap = await firestoreDb.collection('settings').doc('reviewDelegation').get()
+  if (delegationSnap.exists) {
+    const d = delegationSnap.data()
+    const now = Date.now()
+    const startsAtMs = d.startsAt ? d.startsAt.toMillis() : 0
+    const expiresAtMs = d.expiresAt ? d.expiresAt.toMillis() : 0
+    if (d.loginEmail === callerEmail && now >= startsAtMs && now < expiresAtMs) return true
+  }
+  return false
+}
+
+// 建立(或重新產生)分享連結：只有本來就看得到這份需求的人能建立；重新呼叫會產生全新的
+// token 並覆蓋掉舊的——舊連結因此立刻失效，這是刻意的行為(等同「重新產生」)，不是 bug。
+export async function createShareLinkCore(firestoreDb, callerEmail, data) {
+  if (!callerEmail) throw new HttpsError('unauthenticated', '請先登入')
+  const requestId = String(data?.requestId || '').trim()
+  if (!requestId) throw new HttpsError('invalid-argument', '缺少 requestId')
+
+  const reqRef = firestoreDb.collection('requests').doc(requestId)
+  const reqSnap = await reqRef.get()
+  if (!reqSnap.exists) throw new HttpsError('not-found', '找不到這筆需求')
+  const requestData = reqSnap.data()
+
+  const allowed = await canManageShareLink(firestoreDb, callerEmail, requestData)
+  if (!allowed) throw new HttpsError('permission-denied', '沒有這筆需求的檢視權限，無法建立分享連結')
+
+  const shareToken = randomUUID()
+  const expiresAt = new Date(Date.now() + SHARE_LINK_TTL_MS)
+  await reqRef.update({
+    shareToken,
+    shareExpiresAt: expiresAt,
+    shareCreatedBy: callerEmail,
+    shareCreatedAt: FieldValue.serverTimestamp(),
+  })
+  logger.info('已建立需求分享連結', { requestId, callerEmail })
+  return { shareToken, shareExpiresAt: expiresAt.toISOString() }
+}
+
+// 撤銷分享連結：權限跟建立一樣(本來就看得到這份需求的人)。已經沒有分享連結時視為冪等成功，
+// 不噴錯——允許前端重複點擊/重試。
+export async function revokeShareLinkCore(firestoreDb, callerEmail, data) {
+  if (!callerEmail) throw new HttpsError('unauthenticated', '請先登入')
+  const requestId = String(data?.requestId || '').trim()
+  if (!requestId) throw new HttpsError('invalid-argument', '缺少 requestId')
+
+  const reqRef = firestoreDb.collection('requests').doc(requestId)
+  const reqSnap = await reqRef.get()
+  if (!reqSnap.exists) throw new HttpsError('not-found', '找不到這筆需求')
+  const requestData = reqSnap.data()
+
+  const allowed = await canManageShareLink(firestoreDb, callerEmail, requestData)
+  if (!allowed) throw new HttpsError('permission-denied', '沒有這筆需求的檢視權限，無法撤銷分享連結')
+
+  await reqRef.update({
+    shareToken: FieldValue.delete(),
+    shareExpiresAt: FieldValue.delete(),
+    shareCreatedBy: FieldValue.delete(),
+    shareCreatedAt: FieldValue.delete(),
+  })
+  logger.info('已撤銷需求分享連結', { requestId, callerEmail })
+  return { revoked: true }
+}
+
+// 把 Firestore Timestamp/Date 轉成 ISO 字串再回傳給前端——onCall 的回傳資料是走 JSON
+// 序列化，Timestamp 物件直接回傳會被拆解成 {_seconds,_nanoseconds} 這種普通物件，前端
+// RequestDetailModal 的 fmt() 預期拿到「有 .toDate() 的 Timestamp」或「Date 建構式吃得下
+// 的值」，ISO 字串兩者都不是精確符合、但 `new Date(isoString)` 吃得下，所以統一轉成
+// ISO 字串再回傳。
+function toIsoOrNull(ts) {
+  if (!ts) return null
+  if (typeof ts.toDate === 'function') return ts.toDate().toISOString()
+  if (ts instanceof Date) return ts.toISOString()
+  return null
+}
+
+// 透過分享連結取得需求內容：只要求「已登入、在白名單內、帳號啟用中」，不要求原本的
+// manager/提交人/被指派設計師/負責地區這幾種身分——這是這個 callable function 存在的
+// 目的:讓分享連結真的能讓「原本看不到」的組員也能看。token 必須跟文件目前存的 shareToken
+// 完全相符、且未過期，兩者缺一律回報同一種「連結無效」錯誤(not-found)，不細分「token 錯」
+// 跟「已過期」兩種訊息，避免被拿來窮舉試探合法 token。
+export async function getSharedRequestCore(firestoreDb, callerEmail, data) {
+  if (!callerEmail) throw new HttpsError('unauthenticated', '請先登入')
+  const requestId = String(data?.requestId || '').trim()
+  const token = String(data?.token || '').trim()
+  if (!requestId || !token) throw new HttpsError('invalid-argument', '缺少 requestId 或 token')
+
+  const userSnap = await firestoreDb.collection('users').doc(callerEmail).get()
+  if (!userSnap.exists || userSnap.data().active === false) {
+    throw new HttpsError('permission-denied', '這個帳號不在白名單內，或已被停用')
+  }
+
+  const reqSnap = await firestoreDb.collection('requests').doc(requestId).get()
+  if (!reqSnap.exists) throw new HttpsError('not-found', '分享連結無效或已過期')
+  const r = reqSnap.data()
+
+  const expiresAtMs = r.shareExpiresAt
+    ? (typeof r.shareExpiresAt.toMillis === 'function' ? r.shareExpiresAt.toMillis() : new Date(r.shareExpiresAt).getTime())
+    : 0
+  if (!r.shareToken || r.shareToken !== token || Date.now() >= expiresAtMs) {
+    throw new HttpsError('not-found', '分享連結無效或已過期')
+  }
+
+  return {
+    id: requestId,
+    projectName: r.projectName || r.title || '',
+    region: r.region || '',
+    docTypes: r.docTypes || [],
+    dueDate: r.dueDate || '',
+    urgent: !!r.urgent,
+    description: r.description || '',
+    attachments: r.attachments || [],
+    assignedDesigners: r.assignedDesigners || [],
+    assignedDesignersNames: r.assignedDesignersNames || [],
+    submittedBy: r.submittedBy || '',
+    submittedByName: r.submittedByName || '',
+    status: r.status || '',
+    reviewNote: r.reviewNote || '',
+    comment: r.comment || '',
+    rejectReason: r.rejectReason || '',
+    createdAt: toIsoOrNull(r.createdAt),
+    reviewedAt: toIsoOrNull(r.reviewedAt),
+    startedAt: toIsoOrNull(r.startedAt),
+    reviewingAt: toIsoOrNull(r.reviewingAt),
+    completedAt: toIsoOrNull(r.completedAt),
+  }
+}
+
+export const createShareLink = onCall({ region: 'asia-east1' }, async (request) => {
+  const callerEmail = (request.auth?.token?.email || '').trim().toLowerCase()
+  return createShareLinkCore(db, callerEmail, request.data)
+})
+
+export const revokeShareLink = onCall({ region: 'asia-east1' }, async (request) => {
+  const callerEmail = (request.auth?.token?.email || '').trim().toLowerCase()
+  return revokeShareLinkCore(db, callerEmail, request.data)
+})
+
+export const getSharedRequest = onCall({ region: 'asia-east1' }, async (request) => {
+  const callerEmail = (request.auth?.token?.email || '').trim().toLowerCase()
+  return getSharedRequestCore(db, callerEmail, request.data)
 })
 
 // 寄件身份：改用公司 mail2000 信箱（email.transcend-info.com），不再用個人 Gmail 過渡方案。

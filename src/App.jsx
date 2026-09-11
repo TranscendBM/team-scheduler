@@ -15,6 +15,7 @@ import SettingsPage from './pages/SettingsPage'
 import LeavePage from './pages/LeavePage'
 import SponsorPage from './pages/SponsorPage'
 import RequestNewPage from './pages/RequestNewPage'
+import SharedRequestPage from './pages/SharedRequestPage'
 import MyRequestsPage from './pages/MyRequestsPage'
 import RequestsTablePage from './pages/RequestsTablePage'
 import ReviewPage from './pages/ReviewPage'
@@ -95,6 +96,9 @@ export default function App() {
         <Route path="sponsor" element={<PermRoute pageKey="sponsor"><SponsorPage /></PermRoute>} />
         <Route path="request/new" element={<PermRoute pageKey="request/new"><RequestNewPage /></PermRoute>} />
         <Route path="request/edit/:id" element={<PermRoute pageKey="request/new"><RequestNewPage /></PermRoute>} />
+        {/* 分享連結：能不能看這一筆由網址帶的 token 決定(見 SharedRequestPage)，
+            刻意不套用 PermRoute——不屬於角色/地區決定的靜態權限矩陣 */}
+        <Route path="request/shared/:id" element={<SharedRequestPage />} />
         <Route path="my-requests" element={<PermRoute pageKey="my-requests"><MyRequestsPage /></PermRoute>} />
         <Route path="requests" element={<PermRoute pageKey="requests"><RequestsTablePage /></PermRoute>} />
         <Route path="review" element={<ReviewRoute><ReviewPage /></ReviewRoute>} />
