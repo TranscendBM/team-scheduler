@@ -39,6 +39,18 @@ function fmtMonth(ym) {
   return `${y} 年 ${parseInt(m)} 月`
 }
 
+// M/D，不含年份——LINE 訊息給團隊看的是近期休假，不需要年份
+function fmtMD(dateStr) {
+  const [, m, d] = dateStr.split('-')
+  return `${parseInt(m)}/${parseInt(d)}`
+}
+
+// 純文字一行：姓名 起始 ~ 結束 天數，供複製貼到 LINE 群組公告用
+function leaveLineText(leave, personName, dayLabel) {
+  if (leave.startDate === leave.endDate) return `${personName} ${fmtMD(leave.startDate)} ${dayLabel}`
+  return `${personName} ${fmtMD(leave.startDate)} ~ ${fmtMD(leave.endDate)} ${dayLabel}`
+}
+
 export default function LeavePage() {
   const { isManager } = useAuth()
   const [people, setPeople] = useState([])
@@ -50,6 +62,8 @@ export default function LeavePage() {
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [filterPerson, setFilterPerson] = useState('all')
   const [showExpired, setShowExpired] = useState(false)
+  const [showExportModal, setShowExportModal] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     const u1 = onSnapshot(collection(db, 'people'), snap =>
@@ -128,6 +142,24 @@ export default function LeavePage() {
     (filterPerson === 'all' || l.personId === filterPerson) && l.endDate && l.endDate < TODAY
   ).length
 
+  // 匯出純文字：跟目前畫面上看到的（篩選成員 / 是否顯示過期）一致，方便貼到 LINE 群組公告
+  const exportText = baseFiltered.map(l => {
+    const personName = people.find(p => p.id === l.personId)?.name || l.personName
+    const d = days(l)
+    const dayLabel = typeof d === 'number' ? `${d}天` : d
+    return leaveLineText(l, personName, dayLabel)
+  }).join('\n')
+
+  async function handleCopyExport() {
+    try {
+      await navigator.clipboard.writeText(exportText)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // clipboard API 被封鎖時（例如非 https），使用者仍可從文字框手動選取複製
+    }
+  }
+
   // ── Leave card ────────────────────────────────────────────────
   function LeaveCard({ leave }) {
     const person = people.find(p => p.id === leave.personId)
@@ -184,6 +216,10 @@ export default function LeavePage() {
               顯示過期（{expiredCount}）
             </label>
           )}
+          <button onClick={() => setShowExportModal(true)} disabled={baseFiltered.length === 0}
+            className="flex items-center gap-1.5 bg-white border border-gray-200 text-gray-600 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">
+            📋 匯出文字
+          </button>
           {isManager && (
             <button onClick={openCreate}
               className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors">
@@ -378,6 +414,32 @@ export default function LeavePage() {
               <button onClick={handleSave} disabled={saving || !form.personId || !form.startDate || !form.endDate}
                 className="px-5 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-40 font-medium">
                 {saving ? '儲存中…' : '儲存'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 匯出純文字（LINE 用） */}
+      {showExportModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
+          onClick={e => e.target === e.currentTarget && setShowExportModal(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="px-6 py-4 border-b flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-800">匯出純文字</h3>
+              <button onClick={() => setShowExportModal(false)} className="text-gray-500 hover:text-gray-600 text-xl">×</button>
+            </div>
+            <div className="px-6 py-5 space-y-3">
+              <p className="text-xs text-gray-500">內容跟目前畫面上的篩選條件一致，可直接複製貼到 LINE 群組。</p>
+              <textarea readOnly value={exportText} rows={Math.min(12, Math.max(4, exportText.split('\n').length))}
+                onFocus={e => e.target.select()}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono text-gray-700 resize-none" />
+            </div>
+            <div className="px-6 py-4 border-t flex gap-3 justify-end">
+              <button onClick={() => setShowExportModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">關閉</button>
+              <button onClick={handleCopyExport}
+                className="px-5 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium">
+                {copied ? '已複製' : '複製'}
               </button>
             </div>
           </div>
