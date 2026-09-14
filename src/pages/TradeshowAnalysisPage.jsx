@@ -16,6 +16,7 @@ export default function TradeshowAnalysisPage() {
   const [projects, setProjects] = useState([])
   const [year, setYear] = useState(new Date().getFullYear())
   const [target, setTarget] = useState(null)
+  const [copyState, setCopyState] = useState('idle') // 'idle' | 'copied' | 'error'
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'projects'), snap =>
@@ -92,6 +93,45 @@ export default function TradeshowAnalysisPage() {
   const totalBudget = yearShows.reduce((sum, p) => sum + totalCostUSD(p), 0)
   const missingBudget = yearShows.filter(p => totalCostUSD(p) <= 0).length
 
+  // 各分公司目標 vs 已報名，給下面「複製表格」用（跟畫面上的長條圖算法一致）
+  const officeTargetRows = sortByOfficeOrder(Object.keys(targetByOffice)).map(office => {
+    const t = targetByOffice[office]
+    const c = yearShows.filter(p => (p.office || '未分公司') === office).length
+    const rate = t ? Math.round((c / t) * 100) : 0
+    return { office, target: t, count: c, rate }
+  })
+
+  // 複製成表格，貼到 PPT／Word／Excel 時會自動變成原生表格（HTML 表格 + 純文字雙格式），
+  // 不用另外截圖或手動輸入
+  async function handleCopyTargetTable() {
+    const html = `<table><thead><tr><th>分公司</th><th>目標</th><th>已報名</th><th>達成率</th></tr></thead><tbody>${
+      officeTargetRows.map(r => `<tr><td>${r.office}</td><td>${r.target}</td><td>${r.count}</td><td>${r.rate}%</td></tr>`).join('')
+    }</tbody></table>`
+    const text = [
+      `${year} 年度秀展目標達成率`,
+      '分公司\t目標\t已報名\t達成率',
+      ...officeTargetRows.map(r => `${r.office}\t${r.target}\t${r.count}\t${r.rate}%`),
+    ].join('\n')
+    try {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          'text/html': new Blob([html], { type: 'text/html' }),
+          'text/plain': new Blob([text], { type: 'text/plain' }),
+        }),
+      ])
+      setCopyState('copied')
+    } catch {
+      // 舊瀏覽器可能不支援多格式 ClipboardItem，退回純文字（貼到 PPT 會是一段文字而非表格，但至少資料不會丟失）
+      try {
+        await navigator.clipboard.writeText(text)
+        setCopyState('copied')
+      } catch {
+        setCopyState('error')
+      }
+    }
+    setTimeout(() => setCopyState('idle'), 2000)
+  }
+
   return (
     <div className="p-8 max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-1">
@@ -141,7 +181,13 @@ export default function TradeshowAnalysisPage() {
       {/* 各分公司目標達成率 */}
       {Object.keys(targetByOffice).length > 0 && (
         <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
-          <p className="text-sm font-semibold text-gray-700 mb-4">🎯 各分公司目標達成率</p>
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-sm font-semibold text-gray-700">🎯 各分公司目標達成率</p>
+            <button onClick={handleCopyTargetTable}
+              className="text-xs px-2.5 py-1 rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50">
+              {copyState === 'copied' ? '已複製' : copyState === 'error' ? '複製失敗' : '📋 複製表格（可貼到 PPT）'}
+            </button>
+          </div>
           <div className="space-y-2.5">
             {sortByOfficeOrder(Object.keys(targetByOffice)).map(office => {
               const t = targetByOffice[office]
