@@ -17,6 +17,7 @@ export default function TradeshowAnalysisPage() {
   const [year, setYear] = useState(new Date().getFullYear())
   const [target, setTarget] = useState(null)
   const [copyState, setCopyState] = useState('idle') // 'idle' | 'copied' | 'error'
+  const [chartCopyState, setChartCopyState] = useState('idle') // 'idle' | 'copied' | 'error'
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'projects'), snap =>
@@ -132,6 +133,73 @@ export default function TradeshowAnalysisPage() {
     setTimeout(() => setCopyState('idle'), 2000)
   }
 
+  // 用 canvas 畫一張長條圖再存成 PNG 寫進剪貼簿——PPT 貼上會直接變成一張圖片，
+  // 排版跟畫面上的「各分公司目標達成率」長條圖一致，不用另外截圖。
+  async function handleCopyTargetChart() {
+    if (officeTargetRows.length === 0) return
+    const width = 640
+    const rowHeight = 44
+    const paddingTop = 56
+    const paddingBottom = 20
+    const height = paddingTop + officeTargetRows.length * rowHeight + paddingBottom
+    const scale = 2 // 高解析度輸出，貼到 PPT 放大也不會糊
+    const canvas = document.createElement('canvas')
+    canvas.width = width * scale
+    canvas.height = height * scale
+    const ctx = canvas.getContext('2d')
+    ctx.scale(scale, scale)
+
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, width, height)
+    ctx.fillStyle = '#374151'
+    ctx.font = 'bold 16px "Microsoft JhengHei", "PingFang TC", sans-serif'
+    ctx.fillText(`${year} 年度各分公司秀展目標達成率`, 20, 32)
+
+    const labelWidth = 70
+    const barAreaX = 20 + labelWidth
+    const barAreaWidth = width - barAreaX - 20
+
+    officeTargetRows.forEach((r, i) => {
+      const y = paddingTop + i * rowHeight
+      ctx.fillStyle = '#4b5563'
+      ctx.font = '13px "Microsoft JhengHei", "PingFang TC", sans-serif'
+      ctx.textAlign = 'left'
+      ctx.fillText(r.office, 20, y + 22)
+
+      ctx.fillStyle = '#f3f4f6'
+      ctx.fillRect(barAreaX, y + 6, barAreaWidth, 24)
+
+      const barPct = Math.max(Math.min(r.rate, 100), r.count > 0 ? 8 : 0)
+      const barW = barAreaWidth * (barPct / 100)
+      if (barW > 0) {
+        ctx.fillStyle = r.rate >= 100 ? '#10b981' : '#3b82f6'
+        ctx.fillRect(barAreaX, y + 6, barW, 24)
+      }
+
+      const label = `${r.count} / ${r.target}（${r.rate}%）`
+      ctx.font = '12px "Microsoft JhengHei", "PingFang TC", sans-serif'
+      if (r.count > 0) {
+        ctx.fillStyle = '#ffffff'
+        ctx.textAlign = 'right'
+        ctx.fillText(label, barAreaX + barW - 8, y + 22)
+      } else {
+        ctx.fillStyle = '#9ca3af'
+        ctx.textAlign = 'left'
+        ctx.fillText(label, barAreaX + 8, y + 22)
+      }
+    })
+
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'))
+    if (!blob) { setChartCopyState('error'); setTimeout(() => setChartCopyState('idle'), 2000); return }
+    try {
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+      setChartCopyState('copied')
+    } catch {
+      setChartCopyState('error')
+    }
+    setTimeout(() => setChartCopyState('idle'), 2000)
+  }
+
   return (
     <div className="p-8 max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-1">
@@ -183,10 +251,16 @@ export default function TradeshowAnalysisPage() {
         <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
           <div className="flex items-center justify-between mb-4">
             <p className="text-sm font-semibold text-gray-700">🎯 各分公司目標達成率</p>
-            <button onClick={handleCopyTargetTable}
-              className="text-xs px-2.5 py-1 rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50">
-              {copyState === 'copied' ? '已複製' : copyState === 'error' ? '複製失敗' : '📋 複製表格（可貼到 PPT）'}
-            </button>
+            <div className="flex gap-2">
+              <button onClick={handleCopyTargetTable}
+                className="text-xs px-2.5 py-1 rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50">
+                {copyState === 'copied' ? '已複製' : copyState === 'error' ? '複製失敗' : '📋 複製表格（可貼到 PPT）'}
+              </button>
+              <button onClick={handleCopyTargetChart}
+                className="text-xs px-2.5 py-1 rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50">
+                {chartCopyState === 'copied' ? '已複製' : chartCopyState === 'error' ? '複製失敗' : '📊 複製長條圖（可貼到 PPT）'}
+              </button>
+            </div>
           </div>
           <div className="space-y-2.5">
             {sortByOfficeOrder(Object.keys(targetByOffice)).map(office => {
