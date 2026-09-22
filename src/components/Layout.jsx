@@ -1,7 +1,7 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import {
   Home, BarChart3, TrendingUp, ClipboardList, Target, Users, FilePlus2, FileText,
-  FolderOpen, Scale, LineChart, Calendar, Umbrella, Trophy, Settings, PartyPopper,
+  FolderOpen, Scale, LineChart, Calendar, Umbrella, Car, Trophy, Settings, PartyPopper,
   Award, Palette, Shield,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
@@ -31,6 +31,7 @@ const NAV_ICONS = {
   dashboard: LineChart,
   calendar: Calendar,
   leave: Umbrella,
+  outings: Car,
   sponsor: Trophy,
   people: Users,
   settings: Settings,
