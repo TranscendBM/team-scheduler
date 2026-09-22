@@ -248,6 +248,7 @@ service cloud.firestore {
     match /projects/{id}     { allow read: if whitelisted(); allow write: if isManager(); }
     match /people/{id}       { allow read: if whitelisted(); allow write: if isManager(); }
     match /leaves/{id}       { allow read: if whitelisted(); allow write: if isManager(); }
+    match /outings/{id}      { allow read: if whitelisted(); allow write: if isManager(); }
 
     // settings/permissions 只有 manager 能寫；其餘 settings（里程碑規則、設計類別）也收斂為 manager 可寫
     match /settings/{id} {

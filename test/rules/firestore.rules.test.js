@@ -607,7 +607,7 @@ describe('臨時審核代理人（settings/reviewDelegation）', () => {
 })
 
 describe('projects / people / leaves / settings / hbl* — 讀白名單、寫僅 manager', () => {
-  const collections = ['projects', 'people', 'leaves', 'hblPayments', 'hblSchedule', 'hblAdStatus']
+  const collections = ['projects', 'people', 'leaves', 'outings', 'hblPayments', 'hblSchedule', 'hblAdStatus']
 
   for (const col of collections) {
     it(`${col}: 白名單使用者可讀`, async () => {

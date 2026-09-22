@@ -13,6 +13,7 @@ import DesignPage from './pages/DesignPage'
 import PeoplePage from './pages/PeoplePage'
 import SettingsPage from './pages/SettingsPage'
 import LeavePage from './pages/LeavePage'
+import OutingsPage from './pages/OutingsPage'
 import SponsorPage from './pages/SponsorPage'
 import RequestNewPage from './pages/RequestNewPage'
 import SharedRequestPage from './pages/SharedRequestPage'
@@ -93,6 +94,7 @@ export default function App() {
         <Route path="people" element={<PermRoute pageKey="people"><PeoplePage /></PermRoute>} />
         <Route path="settings" element={<PermRoute pageKey="settings"><SettingsPage /></PermRoute>} />
         <Route path="leave" element={<PermRoute pageKey="leave"><LeavePage /></PermRoute>} />
+        <Route path="outings" element={<PermRoute pageKey="outings"><OutingsPage /></PermRoute>} />
         <Route path="sponsor" element={<PermRoute pageKey="sponsor"><SponsorPage /></PermRoute>} />
         <Route path="request/new" element={<PermRoute pageKey="request/new"><RequestNewPage /></PermRoute>} />
         <Route path="request/edit/:id" element={<PermRoute pageKey="request/new"><RequestNewPage /></PermRoute>} />
