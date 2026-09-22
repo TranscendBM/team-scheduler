@@ -4,6 +4,8 @@ import { collection, onSnapshot, doc, getDoc } from 'firebase/firestore'
 import { db } from '../firebase'
 import { buildBarsForPerson, buildRequestBarsForDesigner, TYPE_LABELS, DEFAULT_RULES, LOADING_COLORS } from '../utils/milestoneUtils'
 import { ACTIVE_STATUSES } from '../utils/requestConstants'
+import { useIsDesktop } from '../hooks/useMediaQuery'
+import { tooltipPosition } from '../utils/tooltipPosition'
 
 // 工作條點下去要跳去哪個頁面(帶 ?open=id，目的頁自己找到該筆資料並開啟編輯/詳情視窗)
 const ROUTE_FOR_TYPE = {
@@ -41,8 +43,14 @@ const LANE_GAP = 4       // gap between lanes
 const ROW_PADDING = 12   // top + bottom padding per row
 const BUSY_HEIGHT = 8    // height of busy heatmap strip
 const HEADER_HEIGHT = 56
-const LEFT_WIDTH = 170
+// 人名欄寬度：手機縮到 110px（仍足夠顯示姓名＋角色），桌面維持原本 170px。
+// 這個值同時參與「捲到今天」的計算，所以必須是 JS 值而不是純 CSS breakpoint。
+const LEFT_WIDTH_DESKTOP = 170
+const LEFT_WIDTH_MOBILE = 110
 const MIN_ROW_HEIGHT = 48
+// 時間軸最小寬度：手機用比較窄的值（刻度仍完整、只是每格較窄），桌面維持原本 1400px
+const MIN_TIMELINE_DESKTOP = 1400
+const MIN_TIMELINE_MOBILE = 900
 
 // Assign bars to non-overlapping lanes
 function calculateLanes(bars) {
@@ -90,6 +98,17 @@ const BUSY_COLORS = [
 ]
 function getBusyColor(count) { return BUSY_COLORS[Math.min(count, 10)] }
 
+// tooltip 的 fixed 定位：夾在 viewport 內（估一個高度上限即可，寧可稍微往上移也不要掉出畫面）
+function tipStyle(tooltip, width, height) {
+  const vw = typeof window === 'undefined' ? 1024 : window.innerWidth
+  const vh = typeof window === 'undefined' ? 768 : window.innerHeight
+  return tooltipPosition({
+    x: tooltip.x, y: tooltip.y,
+    width: Math.min(width, vw - 16), height,
+    viewportWidth: vw, viewportHeight: vh,
+  })
+}
+
 const SHIMMER_CSS = `
 @keyframes gantt-breathe {
   0%, 100% { opacity: 0; }
@@ -117,6 +136,9 @@ export default function GanttPage() {
   const [showOverloadPanel, setShowOverloadPanel] = useState(false)
   const scrollRef = useRef(null)
   const rowRefs = useRef(new Map())
+  const isDesktop = useIsDesktop()
+  const LEFT_WIDTH = isDesktop ? LEFT_WIDTH_DESKTOP : LEFT_WIDTH_MOBILE
+  const minTimelineWidth = isDesktop ? MIN_TIMELINE_DESKTOP : MIN_TIMELINE_MOBILE
 
   function goToBar(bar) {
     const route = ROUTE_FOR_TYPE[bar.type]
@@ -238,7 +260,7 @@ export default function GanttPage() {
       scrollRef.current.scrollLeft = isTodayInView ? Math.max(0, todayPx - cw / 2) : 0
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewMode, anchor.getTime(), people.length])
+  }, [viewMode, anchor.getTime(), people.length, LEFT_WIDTH])
 
   const filteredPeople = people
     .filter(p => filterRole === 'all' || p.role === filterRole)
@@ -278,31 +300,32 @@ export default function GanttPage() {
     .sort((a, b) => b.peakBusy - a.peakBusy)
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-w-0">
       <style>{SHIMMER_CSS}</style>
-      {/* Top bar */}
-      <div className="flex items-center justify-between px-6 py-4 border-b bg-white">
-        <div>
-          <h2 className="text-xl font-bold text-gray-800">甘特圖總覽</h2>
+      {/* Top bar：手機上下排列、工具列可換行，不會把控制項擠出畫面 */}
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between px-4 sm:px-6 py-3 sm:py-4 border-b bg-white shrink-0">
+        <div className="min-w-0">
+          <h1 className="text-lg sm:text-xl font-bold text-gray-800">甘特圖總覽</h1>
           <p className="text-sm text-gray-500">{filteredPeople.length} 位成員</p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 xl:gap-4">
           {/* Overload warning */}
           {overloaded.length > 0 && (
             <div className="relative">
               <button onClick={() => setShowOverloadPanel(v => !v)}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium bg-red-50 text-red-700 border border-red-200 hover:bg-red-100">
+                aria-expanded={showOverloadPanel}
+                className="flex items-center gap-1 px-3 py-2 min-h-[40px] rounded-lg text-sm font-medium bg-red-50 text-red-700 border border-red-200 hover:bg-red-100">
                 ⚠️ {overloaded.length} 位過載
               </button>
               {showOverloadPanel && (
                 <>
                   <div className="fixed inset-0 z-30" onClick={() => setShowOverloadPanel(false)} />
-                  <div className="absolute right-0 top-full mt-1 w-56 bg-white rounded-lg shadow-xl border border-gray-200 z-40 py-1">
+                  <div className="absolute left-0 sm:left-auto sm:right-0 top-full mt-1 w-56 max-w-[calc(100vw-2rem)] bg-white rounded-lg shadow-xl border border-gray-200 z-40 py-1 max-h-72 overflow-y-auto">
                     {overloaded.map(pd => (
                       <button key={pd.person.id} onClick={() => scrollToPerson(pd.person.id)}
-                        className="w-full flex items-center justify-between px-3 py-2 text-sm text-left hover:bg-gray-50">
-                        <span className="text-gray-700">{pd.person.name}</span>
-                        <span className="text-red-600 font-medium">{pd.peakBusy} 件並行</span>
+                        className="w-full flex items-center justify-between gap-2 px-3 py-2.5 min-h-[44px] text-sm text-left hover:bg-gray-50">
+                        <span className="text-gray-700 min-w-0 break-words">{pd.person.name}</span>
+                        <span className="text-red-600 font-medium whitespace-nowrap">{pd.peakBusy} 件並行</span>
                       </button>
                     ))}
                   </div>
@@ -311,7 +334,7 @@ export default function GanttPage() {
             </div>
           )}
           {/* Busy legend */}
-          <div className="flex items-center gap-1.5 text-xs text-gray-500">
+          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-gray-500">
             <span>繁忙度</span>
             {[[1,'1'],[3,'3'],[5,'5'],[7,'7'],[10,'10+']].map(([cnt, label]) => (
               <div key={cnt} className="flex items-center gap-0.5">
@@ -324,7 +347,7 @@ export default function GanttPage() {
           <div className="flex rounded-lg border border-gray-200 overflow-hidden text-sm">
             {[['all', '全部'], ['designer', '設計師'], ['planner', 'Planner']].map(([val, label]) => (
               <button key={val} onClick={() => setFilterRole(val)}
-                className={`px-3 py-1.5 ${filterRole === val ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                className={`px-3 py-2 min-h-[40px] ${filterRole === val ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
                 {label}
               </button>
             ))}
@@ -333,23 +356,23 @@ export default function GanttPage() {
           <div className="flex rounded-lg border border-gray-200 overflow-hidden text-sm">
             {[['year', '年'], ['month', '月'], ['week', '週']].map(([val, label]) => (
               <button key={val} onClick={() => setViewMode(val)}
-                className={`px-3 py-1.5 ${viewMode === val ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                className={`px-3 py-2 min-h-[40px] ${viewMode === val ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
                 {label}
               </button>
             ))}
           </div>
           {/* Period nav */}
           <div className="flex items-center gap-1">
-            <button onClick={goPrev} className="p-1.5 rounded hover:bg-gray-100 text-gray-600">‹</button>
-            <button onClick={goToday} className="px-2 py-1 rounded hover:bg-gray-100 text-xs text-gray-500 border border-gray-200">今天</button>
-            <span className="font-semibold text-gray-800 text-center px-1" style={{ minWidth: 90 }}>{periodLabel}</span>
-            <button onClick={goNext} className="p-1.5 rounded hover:bg-gray-100 text-gray-600">›</button>
+            <button onClick={goPrev} aria-label="上一期" className="w-10 h-10 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600">‹</button>
+            <button onClick={goToday} className="px-2 py-2 min-h-[40px] rounded hover:bg-gray-100 text-xs text-gray-500 border border-gray-200">今天</button>
+            <span className="font-semibold text-gray-800 text-center px-1 text-sm sm:text-base" style={{ minWidth: 80 }}>{periodLabel}</span>
+            <button onClick={goNext} aria-label="下一期" className="w-10 h-10 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600">›</button>
           </div>
         </div>
       </div>
 
-      {/* Gantt body */}
-      <div className="flex-1 overflow-hidden">
+      {/* Gantt body：橫向捲動只發生在這個容器內，不會讓整頁 body 出現水平捲軸 */}
+      <div className="flex-1 min-h-0 overflow-hidden">
         {filteredPeople.length === 0 ? (
           <div className="flex items-center justify-center h-full text-gray-500">
             <div className="text-center">
@@ -359,11 +382,11 @@ export default function GanttPage() {
           </div>
         ) : (
           <div className="h-full overflow-auto gantt-scroll" ref={scrollRef}>
-            <div style={{ minWidth: '1400px' }}>
+            <div style={{ minWidth: `${minTimelineWidth}px` }}>
 
               {/* Month header */}
               <div className="flex sticky top-0 bg-white z-20 border-b shadow-sm" style={{ height: HEADER_HEIGHT }}>
-                <div className="flex-shrink-0 border-r bg-gray-50 flex items-center px-4" style={{ width: LEFT_WIDTH }}>
+                <div className="flex-shrink-0 border-r bg-gray-50 flex items-center px-2 lg:px-4 sticky left-0 z-10" style={{ width: LEFT_WIDTH }}>
                   <span className="text-xs font-medium text-gray-500">成員</span>
                 </div>
                 <div className="flex-1 relative overflow-hidden">
@@ -391,11 +414,11 @@ export default function GanttPage() {
                   style={{ height: rowH }}>
 
                   {/* Name column */}
-                  <div className="flex-shrink-0 border-r flex items-start pt-3 px-4 gap-2 sticky left-0 z-10 bg-inherit"
+                  <div className="flex-shrink-0 border-r flex items-start pt-3 px-2 lg:px-4 gap-1.5 lg:gap-2 sticky left-0 z-10 bg-inherit"
                     style={{ width: LEFT_WIDTH }}>
                     <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1.5 ${person.role === 'designer' ? 'bg-purple-400' : 'bg-teal-400'}`} />
                     <div className="min-w-0">
-                      <p className="text-base font-semibold text-gray-800 truncate flex items-center gap-1">
+                      <p className="text-sm lg:text-base font-semibold text-gray-800 truncate flex items-center gap-1">
                         {person.name}
                         {peakBusy >= OVERLOAD_THRESHOLD && (
                           <span title={`本期最多同時 ${peakBusy} 件`} className="text-red-500 text-sm leading-none">⚠️</span>
@@ -554,10 +577,10 @@ export default function GanttPage() {
         )}
       </div>
 
-      {/* Tooltip */}
+      {/* Tooltip：位置夾在 viewport 內，手機上點右半邊的工作條也不會整個掉出畫面 */}
       {tooltip && tooltip.bar && (
-        <div className="fixed z-50 bg-gray-900 text-white text-xs rounded-xl p-3 shadow-2xl pointer-events-none"
-          style={{ left: tooltip.x + 14, top: tooltip.y - 10, maxWidth: 260 }}>
+        <div className="fixed z-[70] bg-gray-900 text-white text-xs rounded-xl p-3 shadow-2xl pointer-events-none"
+          style={{ ...tipStyle(tooltip, 260, 200), maxWidth: 'min(260px, calc(100vw - 16px))' }}>
           <p className="font-semibold text-sm mb-1">{tooltip.bar.projectName}</p>
           <div className="flex items-center gap-2 mb-1 flex-wrap">
             <div className="w-2 h-2 rounded-full" style={{ backgroundColor: tooltip.bar.color }} />
@@ -589,8 +612,8 @@ export default function GanttPage() {
         </div>
       )}
       {tooltip && tooltip.leave && (
-        <div className="fixed z-50 bg-gray-900 text-white text-xs rounded-xl p-3 shadow-2xl pointer-events-none"
-          style={{ left: tooltip.x + 14, top: tooltip.y - 10, maxWidth: 220 }}>
+        <div className="fixed z-[70] bg-gray-900 text-white text-xs rounded-xl p-3 shadow-2xl pointer-events-none"
+          style={{ ...tipStyle(tooltip, 220, 110), maxWidth: 'min(220px, calc(100vw - 16px))' }}>
           <div className="flex items-center gap-2 mb-1">
             <div className="w-2 h-2 rounded-full" style={{ backgroundColor: LEAVE_COLORS[tooltip.leave.type] || '#d1d5db' }} />
             <p className="font-semibold text-sm">{tooltip.leave.personName} · {tooltip.leave.type}</p>

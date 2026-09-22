@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { getSafeAttachmentUrl } from '../utils/attachmentUrl'
+import useScrollLock from '../hooks/useScrollLock'
 
 const IMG_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp']
 const OFFICE_EXT = ['ppt', 'pptx', 'doc', 'docx', 'xls', 'xlsx']
@@ -44,6 +45,15 @@ const icon = (name) => {
 export default function Attachments({ items, requestId }) {
   const [preview, setPreview] = useState(null) // { a, info, safeUrl }
 
+  // 預覽是全螢幕浮層：開著的時候鎖住背景捲動、Escape 可關閉（跟其他 Modal 一致）
+  useScrollLock(!!preview)
+  useEffect(() => {
+    if (!preview) return undefined
+    const onKey = (e) => { if (e.key === 'Escape') setPreview(null) }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [preview])
+
   if (!items || items.length === 0) return null
 
   // 每個附件在使用前都必須先驗證：url 是不是合法的本專案 Firebase Storage 網址、
@@ -70,26 +80,27 @@ export default function Attachments({ items, requestId }) {
       <div className="flex flex-wrap gap-2">
         {items.map((a, idx) => (
           <button key={a.url} type="button" onClick={e => open(e, a, idx)}
-            className="inline-flex items-center gap-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg px-2.5 py-1 transition-colors">
-            {icon(a.name)} <span className="truncate max-w-[180px]">{a.name}</span>
+            className="inline-flex items-center gap-1 max-w-full min-h-[36px] text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg px-2.5 py-1.5 transition-colors">
+            <span className="shrink-0">{icon(a.name)}</span>
+            <span className="truncate max-w-[60vw] sm:max-w-[180px]">{a.name}</span>
           </button>
         ))}
       </div>
 
       {preview && (
         <div className="fixed inset-0 bg-black/60 z-[60] flex flex-col" onClick={e => { e.stopPropagation(); setPreview(null) }}>
-          {/* 頂欄 */}
-          <div className="flex items-center gap-3 px-4 py-3 bg-gray-900/90 text-white" onClick={e => e.stopPropagation()}>
-            <span className="text-sm truncate flex-1">{icon(preview.a.name)} {preview.a.name}</span>
+          {/* 頂欄：手機上檔名獨立一行，操作鍵換行排列，不會互相擠掉 */}
+          <div className="flex flex-wrap items-center gap-2 px-3 sm:px-4 py-2 sm:py-3 bg-gray-900/90 text-white shrink-0" onClick={e => e.stopPropagation()}>
+            <span className="text-sm truncate flex-1 min-w-0 basis-full sm:basis-auto">{icon(preview.a.name)} {preview.a.name}</span>
             <a href={preview.info.src} target="_blank" rel="noreferrer noopener"
-              className="text-xs bg-white/10 hover:bg-white/20 rounded-lg px-3 py-1.5">另開視窗</a>
+              className="text-xs bg-white/10 hover:bg-white/20 rounded-lg px-3 py-2 min-h-[36px] flex items-center">另開視窗</a>
             <a href={preview.safeUrl} target="_blank" rel="noreferrer noopener"
-              className="text-xs bg-white/10 hover:bg-white/20 rounded-lg px-3 py-1.5">下載</a>
-            <button onClick={() => setPreview(null)}
-              className="text-lg leading-none px-2 hover:text-gray-500">✕</button>
+              className="text-xs bg-white/10 hover:bg-white/20 rounded-lg px-3 py-2 min-h-[36px] flex items-center">下載</a>
+            <button onClick={() => setPreview(null)} aria-label="關閉預覽"
+              className="ml-auto sm:ml-0 w-11 h-11 flex items-center justify-center text-lg leading-none rounded-lg hover:bg-white/10">✕</button>
           </div>
           {/* 內容 */}
-          <div className="flex-1 min-h-0 p-4 flex items-center justify-center" onClick={e => e.stopPropagation()}>
+          <div className="flex-1 min-h-0 p-2 sm:p-4 flex items-center justify-center" onClick={e => e.stopPropagation()}>
             {preview.info.kind === 'image' ? (
               <img src={preview.info.src} alt={preview.a.name}
                 className="max-w-full max-h-full object-contain rounded-lg shadow-2xl" />

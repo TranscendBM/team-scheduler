@@ -19,8 +19,8 @@ export default function LoginPage() {
   // 已登入但不在白名單 → 顯示未開通訊息
   if (user && unauthorized) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-        <div className="bg-white rounded-2xl shadow-lg p-10 w-full max-w-sm text-center">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 px-4 py-8">
+        <div className="bg-white rounded-2xl shadow-lg p-6 sm:p-10 w-full max-w-sm text-center">
           <div className="text-5xl mb-4">🔒</div>
           <h1 className="text-xl font-bold text-gray-800 mb-2">帳號尚未開通</h1>
           <p className="text-gray-500 text-sm mb-1">你登入的帳號</p>
@@ -28,7 +28,7 @@ export default function LoginPage() {
           <p className="text-gray-500 text-sm mb-8">尚未被授權使用本系統,請聯絡主管開通權限。</p>
           <button
             onClick={logout}
-            className="w-full bg-gray-100 text-gray-600 py-3 px-6 rounded-xl font-medium hover:bg-gray-200 transition-all"
+            className="w-full bg-gray-100 text-gray-600 py-3 px-6 min-h-[44px] rounded-xl font-medium hover:bg-gray-200 transition-all"
           >
             使用其他帳號登入
           </button>
@@ -38,16 +38,16 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="bg-white rounded-2xl shadow-lg p-10 w-full max-w-sm text-center">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 px-4 py-8">
+      <div className="bg-white rounded-2xl shadow-lg p-6 sm:p-10 w-full max-w-sm text-center">
         <img src={transcendLogo} alt="創見資訊" className="h-8 mx-auto mb-5" />
         <h1 className="text-2xl font-bold text-gray-800 mb-1">行銷設計部</h1>
         <p className="text-gray-500 text-sm mb-8">專案管理系統</p>
         <button
           onClick={handleLogin}
-          className="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 text-gray-700 py-3 px-6 rounded-xl font-medium hover:bg-gray-50 hover:shadow-md transition-all"
+          className="w-full flex items-center justify-center gap-3 bg-white border border-gray-300 text-gray-700 py-3 px-4 sm:px-6 min-h-[44px] rounded-xl font-medium hover:bg-gray-50 hover:shadow-md transition-all"
         >
-          <svg className="w-5 h-5" viewBox="0 0 24 24">
+          <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
             <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
             <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />

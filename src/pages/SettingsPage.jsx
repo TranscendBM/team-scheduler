@@ -80,11 +80,11 @@ export default function SettingsPage() {
       <div className="flex items-center justify-center gap-1">
         {isManager ? (
           <>
-            <button onClick={() => setVal(baseKey, level, -1)} disabled={val <= 0}
-              className="w-6 h-6 flex items-center justify-center rounded border border-gray-200 hover:bg-gray-100 text-gray-600 disabled:opacity-30 text-sm font-bold">−</button>
-            <span className="w-8 text-center text-sm font-semibold text-gray-800">{val}</span>
-            <button onClick={() => setVal(baseKey, level, +1)}
-              className="w-6 h-6 flex items-center justify-center rounded border border-gray-200 hover:bg-gray-100 text-gray-600 text-sm font-bold">+</button>
+            <button onClick={() => setVal(baseKey, level, -1)} disabled={val <= 0} aria-label="減少一週"
+              className="w-8 h-8 sm:w-7 sm:h-7 flex items-center justify-center rounded border border-gray-200 hover:bg-gray-100 text-gray-600 disabled:opacity-30 text-sm font-bold shrink-0">−</button>
+            <span className="w-7 text-center text-sm font-semibold text-gray-800">{val}</span>
+            <button onClick={() => setVal(baseKey, level, +1)} aria-label="增加一週"
+              className="w-8 h-8 sm:w-7 sm:h-7 flex items-center justify-center rounded border border-gray-200 hover:bg-gray-100 text-gray-600 text-sm font-bold shrink-0">+</button>
           </>
         ) : (
           <span className="text-sm font-semibold text-gray-700">{val === 0 ? '當天' : `${val} 週`}</span>
@@ -94,28 +94,28 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-w-0">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b bg-white">
-        <div>
-          <h2 className="text-xl font-bold text-gray-800">里程碑設定</h2>
-          <p className="text-sm text-gray-500">依秀展 Loading 程度設定各工作項目的提前週數</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 sm:px-6 py-3 sm:py-4 border-b bg-white shrink-0">
+        <div className="min-w-0">
+          <h1 className="text-lg sm:text-xl font-bold text-gray-800">里程碑設定</h1>
+          <p className="text-sm text-gray-500 break-words">依秀展 Loading 程度設定各工作項目的提前週數</p>
         </div>
         {isManager && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {saved && <span className="text-sm text-emerald-600 font-medium">✓ 已儲存</span>}
-            <button onClick={handleReset} className="px-3 py-2 text-sm text-gray-500 hover:bg-gray-100 rounded-lg">
+            <button onClick={handleReset} className="px-3 py-2 min-h-[44px] text-sm text-gray-500 hover:bg-gray-100 rounded-lg">
               還原預設
             </button>
             <button onClick={handleSave} disabled={saving || !hasChanges}
-              className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 font-medium">
+              className="px-4 py-2 min-h-[44px] text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 font-medium">
               {saving ? '儲存中…' : '儲存設定'}
             </button>
           </div>
         )}
       </div>
 
-      <div className="flex-1 overflow-auto p-6 space-y-6 max-w-3xl">
+      <div className="flex-1 min-h-0 overflow-auto p-4 sm:p-6 space-y-6 max-w-3xl">
 
         {/* ── 秀展里程碑（分 loading 等級） ── */}
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -124,9 +124,11 @@ export default function SettingsPage() {
             <span className="text-xs text-blue-500">依 Loading 程度設定不同提前週數</span>
           </div>
 
-          {/* Table header */}
-          <div className="grid px-5 py-2.5 border-b bg-gray-50 text-xs font-semibold text-gray-500"
-            style={{ gridTemplateColumns: '1fr 90px 90px 90px' }}>
+          {/*
+            Table header：手機隱藏（每一列會各自帶上 Loading 等級標籤），
+            sm 以上維持原本「工作項目 + 三個等級欄」的表格版型
+          */}
+          <div className="hidden sm:grid px-5 py-2.5 border-b bg-gray-50 text-xs font-semibold text-gray-500 grid-cols-[1fr_90px_90px_90px]">
             <div>工作項目</div>
             {LEVELS.map(lv => (
               <div key={lv} className="text-center">
@@ -138,30 +140,33 @@ export default function SettingsPage() {
           {/* Rows */}
           <div className="divide-y divide-gray-100">
             {TRADESHOW_ROWS.map(row => (
-              <div key={row.key} className="grid px-5 py-3 items-center"
-                style={{ gridTemplateColumns: '1fr 90px 90px 90px' }}>
-                <div>
-                  <p className="text-sm font-medium text-gray-800">{row.label}</p>
-                  <p className="text-xs text-gray-500">{row.desc} ·
+              <div key={row.key} className="grid grid-cols-3 sm:grid-cols-[1fr_90px_90px_90px] gap-y-2 px-4 sm:px-5 py-3 items-center">
+                <div className="col-span-3 sm:col-span-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-800 break-words">{row.label}</p>
+                  <p className="text-xs text-gray-500 break-words">{row.desc} ·
                     <span className={`ml-1 text-xs px-1.5 py-0.5 rounded-full ${row.role === '設計師' ? 'bg-purple-100 text-purple-700' : 'bg-teal-100 text-teal-700'}`}>
                       {row.role}
                     </span>
                   </p>
                 </div>
                 {LEVELS.map(lv => (
-                  <div key={lv}><Stepper baseKey={row.key} level={lv} /></div>
+                  <div key={lv}>
+                    <span className={`sm:hidden block text-center mb-1 text-xs font-semibold ${LEVEL_COLORS[lv]} rounded-full px-1 py-0.5`}>{lv}</span>
+                    <Stepper baseKey={row.key} level={lv} />
+                  </div>
                 ))}
               </div>
             ))}
 
             {/* LinkedIn post row — always on event day */}
-            <div className="grid px-5 py-3 items-center" style={{ gridTemplateColumns: '1fr 90px 90px 90px' }}>
-              <div>
+            <div className="grid grid-cols-3 sm:grid-cols-[1fr_90px_90px_90px] gap-y-2 px-4 sm:px-5 py-3 items-center">
+              <div className="col-span-3 sm:col-span-1 min-w-0">
                 <p className="text-sm font-medium text-gray-800">LinkedIn 發文</p>
-                <p className="text-xs text-gray-500">開展當天 · <span className="ml-1 text-xs px-1.5 py-0.5 rounded-full bg-teal-100 text-teal-700">Planner</span></p>
+                <p className="text-xs text-gray-500 break-words">開展當天 · <span className="ml-1 text-xs px-1.5 py-0.5 rounded-full bg-teal-100 text-teal-700">Planner</span></p>
               </div>
               {LEVELS.map(lv => (
                 <div key={lv} className="text-center">
+                  <span className={`sm:hidden block mb-1 text-xs font-semibold ${LEVEL_COLORS[lv]} rounded-full px-1 py-0.5`}>{lv}</span>
                   <span className="text-xs text-gray-500 italic">開展當天</span>
                 </div>
               ))}
@@ -176,14 +181,14 @@ export default function SettingsPage() {
           </div>
           <div className="divide-y divide-gray-100">
             {KV_ROWS.map(row => (
-              <div key={row.key} className="flex items-center justify-between px-5 py-3.5">
-                <div>
-                  <p className="text-sm font-medium text-gray-800">{row.label}</p>
-                  <p className="text-xs text-gray-500">{row.desc}</p>
+              <div key={row.key} className="flex flex-wrap items-center justify-between gap-2 px-4 sm:px-5 py-3.5">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-gray-800 break-words">{row.label}</p>
+                  <p className="text-xs text-gray-500 break-words">{row.desc}</p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                   <Stepper baseKey={row.key} level={null} />
-                  <span className="text-sm text-gray-500 w-8">週前</span>
+                  <span className="text-sm text-gray-500">週前</span>
                 </div>
               </div>
             ))}
@@ -191,7 +196,7 @@ export default function SettingsPage() {
         </div>
 
         {/* ── Preview ── */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 min-w-0">
           <h3 className="text-sm font-semibold text-gray-700 mb-4">📅 預覽（假設開展日：6/2，中度）</h3>
           <div className="space-y-2">
             {[
@@ -206,12 +211,12 @@ export default function SettingsPage() {
               const taskDate = new Date(showDate)
               taskDate.setDate(taskDate.getDate() - w * 7)
               return (
-                <div key={key} className="flex items-center justify-between text-sm">
-                  <div className="flex items-center gap-2">
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${role === '設計師' ? 'bg-purple-100 text-purple-700' : 'bg-teal-100 text-teal-700'}`}>{role}</span>
-                    <span className="text-gray-600">{label}</span>
+                <div key={key} className="flex items-center justify-between gap-2 text-sm">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${role === '設計師' ? 'bg-purple-100 text-purple-700' : 'bg-teal-100 text-teal-700'}`}>{role}</span>
+                    <span className="text-gray-600 break-words">{label}</span>
                   </div>
-                  <span className="text-gray-800 font-medium">
+                  <span className="text-gray-800 font-medium whitespace-nowrap">
                     {taskDate.toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' })}
                   </span>
                 </div>

@@ -59,7 +59,7 @@ export default function SharedRequestPage() {
   }
 
   if (loading) {
-    return <div className="flex items-center justify-center h-screen text-gray-500">載入中…</div>
+    return <div className="flex items-center justify-center min-h-[60vh] p-4 text-gray-500">載入中…</div>
   }
 
   if (result.error) {
@@ -71,10 +71,10 @@ export default function SharedRequestPage() {
 
 function ErrorScreen({ message, onBack }) {
   return (
-    <div className="flex items-center justify-center h-screen p-4">
-      <div className="bg-white rounded-2xl shadow-xl p-6 max-w-md w-full text-center space-y-3">
-        <p className="text-gray-700 text-sm">{message}</p>
-        <button onClick={onBack} className="text-blue-600 hover:underline text-sm">回到首頁</button>
+    <div className="flex items-center justify-center min-h-[60vh] p-4">
+      <div className="bg-white rounded-2xl shadow-xl p-5 sm:p-6 max-w-md w-full text-center space-y-3">
+        <p className="text-gray-700 text-sm break-words">{message}</p>
+        <button onClick={onBack} className="text-blue-600 hover:underline text-sm py-2 min-h-[44px]">回到首頁</button>
       </div>
     </div>
   )

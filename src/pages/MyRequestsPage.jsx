@@ -62,32 +62,36 @@ export default function MyRequestsPage() {
     const meta = statusMeta(r.status)
     return (
       <button key={r.id} onClick={() => setDetail(r)}
-        className="w-full flex items-center gap-3 px-5 py-4 text-left bg-white rounded-xl border border-gray-200 shadow-sm hover:bg-gray-50 transition-colors">
-        <span className={`w-2 h-2 rounded-full ${meta.dot}`} />
+        className="w-full flex items-start gap-3 px-4 sm:px-5 py-4 text-left bg-white rounded-xl border border-gray-200 shadow-sm hover:bg-gray-50 transition-colors">
+        <span className={`w-2 h-2 mt-1.5 shrink-0 rounded-full ${meta.dot}`} />
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-gray-800 truncate">
             {r.urgent && <span className="text-red-500 mr-1">🔥</span>}
             {r.projectName || r.title}
           </p>
-          <p className="text-xs text-gray-500 mt-0.5">
+          <p className="text-xs text-gray-500 mt-0.5 break-words">
             {r.region ? r.region + ' · ' : ''}{(r.docTypes || []).join('、') || ''} · 交期 {r.dueDate || '未指定'}
           </p>
+          <span className="mt-1.5 flex flex-wrap items-center gap-2 sm:hidden">
+            {r.status === 'pending' && <span className="text-xs text-blue-400">可編輯</span>}
+            <span className={`text-xs px-2 py-0.5 rounded-full ${meta.color}`}>{meta.label}</span>
+          </span>
         </div>
-        {r.status === 'pending' && <span className="text-xs text-blue-400">可編輯</span>}
-        <span className={`text-xs px-2 py-0.5 rounded-full ${meta.color}`}>{meta.label}</span>
+        {r.status === 'pending' && <span className="hidden sm:inline text-xs text-blue-400 shrink-0">可編輯</span>}
+        <span className={`hidden sm:inline text-xs px-2 py-0.5 rounded-full shrink-0 ${meta.color}`}>{meta.label}</span>
       </button>
     )
   }
 
   return (
-    <div className="p-8 max-w-3xl mx-auto">
-      <h1 className="text-2xl font-bold text-gray-800 mb-1">我的需求</h1>
-      <p className="text-sm text-gray-500 mb-5">追蹤你送出的設計需求進度,點擊查看完整內容;待審核時可編輯</p>
+    <div className="p-4 sm:p-6 lg:p-8 max-w-3xl mx-auto min-w-0">
+      <h1 className="text-xl sm:text-2xl font-bold text-gray-800 mb-1">我的需求</h1>
+      <p className="text-sm text-gray-500 mb-5 break-words">追蹤你送出的設計需求進度,點擊查看完整內容;待審核時可編輯</p>
 
       <div className="flex gap-2 mb-3 flex-wrap">
         {FILTERS.map(f => (
           <button key={f.key} onClick={() => setFilter(f.key)}
-            className={`text-sm px-3 py-1.5 rounded-full transition-colors ${
+            className={`text-sm px-3 py-2 min-h-[40px] rounded-full transition-colors ${
               filter === f.key ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
             }`}>
             {f.label}
@@ -99,7 +103,7 @@ export default function MyRequestsPage() {
         <span className="text-xs text-gray-500">排序</span>
         {SORT_OPTIONS.map(s => (
           <button key={s.label} onClick={() => setDueDateSort(s.key)}
-            className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+            className={`text-xs px-2.5 py-2 min-h-[36px] rounded-full border transition-colors ${
               dueDateSort === s.key ? 'bg-gray-700 text-white border-gray-700' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
             }`}>
             {s.label}
@@ -129,7 +133,7 @@ export default function MyRequestsPage() {
       <RequestDetailModal r={detailLive} onClose={() => setDetail(null)}
         actions={detailLive?.status === 'pending' ? (
           <button onClick={() => navigate(`/request/edit/${detailLive.id}`)}
-            className="bg-blue-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-blue-700">
+            className="w-full sm:w-auto bg-blue-600 text-white text-sm px-4 py-2.5 min-h-[44px] rounded-lg hover:bg-blue-700">
             ✎ 編輯需求
           </button>
         ) : null} />

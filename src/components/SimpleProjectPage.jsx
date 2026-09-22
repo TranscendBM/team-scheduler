@@ -4,6 +4,10 @@ import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from 'fireb
 import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
 import { PHASE_DOT, projectPhase } from '../utils/milestoneUtils'
+import PageHeader from './ui/PageHeader'
+import ModalShell from './ui/ModalShell'
+import ConfirmDialog from './ui/ConfirmDialog'
+import EmptyState from './ui/EmptyState'
 
 const emptyForm = {
   name: '', subtype: '', startDate: '', endDate: '', location: '',
@@ -120,38 +124,81 @@ export default function SimpleProjectPage({ type, typeLabel, subtypeOptions, sub
   const planners = people.filter(p => p.role === 'planner')
   const canSave = !!form.name && !!form.startDate && !!form.endDate
 
-  return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-6 py-4 border-b bg-white">
-        <div>
-          <h2 className="text-xl font-bold text-gray-800">{typeLabel}</h2>
-          <p className="text-sm text-gray-500">{filtered.length} 個專案</p>
-        </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          <select value={filterYear} onChange={e => setFilterYear(parseInt(e.target.value))}
-            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white text-gray-700">
-            {years.map(y => <option key={y} value={y}>{y}</option>)}
-          </select>
-          <button onClick={() => setShowCompleted(v => !v)}
-            className={`px-3 py-2 text-sm rounded-lg border transition-colors ${showCompleted ? 'bg-gray-200 text-gray-700 border-gray-300' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}>
-            {showCompleted ? '✓ 顯示已結束' : '已結束已隱藏'}
-          </button>
-          {isManager && (
-            <button onClick={openCreate}
-              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
-              + 新增{typeLabel}
-            </button>
-          )}
-        </div>
-      </div>
+  // 表格 / 手機卡片共用的一列資料整理（避免兩種版型各自算一次、之後改到不一致）
+  function rowData(p) {
+    const assigned = (p.assignments || []).map(a => {
+      const person = people.find(pe => pe.id === a.personId)
+      return person ? { ...person, role: a.role } : null
+    }).filter(Boolean)
+    const phase = projectPhase(p, todayStr)
+    return { assigned, phase, expired: phase === 'ended', dot: phase ? PHASE_DOT[phase] : null }
+  }
+  const assignedText = (assigned) => assigned.length > 0
+    ? assigned.map(a => `${a.name}${a.role === 'designer' ? '(設計)' : '(Planner)'}`).join('、')
+    : '—'
 
-      <div className="flex-1 overflow-auto p-6">
+  return (
+    <div className="flex flex-col h-full min-w-0">
+      <PageHeader
+        title={typeLabel}
+        subtitle={`${filtered.length} 個專案`}
+        actions={
+          <>
+            <select value={filterYear} onChange={e => setFilterYear(parseInt(e.target.value))}
+              aria-label="年度"
+              className="text-sm border border-gray-300 rounded-lg px-3 py-2 min-h-[44px] bg-white text-gray-700">
+              {years.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+            <button onClick={() => setShowCompleted(v => !v)}
+              className={`px-3 py-2 min-h-[44px] text-sm rounded-lg border transition-colors ${showCompleted ? 'bg-gray-200 text-gray-700 border-gray-300' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}>
+              {showCompleted ? '✓ 顯示已結束' : '已結束已隱藏'}
+            </button>
+            {isManager && (
+              <button onClick={openCreate}
+                className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 min-h-[44px] rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
+                + 新增{typeLabel}
+              </button>
+            )}
+          </>
+        }
+      />
+
+      <div className="flex-1 min-h-0 overflow-auto p-4 sm:p-6">
         {filtered.length === 0 ? (
-          <div className="flex items-center justify-center h-64 text-gray-500">
-            <div className="text-center"><div className="text-4xl mb-2">📋</div><p>尚無{typeLabel}，點擊「新增{typeLabel}」開始</p></div>
-          </div>
+          <EmptyState icon="📋" title={`尚無${typeLabel}，點擊「新增${typeLabel}」開始`} />
         ) : (
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto">
+          <>
+          {/* 手機：卡片列表（欄位與操作都保留，不隱藏任何資料） */}
+          <div className="md:hidden space-y-2">
+            {filtered.map(p => {
+              const { assigned, expired, dot } = rowData(p)
+              return (
+                <div key={p.id}
+                  className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 active:bg-blue-50"
+                  onClick={() => openEdit(p)}>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className={`font-medium break-words min-w-0 ${expired ? 'text-gray-500' : 'text-gray-800'}`}>
+                      {dot && <span className="inline-block w-2 h-2 rounded-full mr-1.5 align-middle" style={{ backgroundColor: dot.color }} title={dot.label} />}
+                      {p.name}
+                    </p>
+                    {isManager && (
+                      <button onClick={e => { e.stopPropagation(); setDeleteConfirm(p.id) }}
+                        className="shrink-0 text-xs text-red-400 hover:text-red-600 px-2 py-2 min-h-[36px]">刪除</button>
+                    )}
+                  </div>
+                  <dl className="mt-2 grid grid-cols-[auto,1fr] gap-x-3 gap-y-1 text-xs text-gray-600">
+                    <dt className="text-gray-500">{subtypeFieldLabel}</dt><dd className="break-words">{p.subtype || '—'}</dd>
+                    <dt className="text-gray-500">日期</dt><dd className="break-words">{p.startDate ? `${p.startDate} ~ ${p.endDate}` : '—'}</dd>
+                    <dt className="text-gray-500">地點</dt><dd className="break-words">{p.location || '—'}</dd>
+                    <dt className="text-gray-500">指派人員</dt><dd className="break-words">{assignedText(assigned)}</dd>
+                  </dl>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* md 以上：維持原本的高密度表格 */}
+          <div className="hidden md:block bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto">
             <table className="w-full text-sm border-collapse">
               <thead className="sticky top-0 bg-gray-50 z-10">
                 <tr>
@@ -165,13 +212,7 @@ export default function SimpleProjectPage({ type, typeLabel, subtypeOptions, sub
               </thead>
               <tbody>
                 {filtered.map((p, i) => {
-                  const assigned = (p.assignments || []).map(a => {
-                    const person = people.find(pe => pe.id === a.personId)
-                    return person ? { ...person, role: a.role } : null
-                  }).filter(Boolean)
-                  const phase = projectPhase(p, todayStr)
-                  const expired = phase === 'ended'
-                  const dot = phase ? PHASE_DOT[phase] : null
+                  const { assigned, expired, dot } = rowData(p)
                   return (
                     <tr key={p.id} onClick={() => openEdit(p)}
                       className={`cursor-pointer hover:bg-blue-50 ${i % 2 ? 'bg-gray-50/50' : 'bg-white'}`}>
@@ -187,7 +228,7 @@ export default function SimpleProjectPage({ type, typeLabel, subtypeOptions, sub
                       </td>
                       <td className={`px-3 py-2 ${expired ? 'text-gray-500' : 'text-gray-600'}`}>{p.location || '—'}</td>
                       <td className={`px-3 py-2 whitespace-nowrap ${expired ? 'text-gray-500' : 'text-gray-600'}`}>
-                        {assigned.length > 0 ? assigned.map(a => `${a.name}${a.role === 'designer' ? '(設計)' : '(Planner)'}`).join('、') : '—'}
+                        {assignedText(assigned)}
                       </td>
                       {isManager && (
                         <td className="px-3 py-2 text-right whitespace-nowrap" onClick={e => e.stopPropagation()}>
@@ -200,20 +241,28 @@ export default function SimpleProjectPage({ type, typeLabel, subtypeOptions, sub
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
-          onClick={e => e.target === e.currentTarget && setShowModal(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="px-6 py-4 border-b flex items-center justify-between sticky top-0 bg-white z-10">
-              <h3 className="text-lg font-semibold text-gray-800">
-                {!isManager ? `檢視${typeLabel}` : editProject ? `編輯${typeLabel}` : `新增${typeLabel}`}
-              </h3>
-              <button onClick={() => setShowModal(false)} className="text-gray-500 hover:text-gray-600 text-xl">×</button>
+        <ModalShell
+          onClose={() => setShowModal(false)}
+          title={!isManager ? `檢視${typeLabel}` : editProject ? `編輯${typeLabel}` : `新增${typeLabel}`}
+          footer={
+            <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 sm:justify-end">
+              <button onClick={() => setShowModal(false)} className="w-full sm:w-auto px-4 py-2.5 min-h-[44px] text-sm text-gray-600 hover:bg-gray-100 rounded-lg border border-gray-200 sm:border-0">
+                {isManager ? '取消' : '關閉'}
+              </button>
+              {isManager && (
+                <button onClick={handleSave} disabled={saving || !canSave}
+                  className="w-full sm:w-auto px-5 py-2.5 min-h-[44px] text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 font-medium">
+                  {saving ? '儲存中…' : '儲存'}
+                </button>
+              )}
             </div>
-            <div className="px-6 py-5 space-y-4">
+          }
+        >
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{subtypeFieldLabel}</label>
                 <select value={form.subtype} disabled={!isManager} onChange={e => setForm(f => ({ ...f, subtype: e.target.value }))}
@@ -229,13 +278,13 @@ export default function SimpleProjectPage({ type, typeLabel, subtypeOptions, sub
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500" />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="min-w-0">
                   <label className="block text-sm font-medium text-gray-700 mb-1">開始日期 *</label>
                   <input type="date" value={form.startDate} disabled={!isManager} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <label className="block text-sm font-medium text-gray-700 mb-1">結束日期 *</label>
                   <input type="date" value={form.endDate} disabled={!isManager} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500" />
@@ -265,7 +314,7 @@ export default function SimpleProjectPage({ type, typeLabel, subtypeOptions, sub
                         const selected = form.assignments.some(a => a.personId === p.id)
                         return (
                           <button key={p.id} type="button" disabled={!isManager} onClick={() => toggleAssignment(p.id, 'designer')}
-                            className={`px-3 py-1.5 text-sm rounded-lg border transition-colors disabled:cursor-default ${selected ? 'bg-purple-600 text-white border-purple-600' : 'border-gray-200 text-gray-600 hover:enabled:bg-gray-50'}`}>
+                            className={`px-3 py-2 min-h-[40px] text-sm rounded-lg border transition-colors disabled:cursor-default ${selected ? 'bg-purple-600 text-white border-purple-600' : 'border-gray-200 text-gray-600 hover:enabled:bg-gray-50'}`}>
                             {p.name}
                           </button>
                         )
@@ -281,7 +330,7 @@ export default function SimpleProjectPage({ type, typeLabel, subtypeOptions, sub
                         const selected = form.assignments.some(a => a.personId === p.id)
                         return (
                           <button key={p.id} type="button" disabled={!isManager} onClick={() => toggleAssignment(p.id, 'planner')}
-                            className={`px-3 py-1.5 text-sm rounded-lg border transition-colors disabled:cursor-default ${selected ? 'bg-teal-600 text-white border-teal-600' : 'border-gray-200 text-gray-600 hover:enabled:bg-gray-50'}`}>
+                            className={`px-3 py-2 min-h-[40px] text-sm rounded-lg border transition-colors disabled:cursor-default ${selected ? 'bg-teal-600 text-white border-teal-600' : 'border-gray-200 text-gray-600 hover:enabled:bg-gray-50'}`}>
                             {p.name}
                           </button>
                         )
@@ -291,33 +340,15 @@ export default function SimpleProjectPage({ type, typeLabel, subtypeOptions, sub
                 )}
                 {people.length === 0 && <p className="text-sm text-gray-500">請先在「人員管理」新增成員</p>}
               </div>
-            </div>
-            <div className="px-6 py-4 border-t flex gap-3 justify-end sticky bottom-0 bg-white">
-              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">
-                {isManager ? '取消' : '關閉'}
-              </button>
-              {isManager && (
-                <button onClick={handleSave} disabled={saving || !canSave}
-                  className="px-5 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 font-medium">
-                  {saving ? '儲存中…' : '儲存'}
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
+        </ModalShell>
       )}
 
       {deleteConfirm && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full">
-            <h3 className="text-lg font-semibold text-gray-800 mb-2">確認刪除</h3>
-            <p className="text-sm text-gray-500 mb-6">刪除後無法復原，確定要刪除嗎？</p>
-            <div className="flex gap-3 justify-end">
-              <button onClick={() => setDeleteConfirm(null)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">取消</button>
-              <button onClick={() => handleDelete(deleteConfirm)} className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700">刪除</button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          message="刪除後無法復原，確定要刪除嗎？"
+          onCancel={() => setDeleteConfirm(null)}
+          onConfirm={() => handleDelete(deleteConfirm)}
+        />
       )}
     </div>
   )

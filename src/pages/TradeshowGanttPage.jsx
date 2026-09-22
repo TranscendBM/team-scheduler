@@ -2,10 +2,17 @@ import { useEffect, useState, useRef } from 'react'
 import { collection, onSnapshot } from 'firebase/firestore'
 import { db } from '../firebase'
 import { getLoadingLevel, LOADING_COLORS } from '../utils/milestoneUtils'
+import { useIsDesktop } from '../hooks/useMediaQuery'
+import { tooltipPosition } from '../utils/tooltipPosition'
 
 const MONTHS = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月']
 const HEADER_HEIGHT = 48
-const LEFT_WIDTH = 220
+// 秀展名稱欄：手機縮到 130px（仍看得到名稱），桌面維持 220px。
+// 這個值同時參與「捲到今天」的計算，所以必須是 JS 值而不是純 CSS breakpoint。
+const LEFT_WIDTH_DESKTOP = 220
+const LEFT_WIDTH_MOBILE = 130
+const MIN_TIMELINE_DESKTOP = 1400
+const MIN_TIMELINE_MOBILE = 900
 const ROW_HEIGHT = 40
 const BAR_HEIGHT = 24
 
@@ -15,6 +22,9 @@ export default function TradeshowGanttPage() {
   const [year, setYear] = useState(new Date().getFullYear())
   const [tooltip, setTooltip] = useState(null)
   const scrollRef = useRef(null)
+  const isDesktop = useIsDesktop()
+  const LEFT_WIDTH = isDesktop ? LEFT_WIDTH_DESKTOP : LEFT_WIDTH_MOBILE
+  const minTimelineWidth = isDesktop ? MIN_TIMELINE_DESKTOP : MIN_TIMELINE_MOBILE
 
   useEffect(() => {
     const u1 = onSnapshot(collection(db, 'projects'), snap =>
@@ -41,7 +51,7 @@ export default function TradeshowGanttPage() {
       scrollRef.current.scrollLeft = Math.max(0, todayPx - cw / 2)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [year, projects.length])
+  }, [year, projects.length, LEFT_WIDTH])
 
   const rows = projects
     .filter(p => p.startDate && p.endDate)
@@ -54,30 +64,31 @@ export default function TradeshowGanttPage() {
     })
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-6 py-4 border-b bg-white">
-        <div>
-          <h2 className="text-xl font-bold text-gray-800">秀展甘特圖</h2>
+    <div className="flex flex-col h-full min-w-0">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between px-4 sm:px-6 py-3 sm:py-4 border-b bg-white shrink-0">
+        <div className="min-w-0">
+          <h1 className="text-lg sm:text-xl font-bold text-gray-800">秀展甘特圖</h1>
           <p className="text-sm text-gray-500">{rows.length} 場秀展</p>
         </div>
-        <div className="flex items-center gap-1">
-          <button onClick={() => setYear(y => y - 1)} className="p-1.5 rounded hover:bg-gray-100 text-gray-600">‹</button>
-          <span className="font-semibold text-gray-800 w-12 text-center">{year}</span>
-          <button onClick={() => setYear(y => y + 1)} className="p-1.5 rounded hover:bg-gray-100 text-gray-600">›</button>
+        <div className="flex items-center gap-1 shrink-0">
+          <button onClick={() => setYear(y => y - 1)} aria-label="前一年" className="w-11 h-11 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600">‹</button>
+          <span className="font-semibold text-gray-800 w-14 text-center">{year}</span>
+          <button onClick={() => setYear(y => y + 1)} aria-label="後一年" className="w-11 h-11 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600">›</button>
         </div>
       </div>
 
-      <div className="flex-1 overflow-hidden">
+      {/* 橫向捲動只發生在這個容器內，不會讓整頁 body 出現水平捲軸 */}
+      <div className="flex-1 min-h-0 overflow-hidden">
         {rows.length === 0 ? (
           <div className="flex items-center justify-center h-full text-gray-500">
             <div className="text-center"><div className="text-4xl mb-2">📊</div><p>此年度沒有秀展資料</p></div>
           </div>
         ) : (
-          <div className="h-full overflow-auto" ref={scrollRef}>
-            <div style={{ minWidth: '1400px' }}>
+          <div className="h-full overflow-auto gantt-scroll" ref={scrollRef}>
+            <div style={{ minWidth: `${minTimelineWidth}px` }}>
               {/* Month header */}
               <div className="flex sticky top-0 bg-white z-20 border-b shadow-sm" style={{ height: HEADER_HEIGHT }}>
-                <div className="flex-shrink-0 border-r bg-gray-50 flex items-center px-4" style={{ width: LEFT_WIDTH }}>
+                <div className="flex-shrink-0 border-r bg-gray-50 flex items-center px-2 lg:px-4 sticky left-0 z-10" style={{ width: LEFT_WIDTH }}>
                   <span className="text-xs font-medium text-gray-500">秀展</span>
                 </div>
                 <div className="flex-1 relative overflow-hidden">
@@ -108,7 +119,7 @@ export default function TradeshowGanttPage() {
                 const style = loadingLevel ? LOADING_COLORS[loadingLevel] : { bg: '#93c5fd', text: '#1e3a8a' }
                 return (
                   <div key={p.id} className={`flex border-b ${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/60'}`} style={{ height: ROW_HEIGHT }}>
-                    <div className="flex-shrink-0 border-r flex flex-col justify-center px-4 sticky left-0 z-10 bg-inherit" style={{ width: LEFT_WIDTH }}>
+                    <div className="flex-shrink-0 border-r flex flex-col justify-center px-2 lg:px-4 sticky left-0 z-10 bg-inherit" style={{ width: LEFT_WIDTH }}>
                       <p className="text-sm font-medium text-gray-800 truncate">{p.name}</p>
                       {assigned.length > 0 && <p className="text-xs text-gray-500 truncate">{assigned.join('、')}</p>}
                     </div>
@@ -142,8 +153,17 @@ export default function TradeshowGanttPage() {
       </div>
 
       {tooltip && (
-        <div className="fixed z-50 bg-gray-900 text-white text-xs rounded-xl p-3 shadow-2xl pointer-events-none"
-          style={{ left: tooltip.x + 14, top: tooltip.y - 10, maxWidth: 280 }}>
+        <div className="fixed z-[70] bg-gray-900 text-white text-xs rounded-xl p-3 shadow-2xl pointer-events-none"
+          style={{
+            ...tooltipPosition({
+              x: tooltip.x, y: tooltip.y,
+              width: Math.min(280, (typeof window === 'undefined' ? 1024 : window.innerWidth) - 16),
+              height: 170,
+              viewportWidth: typeof window === 'undefined' ? 1024 : window.innerWidth,
+              viewportHeight: typeof window === 'undefined' ? 768 : window.innerHeight,
+            }),
+            maxWidth: 'min(280px, calc(100vw - 16px))',
+          }}>
           <p className="font-semibold text-sm mb-1">{tooltip.p.name}</p>
           <p className="text-gray-500">{tooltip.p.startDate} ~ {tooltip.p.endDate}</p>
           {tooltip.p.office && <p className="text-gray-500 mt-1">Office：{tooltip.p.office}｜{tooltip.p.location || '—'}</p>}

@@ -4,6 +4,10 @@ import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDoc, setD
 import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
 import { DEFAULT_RULES, PHASE_DOT, projectPhase } from '../utils/milestoneUtils'
+import PageHeader from '../components/ui/PageHeader'
+import ModalShell from '../components/ui/ModalShell'
+import ConfirmDialog from '../components/ui/ConfirmDialog'
+import EmptyState from '../components/ui/EmptyState'
 
 const KV_CATEGORIES = ['台灣節日', '親情愛情節日', '季節促銷', '購物節', '年末節慶促銷']
 const KV_REGIONS = ['WWW', 'CN/SD2', 'SD1', 'SD2']
@@ -189,38 +193,88 @@ export default function DesignPage() {
 
   const canSave = form.name && (isKV ? !!form.kvEventDate : (!!form.startDate && !!form.endDate))
 
-  return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-6 py-4 border-b bg-white">
-        <div>
-          <h2 className="text-xl font-bold text-gray-800">設計</h2>
-          <p className="text-sm text-gray-500">{filtered.length} 個專案</p>
-        </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          <select value={filterYear} onChange={e => setFilterYear(parseInt(e.target.value))}
-            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white text-gray-700">
-            {years.map(y => <option key={y} value={y}>{y}</option>)}
-          </select>
-          <button onClick={() => setShowCompleted(v => !v)}
-            className={`px-3 py-2 text-sm rounded-lg border transition-colors ${showCompleted ? 'bg-gray-200 text-gray-700 border-gray-300' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}>
-            {showCompleted ? '✓ 顯示已結束' : '已結束已隱藏'}
-          </button>
-          {isManager && (
-            <button onClick={openCreate}
-              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
-              + 新增設計專案
-            </button>
-          )}
-        </div>
-      </div>
+  // 表格 / 手機卡片共用的一列資料整理
+  function rowData(p) {
+    const subtypeLabel = p.designSubtype || ''
+    const region = (p.type === 'seasonal_kv' || p.designSubtype === '季節KV') ? p.kvRegion : ''
+    const assigned = (p.assignments || []).map(a => {
+      const person = people.find(pe => pe.id === a.personId)
+      return person ? { ...person, role: a.role } : null
+    }).filter(Boolean)
+    const phase = projectPhase(p, todayStr)
+    return {
+      category: [subtypeLabel, region].filter(Boolean).join(' · ') || '—',
+      dateText: p.startDate ? `${p.startDate} ~ ${p.endDate}` : '—',
+      noteText: [p.kvCategory, p.note].filter(Boolean).join(' · ') || '—',
+      assignedText: assigned.length > 0
+        ? assigned.map(a => `${a.name}${a.role === 'designer' ? '(設計)' : '(Planner)'}`).join('、')
+        : '—',
+      expired: phase === 'ended',
+      dot: phase ? PHASE_DOT[phase] : null,
+    }
+  }
 
-      <div className="flex-1 overflow-auto p-6">
+  return (
+    <div className="flex flex-col h-full min-w-0">
+      <PageHeader
+        title="設計"
+        subtitle={`${filtered.length} 個專案`}
+        actions={
+          <>
+            <select value={filterYear} onChange={e => setFilterYear(parseInt(e.target.value))}
+              aria-label="年度"
+              className="text-sm border border-gray-300 rounded-lg px-3 py-2 min-h-[44px] bg-white text-gray-700">
+              {years.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+            <button onClick={() => setShowCompleted(v => !v)}
+              className={`px-3 py-2 min-h-[44px] text-sm rounded-lg border transition-colors ${showCompleted ? 'bg-gray-200 text-gray-700 border-gray-300' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'}`}>
+              {showCompleted ? '✓ 顯示已結束' : '已結束已隱藏'}
+            </button>
+            {isManager && (
+              <button onClick={openCreate}
+                className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 min-h-[44px] rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
+                + 新增設計專案
+              </button>
+            )}
+          </>
+        }
+      />
+
+      <div className="flex-1 min-h-0 overflow-auto p-4 sm:p-6">
         {filtered.length === 0 ? (
-          <div className="flex items-center justify-center h-64 text-gray-500">
-            <div className="text-center"><div className="text-4xl mb-2">🎨</div><p>尚無設計專案，點擊「新增設計專案」開始</p></div>
-          </div>
+          <EmptyState icon="🎨" title="尚無設計專案，點擊「新增設計專案」開始" />
         ) : (
-          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto">
+          <>
+          {/* 手機：卡片列表（欄位與操作完整保留） */}
+          <div className="md:hidden space-y-2">
+            {filtered.map(p => {
+              const d = rowData(p)
+              return (
+                <div key={p.id} className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 active:bg-blue-50"
+                  onClick={() => openEdit(p)}>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className={`font-medium break-words min-w-0 ${d.expired ? 'text-gray-500' : 'text-gray-800'}`}>
+                      {d.dot && <span className="inline-block w-2 h-2 rounded-full mr-1.5 align-middle" style={{ backgroundColor: d.dot.color }} title={d.dot.label} />}
+                      {p.name}
+                    </p>
+                    {isManager && (
+                      <button onClick={e => { e.stopPropagation(); setDeleteConfirm(p.id) }}
+                        className="shrink-0 text-xs text-red-400 hover:text-red-600 px-2 py-2 min-h-[36px]">刪除</button>
+                    )}
+                  </div>
+                  <dl className="mt-2 grid grid-cols-[auto,1fr] gap-x-3 gap-y-1 text-xs text-gray-600">
+                    <dt className="text-gray-500">類別</dt><dd className="break-words">{d.category}</dd>
+                    <dt className="text-gray-500">日期</dt><dd className="break-words">{d.dateText}</dd>
+                    <dt className="text-gray-500">說明</dt><dd className="break-words">{d.noteText}</dd>
+                    <dt className="text-gray-500">指派人員</dt><dd className="break-words">{d.assignedText}</dd>
+                  </dl>
+                </div>
+              )
+            })}
+          </div>
+
+          {/* md 以上：維持原本的高密度表格 */}
+          <div className="hidden md:block bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto max-w-full">
             <table className="w-full text-sm border-collapse">
               <thead className="sticky top-0 bg-gray-50 z-10">
                 <tr>
@@ -234,15 +288,7 @@ export default function DesignPage() {
               </thead>
               <tbody>
                 {filtered.map((p, i) => {
-                  const subtypeLabel = p.designSubtype || ''
-                  const region = (p.type === 'seasonal_kv' || p.designSubtype === '季節KV') ? p.kvRegion : ''
-                  const assigned = (p.assignments || []).map(a => {
-                    const person = people.find(pe => pe.id === a.personId)
-                    return person ? { ...person, role: a.role } : null
-                  }).filter(Boolean)
-                  const phase = projectPhase(p, todayStr)
-                  const expired = phase === 'ended'
-                  const dot = phase ? PHASE_DOT[phase] : null
+                  const { category, dateText, noteText, assignedText, expired, dot } = rowData(p)
                   return (
                     <tr key={p.id} onClick={() => openEdit(p)}
                       className={`cursor-pointer hover:bg-blue-50 ${i % 2 ? 'bg-gray-50/50' : 'bg-white'}`}>
@@ -253,16 +299,16 @@ export default function DesignPage() {
                         {p.name}
                       </td>
                       <td className={`px-3 py-2 whitespace-nowrap ${expired ? 'text-gray-500' : 'text-gray-600'}`}>
-                        {[subtypeLabel, region].filter(Boolean).join(' · ') || '—'}
+                        {category}
                       </td>
                       <td className={`px-3 py-2 whitespace-nowrap ${expired ? 'text-gray-500' : 'text-gray-600'}`}>
-                        {p.startDate ? `${p.startDate} ~ ${p.endDate}` : '—'}
+                        {dateText}
                       </td>
                       <td className={`px-3 py-2 ${expired ? 'text-gray-500' : 'text-gray-600'}`}>
-                        {[p.kvCategory, p.note].filter(Boolean).join(' · ') || '—'}
+                        {noteText}
                       </td>
                       <td className={`px-3 py-2 whitespace-nowrap ${expired ? 'text-gray-500' : 'text-gray-600'}`}>
-                        {assigned.length > 0 ? assigned.map(a => `${a.name}${a.role === 'designer' ? '(設計)' : '(Planner)'}`).join('、') : '—'}
+                        {assignedText}
                       </td>
                       {isManager && (
                         <td className="px-3 py-2 text-right whitespace-nowrap" onClick={e => e.stopPropagation()}>
@@ -275,33 +321,42 @@ export default function DesignPage() {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
-          onClick={e => e.target === e.currentTarget && setShowModal(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-            <div className="px-6 py-4 border-b flex items-center justify-between sticky top-0 bg-white z-10">
-              <h3 className="text-lg font-semibold text-gray-800">
-                {!isManager ? '檢視設計專案' : editProject ? '編輯設計專案' : '新增設計專案'}
-              </h3>
-              <button onClick={() => setShowModal(false)} className="text-gray-500 hover:text-gray-600 text-xl">×</button>
+        <ModalShell
+          onClose={() => setShowModal(false)}
+          title={!isManager ? '檢視設計專案' : editProject ? '編輯設計專案' : '新增設計專案'}
+          footer={
+            <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 sm:justify-end">
+              <button onClick={() => setShowModal(false)} className="w-full sm:w-auto px-4 py-2.5 min-h-[44px] text-sm text-gray-600 hover:bg-gray-100 rounded-lg border border-gray-200 sm:border-0">
+                {isManager ? '取消' : '關閉'}
+              </button>
+              {isManager && (
+                <button onClick={handleSave} disabled={saving || !canSave}
+                  className="w-full sm:w-auto px-5 py-2.5 min-h-[44px] text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 font-medium">
+                  {saving ? '儲存中…' : '儲存'}
+                </button>
+              )}
             </div>
-            <div className="px-6 py-5 space-y-4">
-
+          }
+        >
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">設計類別</label>
                 <div className="flex flex-wrap gap-2">
                   {allDesignSubtypes.map(sub => (
                     <div key={sub} className="relative group">
                       <button type="button" disabled={!isManager} onClick={() => setForm(f => ({ ...f, designSubtype: sub }))}
-                        className={`px-3 py-1.5 text-sm rounded-lg border-2 font-medium transition-colors disabled:cursor-default ${form.designSubtype === sub ? 'border-indigo-500 bg-indigo-600 text-white' : 'border-gray-200 text-gray-600 hover:enabled:bg-gray-50'}`}>
+                        className={`px-3 py-2 min-h-[40px] text-sm rounded-lg border-2 font-medium transition-colors disabled:cursor-default ${form.designSubtype === sub ? 'border-indigo-500 bg-indigo-600 text-white' : 'border-gray-200 text-gray-600 hover:enabled:bg-gray-50'}`}>
                         {sub}
                       </button>
+                      {/* 觸控裝置沒有 hover：小螢幕一律顯示刪除鈕，lg 以上才維持原本 hover 才出現的行為 */}
                       {!DEFAULT_DESIGN_SUBTYPES.includes(sub) && isManager && (
                         <button onClick={() => deleteCustomSubtype(sub)}
-                          className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-red-500 text-white rounded-full text-xs leading-none opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          aria-label={`刪除類別 ${sub}`}
+                          className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full text-xs leading-none opacity-100 lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100 focus:opacity-100 transition-opacity flex items-center justify-center">
                           ×
                         </button>
                       )}
@@ -351,8 +406,8 @@ export default function DesignPage() {
                       <p className="text-indigo-600">🎯 節慶日期：{form.kvEventDate}</p>
                     </div>
                   )}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="min-w-0">
                       <label className="block text-sm font-medium text-gray-700 mb-1">類別</label>
                       <select value={form.kvCategory} disabled={!isManager} onChange={e => setForm(f => ({ ...f, kvCategory: e.target.value }))}
                         className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm disabled:bg-gray-50 disabled:text-gray-500">
@@ -377,13 +432,13 @@ export default function DesignPage() {
                 </>
               ) : (
                 <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="min-w-0">
                       <label className="block text-sm font-medium text-gray-700 mb-1">開始日期 *</label>
                       <input type="date" value={form.startDate} disabled={!isManager} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))}
                         className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-500" />
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <label className="block text-sm font-medium text-gray-700 mb-1">結束日期 *</label>
                       <input type="date" value={form.endDate} disabled={!isManager} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))}
                         className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-500" />
@@ -414,7 +469,7 @@ export default function DesignPage() {
                         const selected = form.assignments.some(a => a.personId === p.id)
                         return (
                           <button key={p.id} type="button" disabled={!isManager} onClick={() => toggleAssignment(p.id, 'designer')}
-                            className={`px-3 py-1.5 text-sm rounded-lg border transition-colors disabled:cursor-default ${selected ? 'bg-purple-600 text-white border-purple-600' : 'border-gray-200 text-gray-600 hover:enabled:bg-gray-50'}`}>
+                            className={`px-3 py-2 min-h-[40px] text-sm rounded-lg border transition-colors disabled:cursor-default ${selected ? 'bg-purple-600 text-white border-purple-600' : 'border-gray-200 text-gray-600 hover:enabled:bg-gray-50'}`}>
                             {p.name}
                           </button>
                         )
@@ -430,7 +485,7 @@ export default function DesignPage() {
                         const selected = form.assignments.some(a => a.personId === p.id)
                         return (
                           <button key={p.id} type="button" disabled={!isManager} onClick={() => toggleAssignment(p.id, 'planner')}
-                            className={`px-3 py-1.5 text-sm rounded-lg border transition-colors disabled:cursor-default ${selected ? 'bg-teal-600 text-white border-teal-600' : 'border-gray-200 text-gray-600 hover:enabled:bg-gray-50'}`}>
+                            className={`px-3 py-2 min-h-[40px] text-sm rounded-lg border transition-colors disabled:cursor-default ${selected ? 'bg-teal-600 text-white border-teal-600' : 'border-gray-200 text-gray-600 hover:enabled:bg-gray-50'}`}>
                             {p.name}
                           </button>
                         )
@@ -441,33 +496,15 @@ export default function DesignPage() {
                 {people.length === 0 && <p className="text-sm text-gray-500">請先在「人員管理」新增成員</p>}
               </div>
 
-            </div>
-            <div className="px-6 py-4 border-t flex gap-3 justify-end sticky bottom-0 bg-white">
-              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">
-                {isManager ? '取消' : '關閉'}
-              </button>
-              {isManager && (
-                <button onClick={handleSave} disabled={saving || !canSave}
-                  className="px-5 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 font-medium">
-                  {saving ? '儲存中…' : '儲存'}
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
+        </ModalShell>
       )}
 
       {deleteConfirm && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full">
-            <h3 className="text-lg font-semibold text-gray-800 mb-2">確認刪除</h3>
-            <p className="text-sm text-gray-500 mb-6">刪除後無法復原，確定要刪除嗎？</p>
-            <div className="flex gap-3 justify-end">
-              <button onClick={() => setDeleteConfirm(null)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">取消</button>
-              <button onClick={() => handleDelete(deleteConfirm)} className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700">刪除</button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          message="刪除後無法復原，確定要刪除嗎？"
+          onCancel={() => setDeleteConfirm(null)}
+          onConfirm={() => handleDelete(deleteConfirm)}
+        />
       )}
     </div>
   )

@@ -98,7 +98,7 @@ export default function ShareLinkPanel({ requestId, shareToken, shareExpiresAt }
     return (
       <button
         onClick={() => setOpen(true)}
-        className="text-xs px-2.5 py-1 rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50"
+        className="text-xs px-3 py-1.5 min-h-[36px] rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50"
       >
         🔗 分享連結
       </button>
@@ -106,10 +106,10 @@ export default function ShareLinkPanel({ requestId, shareToken, shareExpiresAt }
   }
 
   return (
-    <div className="text-xs bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
-      <div className="flex items-center justify-between">
+    <div className="text-xs bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2 min-w-0">
+      <div className="flex items-center justify-between gap-2">
         <span className="font-medium text-gray-600">🔗 分享連結</span>
-        <button onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600">收合</button>
+        <button onClick={() => setOpen(false)} className="px-2 py-1 text-gray-400 hover:text-gray-600">收合</button>
       </div>
       <p className="text-gray-500">
         產生連結後，任何已登入且在白名單內的組員都能透過連結唯讀檢視這筆需求(不受原本的角色/地區限制)，審核前後皆可使用。
@@ -122,21 +122,21 @@ export default function ShareLinkPanel({ requestId, shareToken, shareExpiresAt }
               readOnly
               value={buildShareUrl(requestId, effectiveToken)}
               onFocus={(e) => e.target.select()}
-              className="flex-1 min-w-0 bg-white border border-gray-200 rounded px-2 py-1 text-gray-700"
+              className="flex-1 min-w-0 bg-white border border-gray-200 rounded px-2 py-1.5 text-gray-700"
             />
             <button
               onClick={handleCopy}
               disabled={busy}
-              className="shrink-0 px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+              className="shrink-0 px-3 py-1.5 min-h-[36px] rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
             >
               {copied ? '已複製' : '複製'}
             </button>
           </div>
-          <div className="flex items-center justify-between text-gray-500">
-            <span>有效期限至 {fmtExpiry(effectiveExpiresAt)}</span>
-            <div className="flex gap-2">
-              <button onClick={handleCreate} disabled={busy} className="text-blue-600 hover:underline disabled:opacity-50">重新產生</button>
-              <button onClick={handleRevoke} disabled={busy} className="text-red-600 hover:underline disabled:opacity-50">撤銷連結</button>
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-gray-500">
+            <span className="break-words">有效期限至 {fmtExpiry(effectiveExpiresAt)}</span>
+            <div className="flex gap-3">
+              <button onClick={handleCreate} disabled={busy} className="py-1 text-blue-600 hover:underline disabled:opacity-50">重新產生</button>
+              <button onClick={handleRevoke} disabled={busy} className="py-1 text-red-600 hover:underline disabled:opacity-50">撤銷連結</button>
             </div>
           </div>
         </>
@@ -144,13 +144,13 @@ export default function ShareLinkPanel({ requestId, shareToken, shareExpiresAt }
         <button
           onClick={handleCreate}
           disabled={busy}
-          className="px-3 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+          className="px-3 py-2 min-h-[36px] rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
         >
           {busy ? '產生中…' : '建立分享連結'}
         </button>
       )}
 
-      {error && <p className="text-red-600">{error}</p>}
+      {error && <p className="text-red-600 break-words">{error}</p>}
     </div>
   )
 }

@@ -79,12 +79,12 @@ export default function RequestsDashboardPage() {
   }
 
   return (
-    <div className="p-8 max-w-6xl mx-auto">
-      <h1 className="text-2xl font-bold text-gray-800 mb-1">設計師儀表板</h1>
-      <p className="text-sm text-gray-500 mb-5">監控每位設計師的需求 loading(僅計進行中:已發稿/設計中/確認中),點色塊看詳情</p>
+    <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto min-w-0">
+      <h1 className="text-xl sm:text-2xl font-bold text-gray-800 mb-1">設計師儀表板</h1>
+      <p className="text-sm text-gray-500 mb-5 break-words">監控每位設計師的需求 loading(僅計進行中:已發稿/設計中/確認中),點色塊看詳情</p>
 
       {/* 圖例 */}
-      <div className="flex flex-wrap gap-4 mb-4 text-xs text-gray-500">
+      <div className="flex flex-wrap gap-x-4 gap-y-2 mb-4 text-xs text-gray-500">
         {Object.entries(BAR_COLORS).map(([k, cls]) => (
           <span key={k} className="flex items-center gap-1.5"><span className={`w-3 h-3 rounded-sm ${cls}`} />{statusMeta(k).label}</span>
         ))}
@@ -92,10 +92,12 @@ export default function RequestsDashboardPage() {
         <span className="flex items-center gap-1.5"><span className="w-0.5 h-3 bg-red-400" />今天</span>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      {/* 時間軸：手機改成這個容器內的局部橫向捲動（保留完整 4 週刻度），不讓整頁出現水平捲軸 */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto max-w-full">
+        <div className="min-w-[620px]">
         {/* 時間刻度 */}
         <div className="flex border-b border-gray-100 text-xs text-gray-500">
-          <div className="w-44 shrink-0 px-4 py-2 font-medium">設計師</div>
+          <div className="w-32 sm:w-44 shrink-0 px-3 sm:px-4 py-2 font-medium">設計師</div>
           <div className="flex-1 relative h-8">
             {ticks.map(t => (
               <span key={t.toISOString()} className="absolute top-2" style={{ left: `${pos(t)}%` }}>{fmtMD(t)}</span>
@@ -108,8 +110,8 @@ export default function RequestsDashboardPage() {
           const lm = loadingMeta(bars.length)
           return (
             <div key={d.email} className="flex border-b border-gray-50 last:border-0">
-              <div className="w-44 shrink-0 px-4 py-3">
-                <p className="text-sm font-medium text-gray-700">{d.displayName || d.email}</p>
+              <div className="w-32 sm:w-44 shrink-0 px-3 sm:px-4 py-3">
+                <p className="text-sm font-medium text-gray-700 break-words">{d.displayName || d.email}</p>
                 <span className={`inline-block mt-1 text-xs px-2 py-0.5 rounded-full ${lm.cls}`}>{lm.label}</span>
               </div>
               <div className="flex-1 relative py-2 pr-2 min-h-[52px]">
@@ -119,17 +121,18 @@ export default function RequestsDashboardPage() {
                 {ticks.map(t => (
                   <div key={t.toISOString()} className="absolute top-0 bottom-0 w-px bg-gray-50" style={{ left: `${pos(t)}%` }} />
                 ))}
+                {/* 色塊高度 24px（原本 20px）：手機上仍點得到，桌面資訊密度幾乎不變 */}
                 {bars.map((b, i) => (
                   <button key={b.r.id} onClick={() => setDetail(b.r)}
-                    className={`absolute h-5 rounded text-[10px] text-white px-1.5 truncate text-left hover:opacity-80 transition-opacity ${
+                    className={`absolute h-6 flex items-center rounded text-[10px] text-white px-1.5 truncate text-left hover:opacity-80 transition-opacity ${
                       b.overdue ? 'bg-red-500' : BAR_COLORS[b.r.status] || 'bg-gray-400'
                     }`}
-                    style={{ left: `${b.left}%`, width: `${b.width}%`, top: `${8 + i * 24}px` }}
+                    style={{ left: `${b.left}%`, width: `${b.width}%`, top: `${8 + i * 28}px` }}
                     title={`${b.r.projectName} · 交期 ${b.r.dueDate || '未定'}`}>
-                    {b.r.urgent ? '🔥' : ''}{b.r.projectName}
+                    <span className="truncate">{b.r.urgent ? '🔥' : ''}{b.r.projectName}</span>
                   </button>
                 ))}
-                {bars.length > 0 && <div style={{ height: `${bars.length * 24}px` }} />}
+                {bars.length > 0 && <div style={{ height: `${bars.length * 28}px` }} />}
                 {bars.length === 0 && <p className="text-xs text-gray-500 pt-2 pl-2">— 目前沒有進行中任務 —</p>}
               </div>
             </div>
@@ -138,6 +141,7 @@ export default function RequestsDashboardPage() {
         {designers.length === 0 && (
           <p className="text-sm text-gray-500 text-center py-10">尚無設計師,請先到使用者管理新增</p>
         )}
+        </div>
       </div>
 
       <RequestDetailModal r={detail} onClose={() => setDetail(null)} />
