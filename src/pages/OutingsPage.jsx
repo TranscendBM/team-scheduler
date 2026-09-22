@@ -146,7 +146,7 @@ export default function OutingsPage() {
       <div className="flex items-center justify-between px-6 py-4 border-b bg-white">
         <div>
           <h2 className="text-xl font-bold text-gray-800">外出通知</h2>
-          <p className="text-sm text-gray-500">{baseFiltered.length} 筆外出記錄，前一天會自動寄信提醒當事人與主管</p>
+          <p className="text-sm text-gray-500">{baseFiltered.length} 筆外出記錄，提前 3 天會彙整提醒主管、前一天會提醒當事人本人</p>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
           <select value={filterPerson} onChange={e => setFilterPerson(e.target.value)}

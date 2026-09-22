@@ -1,8 +1,8 @@
-// 純函式測試，不連任何 Firebase 服務。涵蓋「外出前一天提醒當事人/主管」的判斷邏輯與信件內容。
+// 純函式測試，不連任何 Firebase 服務。涵蓋「外出提前 3 天提醒主管、前一天提醒當事人」的判斷邏輯與信件內容。
 // 執行：npm test（functions 目錄下）
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { findOutingsStartingInDays, buildOutingReminderHtml } from '../index.js'
+import { findOutingsStartingInDays, buildOutingReminderHtml, buildOutingManagerReminderHtml } from '../index.js'
 
 test('findOutingsStartingInDays：外出日期精確等於「今天+N天」才算，差一天就不算', () => {
   const outings = [
@@ -59,6 +59,40 @@ test('buildOutingReminderHtml：姓名/備註欄位一律 escapeHtml，防止 st
   const html = buildOutingReminderHtml(
     { personName: '<img src=x onerror=alert(1)>', note: '<script>alert(2)</script>' },
     '2026-10-06',
+  )
+  assert.ok(!html.includes('<img src=x onerror=alert(1)>'))
+  assert.ok(!html.includes('<script>alert(2)</script>'))
+  assert.ok(html.includes('&lt;img'))
+  assert.ok(html.includes('&lt;script&gt;'))
+})
+
+test('buildOutingManagerReminderHtml：正常渲染姓名/日期/內容，多筆各自一列', () => {
+  const html = buildOutingManagerReminderHtml(
+    [
+      { personName: 'Rachel', date: '2026-10-06', time: '下午兩點', note: '會和業務外出去布展' },
+      { personName: 'Ashley', date: '2026-10-13', note: '展前一天外出' },
+    ],
+    3,
+  )
+  assert.ok(html.includes('Rachel'))
+  assert.ok(html.includes('Ashley'))
+  assert.ok(html.includes('2026-10-06'))
+  assert.ok(html.includes('下午兩點'))
+  assert.ok(html.includes('會和業務外出去布展'))
+  assert.ok(html.includes('3 天後'))
+  assert.equal((html.match(/<tr style="border-bottom/g) || []).length, 2)
+})
+
+test('buildOutingManagerReminderHtml：沒有時間/備註時不會顯示 undefined/null', () => {
+  const html = buildOutingManagerReminderHtml([{ personName: 'Rachel', date: '2026-10-08' }], 3)
+  assert.ok(!html.includes('undefined'))
+  assert.ok(!html.includes('null'))
+})
+
+test('buildOutingManagerReminderHtml：姓名/備註欄位一律 escapeHtml，防止 stored XSS', () => {
+  const html = buildOutingManagerReminderHtml(
+    [{ personName: '<img src=x onerror=alert(1)>', date: '2026-10-06', note: '<script>alert(2)</script>' }],
+    3,
   )
   assert.ok(!html.includes('<img src=x onerror=alert(1)>'))
   assert.ok(!html.includes('<script>alert(2)</script>'))

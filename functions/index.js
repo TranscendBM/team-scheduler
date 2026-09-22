@@ -893,10 +893,12 @@ export const notifyUpcomingLeave = onSchedule(
   }
 )
 
-// ── 外出通知：前一天提醒當事人與主管 ─────────────────────────────────
-// 跟休假預排的差異：休假是「提前 7 天讓主管安排人力」，外出是「前一天提醒當事人跟主管
-// 明天有這件事」，時間點跟收件人邏輯都不一樣，所以獨立一組函式，不共用 notifyUpcomingLeave。
-const OUTING_REMINDER_DAYS = 1
+// ── 外出通知：提前 3 天彙整提醒主管、前一天提醒當事人本人 ────────────────
+// 兩個收件對象時間點刻意不同：主管要提早知道才能安排人力調度(跟休假預排的
+// notifyUpcomingLeave 提前 7 天邏輯相同動機，只是外出改成 3 天)；當事人自己則是
+// 前一天收到個人化的行程提醒即可，不需要提早 3 天(提早太多容易被忘記)。
+const OUTING_MANAGER_REMINDER_DAYS = 3
+const OUTING_PERSON_REMINDER_DAYS = 1
 
 // 純函式：從 outings 集合裡找出「明天」(today + days)有登記外出的記錄。
 // 跟 findLeavesStartingInDays 邏輯完全對應，只是欄位名稱是 date 不是 startDate
@@ -906,9 +908,42 @@ export function findOutingsStartingInDays(outings, todayStr, days) {
   return outings.filter((o) => o?.date === target)
 }
 
-// 外出前一天提醒信：單筆外出記錄自己的內容(姓名/日期/時間/備註)。
-// 跟 buildLeaveReminderHtml(一次列出所有人)不同，這裡一封信只講「這位同仁」的這一筆外出，
-// 因為收件人包含當事人本人，當事人只需要看到自己的行程，不需要看到其他同仁的外出資訊。
+// 外出提醒信(主管版)：3 天後所有同仁的外出彙整成一張表，格式跟 buildLeaveReminderHtml
+// 一致(主管一次看全部、方便安排人力調度)，姓名/日期/內容都要 escapeHtml。
+export function buildOutingManagerReminderHtml(outings, days) {
+  const rows = outings.map((o) => {
+    const dateText = o.time ? `${o.date}　${o.time}` : (o.date || '')
+    return `<tr style="border-bottom:1px solid #f0f0f0">
+       <td style="font-family:${FONT};padding:8px 12px;font-weight:500;font-size:13px">${escapeHtml(o.personName || '')}</td>
+       <td style="font-family:${FONT};padding:8px 12px;font-size:13px;white-space:nowrap">${escapeHtml(dateText)}</td>
+       <td style="font-family:${FONT};padding:8px 12px;color:#6b7280;font-size:13px">${escapeHtml(o.note || '')}</td>
+     </tr>`
+  }).join('')
+  return `
+  <div style="font-family:${FONT};color:#1f2937;max-width:560px;margin:auto;padding:24px">
+    <div style="background:#eff6ff;border-left:4px solid #3b82f6;padding:14px 18px;border-radius:8px;margin-bottom:18px">
+      <h2 style="font-family:${FONT};margin:0 0 4px;font-size:17px">🚗 外出通知提醒</h2>
+      <p style="font-family:${FONT};margin:0;color:#6b7280;font-size:13px">以下同仁將於 ${days} 天後外出，請提前留意人力調度</p>
+    </div>
+    <table style="font-family:${FONT};width:100%;border-collapse:collapse;font-size:13px;border:1px solid #f0f0f0;border-radius:8px;overflow:hidden">
+      <thead>
+        <tr style="background:#f9fafb">
+          <th style="font-family:${FONT};text-align:left;padding:8px 12px;color:#6b7280;font-size:12px">姓名</th>
+          <th style="font-family:${FONT};text-align:left;padding:8px 12px;color:#6b7280;font-size:12px">日期</th>
+          <th style="font-family:${FONT};text-align:left;padding:8px 12px;color:#6b7280;font-size:12px">內容</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <a href="${SITE}/#/outings" style="font-family:${FONT};display:inline-block;margin-top:20px;background:#3b82f6;color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-size:14px">查看外出通知 →</a>
+    <p style="font-family:${FONT};color:#9ca3af;font-size:12px;margin-top:24px">此信由 Team Scheduler 於每天排程檢查時自動寄出。</p>
+    ${LOGO_HTML}
+  </div>`
+}
+
+// 外出前一天提醒信(當事人版)：單筆外出記錄自己的內容(姓名/日期/時間/備註)。
+// 跟上面的主管版(一次列出所有人)不同，這裡一封信只講「這位同仁」的這一筆外出，
+// 因為收件人是當事人本人，只需要看到自己的行程，不需要看到其他同仁的外出資訊。
 export function buildOutingReminderHtml(outing, dateStr) {
   const timeText = outing.time ? ` · ${escapeHtml(outing.time)}` : ''
   return `
@@ -937,41 +972,55 @@ export function buildOutingReminderHtml(outing, dateStr) {
   </div>`
 }
 
-// 每天 09:00(台灣時間)檢查明天是否有同仁登記外出，各自寄一封信給「當事人本人」(cc 所有主管)。
-// 當事人信箱缺漏(people.email 沒填)時退回只寄給主管，至少不會讓這筆外出資訊完全沒人知道。
+// 每天 09:00(台灣時間)寄兩種外出提醒：
+// 1) 主管：3 天後所有外出彙整成一封信(提前讓主管安排人力調度)
+// 2) 當事人本人：前一天各自收到自己那一筆的提醒；本人沒有登記公司信箱時
+//    退回寄給主管，至少不會讓這筆外出資訊完全沒人知道。
 export const notifyUpcomingOuting = onSchedule(
   { schedule: '0 9 * * *', timeZone: 'Asia/Taipei', region: 'asia-east1', secrets: [SMTP_PASS] },
   async () => {
     const today = taipeiTodayStr()
     const snap = await db.collection('outings').get()
     const outings = snap.docs.map((d) => d.data())
-    const targets = findOutingsStartingInDays(outings, today, OUTING_REMINDER_DAYS)
-    if (targets.length === 0) {
-      logger.info(`沒有同仁將於 ${OUTING_REMINDER_DAYS} 天後外出，略過寄信`)
-      return
-    }
-    const tomorrow = addDaysToDateStr(today, OUTING_REMINDER_DAYS)
     const managers = await getManagerEmails()
     const mailer = getMailer()
-    let sent = 0
     try {
-      for (const o of targets) {
+      const managerTargets = findOutingsStartingInDays(outings, today, OUTING_MANAGER_REMINDER_DAYS)
+      if (managerTargets.length === 0) {
+        logger.info(`沒有同仁將於 ${OUTING_MANAGER_REMINDER_DAYS} 天後外出，略過主管提醒信`)
+      } else if (managers.length === 0) {
+        logger.warn('找不到任何啟用中的主管信箱，略過外出提醒信(主管)', { count: managerTargets.length })
+      } else {
+        await mailer.send({
+          to: managers,
+          subject: `[外出通知提醒] ${managerTargets.length} 位同仁將於 ${OUTING_MANAGER_REMINDER_DAYS} 天後外出`,
+          html: buildOutingManagerReminderHtml(managerTargets, OUTING_MANAGER_REMINDER_DAYS),
+        })
+        logger.info('已寄外出提醒信(主管)', { to: managers, count: managerTargets.length })
+      }
+
+      const personTargets = findOutingsStartingInDays(outings, today, OUTING_PERSON_REMINDER_DAYS)
+      if (personTargets.length === 0) {
+        logger.info(`沒有同仁將於 ${OUTING_PERSON_REMINDER_DAYS} 天後外出，略過當事人提醒信`)
+        return
+      }
+      const tomorrow = addDaysToDateStr(today, OUTING_PERSON_REMINDER_DAYS)
+      let sent = 0
+      for (const o of personTargets) {
         const personEmail = (o.personEmail || '').trim().toLowerCase()
         const to = personEmail ? [personEmail] : managers
-        const cc = personEmail ? buildCcList(to, managers) : []
         if (to.length === 0) {
           logger.warn('外出記錄沒有當事人信箱、也沒有啟用中的主管，略過寄信', { personName: o.personName })
           continue
         }
         await mailer.send({
           to,
-          cc,
           subject: `[外出通知] ${o.personName || '同仁'} 明天（${tomorrow}）外出`,
           html: buildOutingReminderHtml(o, tomorrow),
         })
         sent++
       }
-      logger.info('已寄外出提醒信', { count: sent, total: targets.length })
+      logger.info('已寄外出提醒信(當事人)', { count: sent, total: personTargets.length })
     } catch (e) {
       logger.error('外出提醒信寄送失敗', e)
       throw e
