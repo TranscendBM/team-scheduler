@@ -3,9 +3,18 @@ import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from 'fireb
 import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
 
-const emptyForm = { personId: '', dates: [''], time: '', note: '' }
+const emptyForm = { personId: '', dates: [''], time: '', timeTBD: false, note: '' }
 
 const TODAY = new Date().toISOString().split('T')[0]
+
+// 半小時一格，06:00 ~ 22:00(外出/布展常見的時段範圍)
+const TIME_OPTIONS = Array.from({ length: 33 }, (_, i) => {
+  const totalMinutes = 6 * 60 + i * 30
+  const h = String(Math.floor(totalMinutes / 60)).padStart(2, '0')
+  const m = String(totalMinutes % 60).padStart(2, '0')
+  return `${h}:${m}`
+})
+const TIME_TBD = '時間未定'
 
 function fmtMonth(ym) {
   const [y, m] = ym.split('-')
@@ -36,7 +45,8 @@ export default function OutingsPage() {
   function openCreate() { setEditOuting(null); setForm(emptyForm); setSaveError(''); setShowModal(true) }
   function openEdit(o) {
     setEditOuting(o)
-    setForm({ personId: o.personId, dates: [o.date], time: o.time || '', note: o.note || '' })
+    const isTBD = o.time === TIME_TBD
+    setForm({ personId: o.personId, dates: [o.date], time: isTBD ? '' : (o.time || ''), timeTBD: isTBD, note: o.note || '' })
     setSaveError('')
     setShowModal(true)
   }
@@ -60,7 +70,7 @@ export default function OutingsPage() {
       personId: form.personId,
       personName: person?.name || '',
       personEmail: (person?.email || '').trim().toLowerCase(),
-      time: form.time.trim(),
+      time: form.timeTBD ? TIME_TBD : form.time,
       note: form.note.trim(),
       updatedAt: new Date().toISOString(),
     }
@@ -189,8 +199,7 @@ export default function OutingsPage() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
-          onClick={e => e.target === e.currentTarget && setShowModal(false)}>
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
             <div className="px-6 py-4 border-b flex items-center justify-between sticky top-0 bg-white">
               <h3 className="text-lg font-semibold text-gray-800">{editOuting ? '編輯外出' : '新增外出'}</h3>
@@ -232,9 +241,18 @@ export default function OutingsPage() {
               {/* Time */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">時間（選填）</label>
-                <input value={form.time} onChange={e => setForm(f => ({ ...f, time: e.target.value }))}
-                  placeholder="例：下午兩點、14:00、具體時間未定"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <select value={form.time} disabled={form.timeTBD}
+                  onChange={e => setForm(f => ({ ...f, time: e.target.value }))}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400">
+                  <option value="">請選擇時間</option>
+                  {form.time && !TIME_OPTIONS.includes(form.time) && <option value={form.time}>{form.time}</option>}
+                  {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+                <label className="flex items-center gap-1.5 text-xs text-gray-500 mt-2 cursor-pointer select-none">
+                  <input type="checkbox" checked={form.timeTBD}
+                    onChange={e => setForm(f => ({ ...f, timeTBD: e.target.checked }))} />
+                  時間未定（會再跟大會/客戶確認）
+                </label>
               </div>
               {/* Note */}
               <div>
