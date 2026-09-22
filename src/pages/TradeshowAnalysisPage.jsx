@@ -201,19 +201,20 @@ export default function TradeshowAnalysisPage() {
   }
 
   return (
-    <div className="p-8 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between mb-1">
-        <h1 className="text-2xl font-bold text-gray-800">秀展預算分析</h1>
+    <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto min-w-0">
+      <div className="flex items-center justify-between gap-3 mb-1">
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-800 min-w-0">秀展預算分析</h1>
         <select value={year} onChange={e => setYear(parseInt(e.target.value))}
-          className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white text-gray-700">
+          aria-label="年度"
+          className="text-sm border border-gray-300 rounded-lg px-3 py-2 min-h-[44px] bg-white text-gray-700 shrink-0">
           {years.map(y => <option key={y} value={y}>{y}</option>)}
         </select>
       </div>
-      <p className="text-sm text-gray-500 mb-6">{year} 年度秀展數量、月份分布與各地區費用比較</p>
+      <p className="text-sm text-gray-500 mb-6 break-words">{year} 年度秀展數量、月份分布與各地區費用比較</p>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
         {/* 秀展數量與目標 */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 min-w-0">
           <p className="text-xs text-gray-500 mb-2">秀展數量與目標</p>
           <div className="flex items-baseline gap-1.5 mb-2">
             <span className="text-3xl font-bold text-gray-800">{count}</span>
@@ -226,20 +227,20 @@ export default function TradeshowAnalysisPage() {
           ) : (
             <p className="text-xs text-gray-500">尚未設定年度目標</p>
           )}
-          <Link to="/tradeshow-targets" className="text-xs text-blue-500 hover:underline mt-3 inline-block">
+          <Link to="/tradeshow-targets" className="text-xs text-blue-500 hover:underline mt-2 inline-flex items-center min-h-[36px]">
             {target != null ? '前往修改目標 →' : '前往設定年度目標 →'}
           </Link>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 min-w-0">
           <p className="text-xs text-gray-500 mb-2">預算總額（USD）</p>
-          <p className="text-3xl font-bold text-gray-800">{fmtUSD(totalBudget)}</p>
+          <p className="text-2xl sm:text-3xl font-bold text-gray-800 break-words">{fmtUSD(totalBudget)}</p>
           <p className="text-xs text-gray-500 mt-2">{missingBudget > 0 ? `${missingBudget} 場尚無預算資料` : '資料齊全'}</p>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 min-w-0">
           <p className="text-xs text-gray-500 mb-2">平均每場預算（USD）</p>
-          <p className="text-3xl font-bold text-gray-800">
+          <p className="text-2xl sm:text-3xl font-bold text-gray-800 break-words">
             {count - missingBudget > 0 ? fmtUSD(totalBudget / (count - missingBudget)) : '—'}
           </p>
           <p className="text-xs text-gray-500 mt-2">僅計入已有預算資料的場次</p>
@@ -248,16 +249,16 @@ export default function TradeshowAnalysisPage() {
 
       {/* 各分公司目標達成率 */}
       {Object.keys(targetByOffice).length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
-          <div className="flex items-center justify-between mb-4">
+        <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 mb-6 min-w-0">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
             <p className="text-sm font-semibold text-gray-700">🎯 各分公司目標達成率</p>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               <button onClick={handleCopyTargetTable}
-                className="text-xs px-2.5 py-1 rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50">
+                className="text-xs px-3 py-2 min-h-[36px] rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50">
                 {copyState === 'copied' ? '已複製' : copyState === 'error' ? '複製失敗' : '📋 複製表格（可貼到 PPT）'}
               </button>
               <button onClick={handleCopyTargetChart}
-                className="text-xs px-2.5 py-1 rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50">
+                className="text-xs px-3 py-2 min-h-[36px] rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50">
                 {chartCopyState === 'copied' ? '已複製' : chartCopyState === 'error' ? '複製失敗' : '📊 複製長條圖（可貼到 PPT）'}
               </button>
             </div>
@@ -284,23 +285,25 @@ export default function TradeshowAnalysisPage() {
         </div>
       )}
 
-      {/* 月份分布 */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+      {/* 月份分布：12 根長條在窄螢幕塞不下月份標籤，改成這張圖自己橫向捲動（不縮字、不隱藏月份） */}
+      <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 mb-6 min-w-0">
         <p className="text-sm font-semibold text-gray-700 mb-4">📅 月份分布</p>
-        <div className="flex items-end gap-2 h-32">
-          {byMonth.map((c, i) => (
-            <div key={i} className="flex-1 flex flex-col items-center gap-1">
-              <span className="text-xs text-gray-500">{c > 0 ? c : ''}</span>
-              <div className="w-full bg-blue-100 rounded-t transition-all"
-                style={{ height: `${(c / maxMonthCount) * 90}px`, backgroundColor: c > 0 ? '#3B82F6' : '#F3F4F6' }} />
-              <span className="text-xs text-gray-500">{MONTH_LABELS[i]}</span>
-            </div>
-          ))}
+        <div className="overflow-x-auto -mx-1 px-1">
+          <div className="flex items-end gap-2 h-32 min-w-[420px] sm:min-w-0">
+            {byMonth.map((c, i) => (
+              <div key={i} className="flex-1 flex flex-col items-center gap-1 min-w-0">
+                <span className="text-xs text-gray-500">{c > 0 ? c : ''}</span>
+                <div className="w-full bg-blue-100 rounded-t transition-all"
+                  style={{ height: `${(c / maxMonthCount) * 90}px`, backgroundColor: c > 0 ? '#3B82F6' : '#F3F4F6' }} />
+                <span className="text-xs text-gray-500 whitespace-nowrap">{MONTH_LABELS[i]}</span>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
       {/* 各地區費用比較 */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+      <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 mb-6 min-w-0">
         <p className="text-sm font-semibold text-gray-700 mb-1">🌏 各地區費用比較（依 Office，USD）</p>
         <p className="text-xs text-gray-500 mb-4">攤位租金＋裝潢費用＋PR 總預算加總</p>
         {officeRows.length === 0 ? (
@@ -323,7 +326,7 @@ export default function TradeshowAnalysisPage() {
       </div>
 
       {/* 各分公司平均租金比較 */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+      <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 mb-6 min-w-0">
         <p className="text-sm font-semibold text-gray-700 mb-1">🏠 各分公司平均秀展租金比較（USD）</p>
         <p className="text-xs text-gray-500 mb-4">每個分公司「平均每場」攤位租金，只計入已填租金的場次</p>
         {avgRentRows.length === 0 ? (
@@ -346,7 +349,7 @@ export default function TradeshowAnalysisPage() {
       </div>
 
       {/* 各分公司平均 PR 費用比較 */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
+      <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 min-w-0">
         <p className="text-sm font-semibold text-gray-700 mb-1">📣 各分公司平均 PR 費用比較（USD）</p>
         <p className="text-xs text-gray-500 mb-4">每個分公司「平均每場」PR 預算，只計入已填 PR 費用的場次</p>
         {avgPrRows.length === 0 ? (

@@ -4,6 +4,9 @@ import { httpsCallable } from 'firebase/functions'
 import { db, functions } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
 import { REGIONS } from '../utils/requestConstants'
+import PageHeader from '../components/ui/PageHeader'
+import ModalShell from '../components/ui/ModalShell'
+import ConfirmDialog from '../components/ui/ConfirmDialog'
 
 const renameUserLoginFn = httpsCallable(functions, 'renameUserLogin')
 
@@ -198,29 +201,25 @@ export default function PeoplePage() {
   const managerUsers = users.filter(u => u.role === 'manager').sort((a, b) => a.email.localeCompare(b.email))
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between px-6 py-4 border-b bg-white">
-        <div>
-          <h2 className="text-xl font-bold text-gray-800">人員管理</h2>
-          <p className="text-sm text-gray-500">
-            {people.length} 位成員{isManager && managerUsers.length > 0 ? `、${managerUsers.length} 位主管帳號` : ''}
-          </p>
-        </div>
-        {isManager && (
-          <div className="flex items-center gap-2">
+    <div className="flex flex-col h-full min-w-0">
+      <PageHeader
+        title="人員管理"
+        subtitle={`${people.length} 位成員${isManager && managerUsers.length > 0 ? `、${managerUsers.length} 位主管帳號` : ''}`}
+        actions={isManager ? (
+          <>
             <button onClick={openManagerCreate}
-              className="text-sm px-4 py-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 font-medium">
+              className="text-sm px-4 py-2 min-h-[44px] rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 font-medium">
               + 新增主管帳號
             </button>
             <button onClick={openCreate}
-              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
+              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 min-h-[44px] rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
               + 新增成員
             </button>
-          </div>
-        )}
-      </div>
+          </>
+        ) : null}
+      />
 
-      <div className="flex-1 overflow-auto p-6 space-y-6">
+      <div className="flex-1 min-h-0 overflow-auto p-4 sm:p-6 space-y-6">
         {/* Designers */}
         <div>
           <h3 className="text-sm font-semibold text-purple-700 mb-3 flex items-center gap-2">
@@ -267,7 +266,40 @@ export default function PeoplePage() {
             {managerUsers.length === 0 ? (
               <p className="text-sm text-gray-500 pl-4">尚無主管帳號</p>
             ) : (
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <>
+              {/* 手機：卡片列表（欄位與操作完整保留） */}
+              <div className="md:hidden space-y-2">
+                {managerUsers.map(u => (
+                  <div key={u.email} className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+                    <p className="text-sm font-medium text-gray-800 break-all">
+                      {u.email}{u.email === myEmail && <span className="ml-2 text-xs text-blue-400">(你)</span>}
+                    </p>
+                    <dl className="mt-2 grid grid-cols-[auto,1fr] gap-x-3 gap-y-1 text-xs text-gray-600">
+                      <dt className="text-gray-500">名稱</dt><dd className="break-words">{u.displayName || '—'}</dd>
+                      <dt className="text-gray-500">通知信箱</dt>
+                      <dd className="break-all">{u.notifyEmail || <span className="text-amber-500">未設定</span>}</dd>
+                      <dt className="text-gray-500">狀態</dt>
+                      <dd>{u.active === false ? <span className="text-gray-500">已停用</span> : <span className="text-green-600">啟用中</span>}</dd>
+                    </dl>
+                    <div className="mt-3 flex flex-wrap items-center gap-3">
+                      <button onClick={() => openManagerEdit(u)} className="text-xs text-blue-500 hover:underline py-2 min-h-[36px]">編輯</button>
+                      {u.email === myEmail ? (
+                        <span className="text-xs text-gray-500">—</span>
+                      ) : deleteManagerConfirm === u.email ? (
+                        <>
+                          <button onClick={() => handleManagerDelete(u.email)} className="text-xs text-red-600 hover:underline py-2 min-h-[36px]">確認刪除</button>
+                          <button onClick={() => setDeleteManagerConfirm(null)} className="text-xs text-gray-500 hover:underline py-2 min-h-[36px]">取消</button>
+                        </>
+                      ) : (
+                        <button onClick={() => setDeleteManagerConfirm(u.email)} className="text-xs text-red-400 hover:underline py-2 min-h-[36px]">刪除</button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* md 以上：原本的表格 */}
+              <div className="hidden md:block bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 text-gray-500 text-xs">
                     <tr>
@@ -281,7 +313,7 @@ export default function PeoplePage() {
                   <tbody className="divide-y divide-gray-100">
                     {managerUsers.map(u => (
                       <tr key={u.email} className="hover:bg-gray-50">
-                        <td className="px-4 py-2.5 text-gray-700">
+                        <td className="px-4 py-2.5 text-gray-700 break-all">
                           {u.email}{u.email === myEmail && <span className="ml-2 text-xs text-blue-400">(你)</span>}
                         </td>
                         <td className="px-4 py-2.5 text-gray-600">{u.displayName || '—'}</td>
@@ -307,6 +339,7 @@ export default function PeoplePage() {
                   </tbody>
                 </table>
               </div>
+              </>
             )}
           </div>
         )}
@@ -314,13 +347,20 @@ export default function PeoplePage() {
 
       {/* 成員（設計師/Planner）新增／編輯 modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setShowModal(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
-            <div className="px-6 py-4 border-b flex items-center justify-between sticky top-0 bg-white">
-              <h3 className="text-lg font-semibold text-gray-800">{editPerson ? '編輯成員' : '新增成員'}</h3>
-              <button onClick={() => setShowModal(false)} className="text-gray-500 hover:text-gray-600 text-xl">×</button>
+        <ModalShell
+          onClose={() => setShowModal(false)}
+          title={editPerson ? '編輯成員' : '新增成員'}
+          maxWidth="max-w-md"
+          footer={
+            <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 sm:justify-end">
+              <button onClick={() => setShowModal(false)} className="w-full sm:w-auto px-4 py-2.5 min-h-[44px] text-sm text-gray-600 hover:bg-gray-100 rounded-lg border border-gray-200 sm:border-0">取消</button>
+              <button onClick={handleSave} disabled={saving || !form.name}
+                className="w-full sm:w-auto px-5 py-2.5 min-h-[44px] text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 font-medium">
+                {saving ? '儲存中…' : '儲存'}
+              </button>
             </div>
-            <div className="px-6 py-5 space-y-4">
+          }
+        >
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">姓名 *</label>
                 <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
@@ -381,7 +421,7 @@ export default function PeoplePage() {
                               return (
                                 <button type="button" key={r}
                                   onClick={() => setForm(f => ({ ...f, regions: on ? f.regions.filter(x => x !== r) : [...f.regions, r] }))}
-                                  className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${on ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+                                  className={`text-xs px-2.5 py-2 min-h-[36px] rounded-lg border transition-colors ${on ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
                                   {r}
                                 </button>
                               )
@@ -432,7 +472,7 @@ export default function PeoplePage() {
                                   return (
                                     <button type="button" key={r}
                                       onClick={() => setForm(f => ({ ...f, regions: on ? f.regions.filter(x => x !== r) : [...f.regions, r] }))}
-                                      className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${on ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+                                      className={`text-xs px-2.5 py-2 min-h-[36px] rounded-lg border transition-colors ${on ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
                                       {r}
                                     </button>
                                   )
@@ -447,44 +487,36 @@ export default function PeoplePage() {
                 </div>
               )}
 
-              {error && <p className="text-red-500 text-xs">{error}</p>}
-            </div>
-            <div className="px-6 py-4 border-t flex gap-3 justify-end sticky bottom-0 bg-white">
-              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">取消</button>
-              <button onClick={handleSave} disabled={saving || !form.name}
-                className="px-5 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 font-medium">
-                {saving ? '儲存中…' : '儲存'}
-              </button>
-            </div>
-          </div>
-        </div>
+              {error && <p className="text-red-500 text-xs break-words">{error}</p>}
+        </ModalShell>
       )}
 
       {/* 成員刪除確認 */}
       {deleteConfirm && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full">
-            <h3 className="text-lg font-semibold text-gray-800 mb-2">確認刪除</h3>
-            <p className="text-sm text-gray-500 mb-6">
-              刪除後將從所有專案的指派中移除{findLoginForPerson(people.find(p => p.id === deleteConfirm)?.email) ? '，並同時刪除其登入帳號' : ''}，確定要刪除嗎？
-            </p>
-            <div className="flex gap-3 justify-end">
-              <button onClick={() => setDeleteConfirm(null)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">取消</button>
-              <button onClick={() => handleDelete(deleteConfirm)} className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700">刪除</button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          message={`刪除後將從所有專案的指派中移除${findLoginForPerson(people.find(p => p.id === deleteConfirm)?.email) ? '，並同時刪除其登入帳號' : ''}，確定要刪除嗎？`}
+          onCancel={() => setDeleteConfirm(null)}
+          onConfirm={() => handleDelete(deleteConfirm)}
+        />
       )}
 
       {/* 主管帳號新增／編輯 modal */}
       {showManagerModal && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={e => e.target === e.currentTarget && setShowManagerModal(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-            <div className="px-6 py-4 border-b flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-800">{editManagerEmail ? '編輯主管帳號' : '新增主管帳號'}</h3>
-              <button onClick={() => setShowManagerModal(false)} className="text-gray-500 hover:text-gray-600 text-xl">×</button>
+        <ModalShell
+          onClose={() => setShowManagerModal(false)}
+          title={editManagerEmail ? '編輯主管帳號' : '新增主管帳號'}
+          maxWidth="max-w-md"
+          bodyClassName="px-4 sm:px-6 py-5 space-y-3"
+          footer={
+            <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 sm:justify-end">
+              <button onClick={() => setShowManagerModal(false)} className="w-full sm:w-auto px-4 py-2.5 min-h-[44px] text-sm text-gray-600 hover:bg-gray-100 rounded-lg border border-gray-200 sm:border-0">取消</button>
+              <button onClick={handleManagerSave} disabled={managerSaving}
+                className="w-full sm:w-auto px-5 py-2.5 min-h-[44px] text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium">
+                {managerSaving ? '儲存中…' : editManagerEmail ? '更新' : '新增'}
+              </button>
             </div>
-            <div className="px-6 py-5 space-y-3">
+          }
+        >
               <input type="email" placeholder="登入 Email (Gmail)" value={managerForm.email} disabled={!!editManagerEmail}
                 onChange={e => setManagerForm(f => ({ ...f, email: e.target.value }))}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm disabled:bg-gray-100" />
@@ -494,21 +526,12 @@ export default function PeoplePage() {
               <input type="email" placeholder="通知信箱（公司，選填）" value={managerForm.notifyEmail}
                 onChange={e => setManagerForm(f => ({ ...f, notifyEmail: e.target.value }))}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
-              <label className="flex items-center gap-2 text-sm text-gray-600">
+              <label className="flex items-center gap-2 text-sm text-gray-600 py-1">
                 <input type="checkbox" checked={managerForm.active} onChange={e => setManagerForm(f => ({ ...f, active: e.target.checked }))} />
                 啟用
               </label>
-              {managerError && <p className="text-red-500 text-xs">{managerError}</p>}
-            </div>
-            <div className="px-6 py-4 border-t flex gap-3 justify-end">
-              <button onClick={() => setShowManagerModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">取消</button>
-              <button onClick={handleManagerSave} disabled={managerSaving}
-                className="px-5 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium">
-                {managerSaving ? '儲存中…' : editManagerEmail ? '更新' : '新增'}
-              </button>
-            </div>
-          </div>
-        </div>
+              {managerError && <p className="text-red-500 text-xs break-words">{managerError}</p>}
+        </ModalShell>
       )}
     </div>
   )
@@ -516,24 +539,24 @@ export default function PeoplePage() {
 
 function PersonCard({ person, assignedProjects, isManager, loginUser, onEdit, onDelete }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-sm transition-shadow">
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-3">
+    <div className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-sm transition-shadow min-w-0">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex items-center gap-3 min-w-0">
           <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold text-sm flex-shrink-0 ${person.role === 'designer' ? 'bg-purple-500' : 'bg-teal-500'}`}>
             {person.name.charAt(0)}
           </div>
-          <div>
-            <p className="font-semibold text-gray-800">{person.name}</p>
+          <div className="min-w-0">
+            <p className="font-semibold text-gray-800 break-words">{person.name}</p>
             <p className="text-xs text-gray-500">{person.role === 'designer' ? '設計師' : 'Planner'}</p>
             {person.email && (
-              <p className="text-xs text-gray-500 truncate max-w-[140px]">{person.email}</p>
+              <p className="text-xs text-gray-500 break-all">{person.email}</p>
             )}
           </div>
         </div>
         {isManager && (
-          <div className="flex gap-1">
-            <button onClick={() => onEdit(person)} className="text-xs text-blue-500 hover:text-blue-700 p-1 rounded hover:bg-blue-50">編輯</button>
-            <button onClick={() => onDelete(person.id)} className="text-xs text-red-400 hover:text-red-600 p-1 rounded hover:bg-red-50">刪除</button>
+          <div className="flex gap-1 shrink-0">
+            <button onClick={() => onEdit(person)} className="text-xs text-blue-500 hover:text-blue-700 px-2 py-2 min-h-[36px] rounded hover:bg-blue-50">編輯</button>
+            <button onClick={() => onDelete(person.id)} className="text-xs text-red-400 hover:text-red-600 px-2 py-2 min-h-[36px] rounded hover:bg-red-50">刪除</button>
           </div>
         )}
       </div>
@@ -560,7 +583,7 @@ function PersonCard({ person, assignedProjects, isManager, loginUser, onEdit, on
           <p className="text-xs text-gray-500 mb-1">目前負責 {assignedProjects.length} 個專案</p>
           <div className="flex flex-wrap gap-1">
             {assignedProjects.slice(0, 3).map(p => (
-              <span key={p.id} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded truncate max-w-[120px]">{p.name}</span>
+              <span key={p.id} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded truncate max-w-[60vw] sm:max-w-[120px]">{p.name}</span>
             ))}
             {assignedProjects.length > 3 && <span className="text-xs text-gray-500">+{assignedProjects.length - 3}</span>}
           </div>

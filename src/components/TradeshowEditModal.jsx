@@ -3,6 +3,7 @@ import { collection, addDoc, updateDoc, doc, onSnapshot } from 'firebase/firesto
 import { db } from '../firebase'
 import { getWorkStart, getLoadingLevel, LOADING_COLORS, DEFAULT_RULES } from '../utils/milestoneUtils'
 import { OFFICE_CURRENCY } from '../utils/officeCurrency'
+import ModalShell from './ui/ModalShell'
 
 const BOOTH_FORMATS = ['標準', '特裝', '空地', 'Show Kit', 'Counter Booth']
 // 狀態固定三種（原本的自由文字狀態已一次性歸類到這三種；出稿與否改用下方獨立的「出稿完畢」開關表示）
@@ -140,14 +141,25 @@ export default function TradeshowEditModal({ project, people, rules, onClose, on
   const loadingStyle = loadingLevel ? LOADING_COLORS[loadingLevel] : null
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
-      onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <div className="px-6 py-4 border-b flex items-center justify-between sticky top-0 bg-white z-10">
-          <h3 className="text-lg font-semibold text-gray-800">{readOnly ? '檢視秀展' : project ? '編輯秀展' : '新增秀展'}</h3>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-600 text-xl">×</button>
+    <ModalShell
+      onClose={onClose}
+      title={readOnly ? '檢視秀展' : project ? '編輯秀展' : '新增秀展'}
+      bodyClassName="px-4 sm:px-6 py-5"
+      footer={
+        <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 sm:justify-end">
+          <button onClick={onClose} className="w-full sm:w-auto px-4 py-2.5 min-h-[44px] text-sm text-gray-600 hover:bg-gray-100 rounded-lg border border-gray-200 sm:border-0">
+            {readOnly ? '關閉' : '取消'}
+          </button>
+          {!readOnly && (
+            <button onClick={handleSave} disabled={saving || !canSave}
+              className="w-full sm:w-auto px-5 py-2.5 min-h-[44px] text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 font-medium">
+              {saving ? '儲存中…' : '儲存'}
+            </button>
+          )}
         </div>
-        <fieldset disabled={readOnly} className="px-6 py-5 space-y-4">
+      }
+    >
+        <fieldset disabled={readOnly} className="space-y-4 min-w-0">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">秀展名稱 *</label>
             <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
@@ -155,13 +167,13 @@ export default function TradeshowEditModal({ project, people, rules, onClose, on
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="min-w-0">
               <label className="block text-sm font-medium text-gray-700 mb-1">開始日期 *</label>
               <input type="date" value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
-            <div>
+            <div className="min-w-0">
               <label className="block text-sm font-medium text-gray-700 mb-1">結束日期 *</label>
               <input type="date" value={form.endDate} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
@@ -184,14 +196,14 @@ export default function TradeshowEditModal({ project, people, rules, onClose, on
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            <div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="min-w-0">
               <label className="block text-sm font-medium text-gray-700 mb-1">秀展類型</label>
               <input value={form.showType} onChange={e => setForm(f => ({ ...f, showType: e.target.value }))}
                 placeholder="例：Automation"
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
-            <div>
+            <div className="min-w-0">
               <label className="block text-sm font-medium text-gray-700 mb-1">負責 Office</label>
               <input value={form.office} onChange={e => {
                 const office = e.target.value
@@ -206,7 +218,7 @@ export default function TradeshowEditModal({ project, people, rules, onClose, on
                 placeholder="例：TW、US"
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
-            <div>
+            <div className="min-w-0">
               <label className="block text-sm font-medium text-gray-700 mb-1">攤位數量</label>
               <input type="number" min="0" value={form.boothSize}
                 onChange={e => setForm(f => ({ ...f, boothSize: e.target.value }))}
@@ -223,15 +235,15 @@ export default function TradeshowEditModal({ project, people, rules, onClose, on
 
           {/* 預算與規格 */}
           <div className="border border-gray-200 rounded-lg overflow-hidden">
-            <button type="button" onClick={() => setShowBudget(v => !v)}
-              className="w-full flex items-center justify-between px-4 py-2.5 bg-gray-50 hover:bg-gray-100 text-sm font-medium text-gray-600 transition-colors">
+            <button type="button" onClick={() => setShowBudget(v => !v)} aria-expanded={showBudget}
+              className="w-full flex items-center justify-between gap-2 px-4 py-2.5 min-h-[44px] bg-gray-50 hover:bg-gray-100 text-sm font-medium text-gray-600 transition-colors">
               <span>💰 預算與規格（選填）</span>
               <span className="text-xs text-gray-500">{showBudget ? '收合 ▲' : '展開 ▼'}</span>
             </button>
             {showBudget && (
               <div className="p-4 space-y-3">
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="min-w-0">
                     <label className="block text-xs font-medium text-gray-600 mb-1">攤位形式</label>
                     <select value={form.boothFormat} onChange={e => setForm(f => ({ ...f, boothFormat: e.target.value }))}
                       className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm">
@@ -239,13 +251,13 @@ export default function TradeshowEditModal({ project, people, rules, onClose, on
                       {BOOTH_FORMATS.map(bf => <option key={bf} value={bf}>{bf}</option>)}
                     </select>
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <label className="block text-xs font-medium text-gray-600 mb-1">攤位尺寸</label>
                     <input value={form.boothDimensions} onChange={e => setForm(f => ({ ...f, boothDimensions: e.target.value }))}
                       placeholder="例：3m x 3m"
                       className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm" />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <label className="block text-xs font-medium text-gray-600 mb-1">面積 m²</label>
                     <input type="number" min="0" step="0.1" value={form.boothSqm}
                       onChange={e => setForm(f => ({ ...f, boothSqm: e.target.value }))}
@@ -268,14 +280,14 @@ export default function TradeshowEditModal({ project, people, rules, onClose, on
                   </p>
                 </div>
                 {BUDGET_PAIRS.map(([label, localKey, usdKey]) => (
-                  <div key={localKey} className="grid grid-cols-2 gap-3">
-                    <div>
+                  <div key={localKey} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="min-w-0">
                       <label className="block text-xs font-medium text-gray-600 mb-1">{label}（當地貨幣）</label>
                       <input type="number" min="0" value={form[localKey]}
                         onChange={e => updateLocalAmount(localKey, usdKey, e.target.value)}
                         className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm" />
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <label className="block text-xs font-medium text-gray-600 mb-1">{label}（USD）</label>
                       <input type="number" min="0" value={form[usdKey]}
                         onChange={e => setForm(f => ({ ...f, [usdKey]: e.target.value }))}
@@ -283,14 +295,14 @@ export default function TradeshowEditModal({ project, people, rules, onClose, on
                     </div>
                   </div>
                 ))}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="min-w-0">
                     <label className="block text-xs font-medium text-gray-600 mb-1">參觀人次 Visitors</label>
                     <input type="number" min="0" value={form.visitors}
                       onChange={e => setForm(f => ({ ...f, visitors: e.target.value }))}
                       className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm" />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <label className="block text-xs font-medium text-gray-600 mb-1">參展商數 Exhibitor</label>
                     <input type="number" min="0" value={form.exhibitors}
                       onChange={e => setForm(f => ({ ...f, exhibitors: e.target.value }))}
@@ -303,7 +315,7 @@ export default function TradeshowEditModal({ project, people, rules, onClose, on
 
           <button
             onClick={() => setForm(f => ({ ...f, artworkDone: !f.artworkDone }))}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border-2 transition-colors w-full justify-center ${
+            className={`flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-lg text-sm font-medium border-2 transition-colors w-full justify-center ${
               form.artworkDone ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-gray-200 text-gray-500 hover:bg-gray-50'
             }`}>
             {form.artworkDone ? '✓ 已出稿完畢' : '出稿完畢'}
@@ -325,7 +337,7 @@ export default function TradeshowEditModal({ project, people, rules, onClose, on
                     const selected = form.assignments.some(a => a.personId === p.id)
                     return (
                       <button key={p.id} onClick={() => toggleAssignment(p.id, 'designer')}
-                        className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${selected ? 'bg-purple-600 text-white border-purple-600' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                        className={`px-3 py-2 min-h-[40px] text-sm rounded-lg border transition-colors ${selected ? 'bg-purple-600 text-white border-purple-600' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
                         {p.name}
                       </button>
                     )
@@ -341,7 +353,7 @@ export default function TradeshowEditModal({ project, people, rules, onClose, on
                     const selected = form.assignments.some(a => a.personId === p.id)
                     return (
                       <button key={p.id} onClick={() => toggleAssignment(p.id, 'planner')}
-                        className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${selected ? 'bg-teal-600 text-white border-teal-600' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+                        className={`px-3 py-2 min-h-[40px] text-sm rounded-lg border transition-colors ${selected ? 'bg-teal-600 text-white border-teal-600' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
                         {p.name}
                       </button>
                     )
@@ -369,18 +381,6 @@ export default function TradeshowEditModal({ project, people, rules, onClose, on
             </div>
           )}
         </fieldset>
-        <div className="px-6 py-4 border-t flex gap-3 justify-end sticky bottom-0 bg-white">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">
-            {readOnly ? '關閉' : '取消'}
-          </button>
-          {!readOnly && (
-            <button onClick={handleSave} disabled={saving || !canSave}
-              className="px-5 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 font-medium">
-              {saving ? '儲存中…' : '儲存'}
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
+    </ModalShell>
   )
 }

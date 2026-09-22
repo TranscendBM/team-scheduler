@@ -44,32 +44,34 @@ export default function PermissionsPage() {
     setSaving(false); setSaved(true)
   }
 
-  if (loading) return <div className="p-8 text-gray-500 text-sm">載入中…</div>
+  if (loading) return <div className="p-4 sm:p-8 text-gray-500 text-sm">載入中…</div>
 
   return (
-    <div className="p-8 max-w-3xl mx-auto">
-      <h1 className="text-2xl font-bold text-gray-800 mb-1">權限設定</h1>
-      <p className="text-sm text-gray-500 mb-6">勾選每個角色能看到的頁面。主管永遠可看全部,不可調整。</p>
+    <div className="p-4 sm:p-6 lg:p-8 max-w-3xl mx-auto min-w-0">
+      <h1 className="text-xl sm:text-2xl font-bold text-gray-800 mb-1">權限設定</h1>
+      <p className="text-sm text-gray-500 mb-6 break-words">勾選每個角色能看到的頁面。主管永遠可看全部,不可調整。</p>
 
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-        <table className="w-full text-sm">
+      {/* 3 個角色欄位在手機也塞得下，保留表格；只把欄寬與 padding 調成響應式 */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto max-w-full">
+        <table className="w-full text-sm min-w-[320px]">
           <thead className="bg-gray-50 text-gray-500 text-xs">
             <tr>
-              <th className="text-left px-4 py-3 font-medium">頁面</th>
-              {ROLE_COLS.map(c => <th key={c.key} className="px-4 py-3 font-medium text-center w-28">{c.label}</th>)}
+              <th className="text-left px-3 sm:px-4 py-3 font-medium">頁面</th>
+              {ROLE_COLS.map(c => <th key={c.key} className="px-2 sm:px-4 py-3 font-medium text-center w-16 sm:w-28">{c.label}</th>)}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {ADJUSTABLE_PAGES.map(p => (
               <tr key={p.key} className="hover:bg-gray-50">
-                <td className="px-4 py-3 text-gray-700">{p.icon} {p.label}</td>
+                <td className="px-3 sm:px-4 py-3 text-gray-700 break-words">{p.icon} {p.label}</td>
                 {ROLE_COLS.map(c => (
-                  <td key={c.key} className="px-4 py-3 text-center">
+                  <td key={c.key} className="px-2 sm:px-4 py-3 text-center">
                     {c.fixed ? (
-                      <input type="checkbox" checked disabled className="opacity-40" />
+                      <input type="checkbox" checked disabled aria-label={`主管 · ${p.label}（固定可見）`} className="opacity-40 w-5 h-5" />
                     ) : (
                       <input type="checkbox" checked={canAccess(perms, p.key, c.key)}
-                        onChange={() => toggle(p.key, c.key)} className="cursor-pointer w-4 h-4" />
+                        aria-label={`${c.label} · ${p.label}`}
+                        onChange={() => toggle(p.key, c.key)} className="cursor-pointer w-5 h-5" />
                     )}
                   </td>
                 ))}
@@ -79,14 +81,14 @@ export default function PermissionsPage() {
         </table>
       </div>
 
-      <div className="flex items-center gap-3 mt-5">
+      <div className="flex flex-wrap items-center gap-3 mt-5">
         <button onClick={handleSave} disabled={saving}
-          className="bg-blue-600 text-white text-sm px-5 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50">
+          className="bg-blue-600 text-white text-sm px-5 py-2.5 min-h-[44px] rounded-lg hover:bg-blue-700 disabled:opacity-50">
           {saving ? '儲存中…' : '儲存權限設定'}
         </button>
         {saved && <span className="text-sm text-emerald-600">✓ 已儲存</span>}
       </div>
-      <p className="text-xs text-gray-500 mt-4">
+      <p className="text-xs text-gray-500 mt-4 break-words">
         註:「使用者管理」「權限設定」「需求審核」「設計師儀表板」「負責人與設計師管理」固定僅主管可用,不列在此矩陣。
       </p>
     </div>

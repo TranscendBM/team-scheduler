@@ -126,32 +126,33 @@ export default function TradeshowListPage() {
   }
 
   return (
-    <div className="p-8 max-w-full mx-auto">
-      <div className="flex items-center justify-between mb-1">
-        <h1 className="text-2xl font-bold text-gray-800">展覽列表</h1>
-        <div className="flex items-center gap-2">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-full mx-auto min-w-0">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-1">
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-800 min-w-0">展覽列表</h1>
+        <div className="flex flex-wrap items-center gap-2">
           <button onClick={exportExcel}
-            className="bg-white border border-gray-300 text-gray-600 text-sm px-4 py-2 rounded-lg hover:bg-gray-50 font-medium">
+            className="bg-white border border-gray-300 text-gray-600 text-sm px-4 py-2 min-h-[44px] rounded-lg hover:bg-gray-50 font-medium">
             ⬇ 匯出 Excel
           </button>
           {isManager && (
             <button onClick={() => setCreating(true)}
-              className="bg-blue-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-blue-700 font-medium">
+              className="bg-blue-600 text-white text-sm px-4 py-2 min-h-[44px] rounded-lg hover:bg-blue-700 font-medium">
               + 新增秀展
             </button>
           )}
         </div>
       </div>
-      <p className="text-sm text-gray-500 mb-4">{filtered.length} 場秀展，接近試算表格式方便核對資料</p>
+      <p className="text-sm text-gray-500 mb-4 break-words">{filtered.length} 場秀展，接近試算表格式方便核對資料</p>
 
-      <div className="flex items-center gap-2 mb-3">
+      <div className="flex flex-wrap items-center gap-2 mb-3">
         <select value={year} onChange={e => setYear(parseInt(e.target.value))}
-          className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white">
+          aria-label="年度"
+          className="text-sm border border-gray-300 rounded-lg px-3 py-2 min-h-[44px] bg-white">
           {years.map(y => <option key={y} value={y}>{y}</option>)}
         </select>
         {(officeFilters.length > 0 || statusFilters.length > 0 || plannerFilters.length > 0 || designerFilters.length > 0) && (
           <button onClick={() => { setOfficeFilters([]); setStatusFilters([]); setPlannerFilters([]); setDesignerFilters([]) }}
-            className="text-xs text-gray-500 hover:text-gray-600">✕ 清除篩選</button>
+            className="text-xs text-gray-500 hover:text-gray-600 px-2 py-2 min-h-[36px]">✕ 清除篩選</button>
         )}
       </div>
 
@@ -159,7 +160,7 @@ export default function TradeshowListPage() {
         <span className="text-xs text-gray-500 mr-1">分公司</span>
         {offices.map(o => (
           <button key={o} onClick={() => toggleFilter(setOfficeFilters, o)}
-            className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+            className={`text-xs px-2.5 py-2 min-h-[36px] rounded-full border transition-colors ${
               officeFilters.includes(o) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
             }`}>
             {o}
@@ -171,7 +172,7 @@ export default function TradeshowListPage() {
         <span className="text-xs text-gray-500 mr-1">狀態</span>
         {statuses.map(s => (
           <button key={s} onClick={() => toggleFilter(setStatusFilters, s)}
-            className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+            className={`text-xs px-2.5 py-2 min-h-[36px] rounded-full border transition-colors ${
               statusFilters.includes(s) ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
             }`}>
             {s}
@@ -184,7 +185,7 @@ export default function TradeshowListPage() {
           <span className="text-xs text-gray-500 mr-1">負責 Planner</span>
           {plannerOptions.map(id => (
             <button key={id} onClick={() => toggleFilter(setPlannerFilters, id)}
-              className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+              className={`text-xs px-2.5 py-2 min-h-[36px] rounded-full border transition-colors ${
                 plannerFilters.includes(id) ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
               }`}>
               {personName(id)}
@@ -198,7 +199,7 @@ export default function TradeshowListPage() {
           <span className="text-xs text-gray-500 mr-1">負責設計師</span>
           {designerOptions.map(id => (
             <button key={id} onClick={() => toggleFilter(setDesignerFilters, id)}
-              className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+              className={`text-xs px-2.5 py-2 min-h-[36px] rounded-full border transition-colors ${
                 designerFilters.includes(id) ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
               }`}>
               {personName(id)}
@@ -207,7 +208,9 @@ export default function TradeshowListPage() {
         </div>
       )}
 
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto">
+      {/* 17 欄的高密度試算表：手機一樣在這個容器內橫向捲動（秀展名稱欄 sticky），
+          不改欄位、不隱藏資料，整頁 body 不會出現水平捲軸 */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto max-w-full">
         <table className="text-sm border-collapse">
           <thead className="sticky top-0 bg-gray-50 z-10">
             <tr>
@@ -253,11 +256,11 @@ export default function TradeshowListPage() {
                   <td className="px-3 py-2 text-right whitespace-nowrap" onClick={e => e.stopPropagation()}>
                     {deleteConfirm === p.id ? (
                       <>
-                        <button onClick={() => handleDelete(p.id)} className="text-xs text-red-600 hover:underline mr-2">確認刪除</button>
-                        <button onClick={() => setDeleteConfirm(null)} className="text-xs text-gray-500 hover:underline">取消</button>
+                        <button onClick={() => handleDelete(p.id)} className="text-xs text-red-600 hover:underline mr-2 py-2 min-h-[36px]">確認刪除</button>
+                        <button onClick={() => setDeleteConfirm(null)} className="text-xs text-gray-500 hover:underline py-2 min-h-[36px]">取消</button>
                       </>
                     ) : (
-                      <button onClick={() => setDeleteConfirm(p.id)} className="text-xs text-red-400 hover:text-red-600 hover:underline">刪除</button>
+                      <button onClick={() => setDeleteConfirm(p.id)} className="text-xs text-red-400 hover:text-red-600 hover:underline py-2 min-h-[36px]">刪除</button>
                     )}
                   </td>
                 )}

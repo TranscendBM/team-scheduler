@@ -210,16 +210,16 @@ export default function RequestNewPage() {
     }
   }
 
-  if (loading) return <div className="p-8 text-gray-500 text-sm">載入中…</div>
+  if (loading) return <div className="p-4 sm:p-8 text-gray-500 text-sm">載入中…</div>
 
   if (blocked) {
     return (
-      <div className="p-8 max-w-2xl mx-auto">
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-8 text-center">
+      <div className="p-4 sm:p-6 lg:p-8 max-w-2xl mx-auto">
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 sm:p-8 text-center">
           <div className="text-4xl mb-3">🔒</div>
-          <p className="text-sm text-amber-700">{blocked}</p>
+          <p className="text-sm text-amber-700 break-words">{blocked}</p>
           <button onClick={() => navigate('/my-requests')}
-            className="mt-4 text-sm text-blue-600 hover:underline">回我的需求</button>
+            className="mt-4 text-sm text-blue-600 hover:underline py-2 min-h-[44px]">回我的需求</button>
         </div>
       </div>
     )
@@ -227,8 +227,8 @@ export default function RequestNewPage() {
 
   if (done) {
     return (
-      <div className="p-8 max-w-2xl mx-auto">
-        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-8 text-center">
+      <div className="p-4 sm:p-6 lg:p-8 max-w-2xl mx-auto">
+        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-6 sm:p-8 text-center">
           <div className="text-4xl mb-3">✅</div>
           <h2 className="text-lg font-semibold text-emerald-800">{editId ? '需求已更新' : '需求已送出'}</h2>
           <p className="text-sm text-emerald-600 mt-1">狀態：待審核，正在前往「我的需求」…</p>
@@ -240,21 +240,21 @@ export default function RequestNewPage() {
   const inputCls = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-200 focus:border-blue-400 outline-none'
 
   return (
-    <div className="p-8 max-w-2xl mx-auto">
-      <h1 className="text-2xl font-bold text-gray-800 mb-1">{editId ? '編輯設計需求' : '提交設計需求'}</h1>
-      <p className="text-sm text-gray-500 mb-6">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-2xl mx-auto min-w-0">
+      <h1 className="text-xl sm:text-2xl font-bold text-gray-800 mb-1">{editId ? '編輯設計需求' : '提交設計需求'}</h1>
+      <p className="text-sm text-gray-500 mb-6 break-words">
         {editId ? '需求仍在「待審核」狀態,可修改內容;審核後即無法編輯' : '送出後會進入主管審核,狀態預設為「待審核」'}
       </p>
 
-      <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm space-y-5">
+      <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-gray-200 p-4 sm:p-6 shadow-sm space-y-5">
         {/* 發稿類型 / 急件 */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">發稿類型</label>
-          <label className="flex items-center gap-2 text-sm text-gray-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 cursor-pointer">
+          <label className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-gray-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 min-h-[44px] cursor-pointer">
             <input type="checkbox" checked={form.urgent}
               onChange={e => setForm(f => ({ ...f, urgent: e.target.checked }))} />
             <span>🔥 急件</span>
-            <span className="text-xs text-amber-600">（L/T 少於 5 個工作天，請勾選急件）</span>
+            <span className="text-xs text-amber-600 break-words">（L/T 少於 5 個工作天，請勾選急件）</span>
           </label>
         </div>
 
@@ -281,7 +281,7 @@ export default function RequestNewPage() {
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {DOC_TYPES.map(t => (
               <label key={t}
-                className={`flex items-center gap-2 text-sm rounded-lg border px-3 py-2 cursor-pointer transition-colors ${
+                className={`flex items-center gap-2 min-w-0 break-words text-sm rounded-lg border px-3 py-2.5 min-h-[44px] cursor-pointer transition-colors ${
                   form.docTypes.includes(t) ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'
                 }`}>
                 <input type="checkbox" checked={form.docTypes.includes(t)} onChange={() => toggleDocType(t)} />
@@ -310,7 +310,7 @@ export default function RequestNewPage() {
         {/* 上傳提案 */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">上傳提案</label>
-          <label className="flex items-center justify-center gap-2 border border-dashed border-gray-300 rounded-lg p-4 text-sm text-gray-500 bg-gray-50 hover:bg-gray-100 cursor-pointer transition-colors">
+          <label className="flex items-center justify-center gap-2 border border-dashed border-gray-300 rounded-lg p-4 min-h-[56px] text-sm text-gray-500 bg-gray-50 hover:bg-gray-100 cursor-pointer transition-colors text-center">
             <span>📎 點此選擇檔案（可多選）</span>
             <input type="file" multiple className="hidden"
               accept=".pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.key,.pages,.numbers,image/*"
@@ -324,45 +324,45 @@ export default function RequestNewPage() {
                 const safeUrl = getSafeAttachmentUrl(a, editId)
                 return (
                   <li key={attachmentKey(a)}
-                    className={`flex items-center justify-between text-xs rounded-lg px-3 py-1.5 ${isRemoved ? 'bg-red-50 text-red-300' : 'bg-gray-100 text-gray-600'}`}>
+                    className={`flex items-center justify-between gap-2 text-xs rounded-lg px-3 py-2 ${isRemoved ? 'bg-red-50 text-red-300' : 'bg-gray-100 text-gray-600'}`}>
                     {isRemoved ? (
-                      <span className="truncate line-through">📄 {a.name}（將於儲存後移除）</span>
+                      <span className="truncate min-w-0 line-through">📄 {a.name}（將於儲存後移除）</span>
                     ) : safeUrl ? (
-                      <a href={safeUrl} target="_blank" rel="noreferrer noopener" className="truncate hover:underline">📄 {a.name}（已上傳）</a>
+                      <a href={safeUrl} target="_blank" rel="noreferrer noopener" className="truncate min-w-0 hover:underline">📄 {a.name}（已上傳）</a>
                     ) : (
-                      <span className="truncate text-red-400" title="連結驗證失敗">📄 {a.name}（連結無效）</span>
+                      <span className="truncate min-w-0 text-red-400" title="連結驗證失敗">📄 {a.name}（連結無效）</span>
                     )}
                     {isRemoved ? (
-                      <button type="button" onClick={() => restoreExisting(a)} className="text-blue-400 hover:text-blue-600 ml-2">復原</button>
+                      <button type="button" onClick={() => restoreExisting(a)} className="shrink-0 text-blue-400 hover:text-blue-600 px-2 py-1 min-h-[32px]">復原</button>
                     ) : (
-                      <button type="button" onClick={() => removeExisting(a)} className="text-gray-500 hover:text-red-500 ml-2">移除</button>
+                      <button type="button" onClick={() => removeExisting(a)} className="shrink-0 text-gray-500 hover:text-red-500 px-2 py-1 min-h-[32px]">移除</button>
                     )}
                   </li>
                 )
               })}
               {files.map(f => (
-                <li key={f.name} className="flex items-center justify-between text-xs bg-blue-50 text-blue-700 rounded-lg px-3 py-1.5">
-                  <span className="truncate">📄 {f.name}（{(f.size / 1024 / 1024).toFixed(2)}MB）</span>
-                  <button type="button" onClick={() => removeFile(f.name)} className="text-blue-400 hover:text-red-500 ml-2">移除</button>
+                <li key={f.name} className="flex items-center justify-between gap-2 text-xs bg-blue-50 text-blue-700 rounded-lg px-3 py-2">
+                  <span className="truncate min-w-0">📄 {f.name}（{(f.size / 1024 / 1024).toFixed(2)}MB）</span>
+                  <button type="button" onClick={() => removeFile(f.name)} className="shrink-0 text-blue-400 hover:text-red-500 px-2 py-1 min-h-[32px]">移除</button>
                 </li>
               ))}
             </ul>
           )}
         </div>
 
-        <div className="text-xs text-gray-500">提交人：{user?.displayName || email}（自動帶入）</div>
+        <div className="text-xs text-gray-500 break-words">提交人：{user?.displayName || email}（自動帶入）</div>
 
-        {error && <p className="text-sm text-red-500">{error}</p>}
-        {saving && uploadMsg && <p className="text-sm text-blue-500">{uploadMsg}</p>}
+        {error && <p className="text-sm text-red-500 break-words">{error}</p>}
+        {saving && uploadMsg && <p className="text-sm text-blue-500 break-words">{uploadMsg}</p>}
 
-        <div className="flex gap-2">
+        <div className="flex flex-col-reverse sm:flex-row gap-2">
           <button type="submit" disabled={saving}
-            className="flex-1 bg-blue-600 text-white py-2.5 rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors">
+            className="sm:flex-1 bg-blue-600 text-white py-2.5 min-h-[44px] rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors">
             {saving ? (editId ? '更新中…' : '送出中…') : (editId ? '儲存變更' : '送出需求')}
           </button>
           {editId && (
             <button type="button" onClick={() => navigate('/my-requests')}
-              className="px-5 py-2.5 rounded-lg text-sm text-gray-500 hover:bg-gray-100">取消</button>
+              className="px-5 py-2.5 min-h-[44px] rounded-lg text-sm text-gray-500 hover:bg-gray-100 border border-gray-200 sm:border-0">取消</button>
           )}
         </div>
       </form>

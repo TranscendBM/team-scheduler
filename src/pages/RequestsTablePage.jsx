@@ -144,8 +144,8 @@ export default function RequestsTablePage() {
       else plannerClose(r)
     }
     const cls = action.type === 'advance'
-      ? 'text-xs bg-blue-600 text-white px-3 py-1 rounded-lg hover:bg-blue-700 disabled:opacity-50'
-      : 'text-xs bg-emerald-600 text-white px-3 py-1 rounded-lg hover:bg-emerald-700 disabled:opacity-50'
+      ? 'text-xs bg-blue-600 text-white px-3 py-2 min-h-[36px] rounded-lg hover:bg-blue-700 disabled:opacity-50'
+      : 'text-xs bg-emerald-600 text-white px-3 py-2 min-h-[36px] rounded-lg hover:bg-emerald-700 disabled:opacity-50'
     return <button onClick={onClick} disabled={busy === r.id} className={cls}>{action.label}</button>
   }
 
@@ -161,7 +161,9 @@ export default function RequestsTablePage() {
               <button
                 onClick={e => { e.stopPropagation(); toggleImportant(r) }}
                 title={r.important ? '取消標記重要' : '標記為重要'}
-                className={`mr-1 align-middle leading-none ${r.important ? 'text-amber-400' : 'text-gray-500 hover:text-amber-400'}`}>
+                aria-label={r.important ? '取消標記重要' : '標記為重要'}
+                aria-pressed={!!r.important}
+                className={`mr-1 -my-1.5 w-8 h-8 inline-flex items-center justify-center align-middle leading-none rounded ${r.important ? 'text-amber-400' : 'text-gray-500 hover:text-amber-400'}`}>
                 {r.important ? '★' : '☆'}
               </button>
             )}
@@ -185,9 +187,10 @@ export default function RequestsTablePage() {
 
   // 固定欄寬（table-layout: fixed + 同一組 colgroup），讓每個設計師分組的表格欄位對得齊，不會因為內容長短各自伸縮
   // 設計師欄位已隱藏（分組標題已顯示設計師名稱，欄位重複）；動作欄只有 designer/planner 有按鈕才顯示
+  // 高密度表格：手機改成這個容器內的局部橫向捲動（保留全部欄位），不讓整頁出現水平捲軸
   function table(data, faded, empty) {
     return (
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto max-w-full">
         <table className="w-full" style={{ tableLayout: 'fixed', minWidth: 640 }}>
           <colgroup>
             {showAction ? (
@@ -231,9 +234,9 @@ export default function RequestsTablePage() {
   }
 
   return (
-    <div className="p-8 max-w-6xl mx-auto">
-      <h1 className="text-2xl font-bold text-gray-800 mb-1">需求總表</h1>
-      <p className="text-sm text-gray-500 mb-5">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-6xl mx-auto min-w-0">
+      <h1 className="text-xl sm:text-2xl font-bold text-gray-800 mb-1">需求總表</h1>
+      <p className="text-sm text-gray-500 mb-5 break-words">
         {role === 'manager' && '全部需求一覽,點擊任一列查看完整內容'}
         {role !== 'manager' && canReview && '你目前是臨時審核代理人,這裡顯示全部設計師的需求'}
         {role === 'designer' && !canReview && '指派給你的需求,可調整進度'}
@@ -245,19 +248,20 @@ export default function RequestsTablePage() {
         <div className="mb-4">
           <div className="flex flex-wrap items-center gap-2 mb-2">
             <select value={sort} onChange={e => setSort(e.target.value)}
-              className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white">
+              aria-label="排序方式"
+              className="text-sm border border-gray-300 rounded-lg px-3 py-2 min-h-[44px] bg-white max-w-full">
               {SORTS.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
             </select>
             {(fDesigners.length > 0 || fStatuses.length > 0 || fRegions.length > 0) && (
               <button onClick={() => { setFDesigners([]); setFStatuses([]); setFRegions([]) }}
-                className="text-xs text-gray-500 hover:text-gray-600">✕ 清除篩選</button>
+                className="text-xs text-gray-500 hover:text-gray-600 px-2 py-2 min-h-[36px]">✕ 清除篩選</button>
             )}
           </div>
           <div className="flex flex-wrap items-center gap-1.5 mb-1.5">
             <span className="text-xs text-gray-500 mr-1">設計師</span>
             {allDesignerOpts.map(([e, name]) => (
               <button key={e} onClick={() => toggleFilter(setFDesigners, e)}
-                className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                className={`text-xs px-2.5 py-2 min-h-[36px] rounded-full border transition-colors ${
                   fDesigners.includes(e) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
                 }`}>
                 {name}
@@ -268,7 +272,7 @@ export default function RequestsTablePage() {
             <span className="text-xs text-gray-500 mr-1">狀態</span>
             {Object.entries(STATUS).map(([k, v]) => (
               <button key={k} onClick={() => toggleFilter(setFStatuses, k)}
-                className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                className={`text-xs px-2.5 py-2 min-h-[36px] rounded-full border transition-colors ${
                   fStatuses.includes(k) ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
                 }`}>
                 {v.label}
@@ -279,7 +283,7 @@ export default function RequestsTablePage() {
             <span className="text-xs text-gray-500 mr-1">地區</span>
             {allRegionOpts.map(r => (
               <button key={r} onClick={() => toggleFilter(setFRegions, r)}
-                className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                className={`text-xs px-2.5 py-2 min-h-[36px] rounded-full border transition-colors ${
                   fRegions.includes(r) ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
                 }`}>
                 {r}
@@ -309,7 +313,8 @@ export default function RequestsTablePage() {
           {done.length > 0 && (
             <>
               <button onClick={() => setDoneOpen(v => !v)}
-                className="flex items-center gap-1.5 text-sm font-medium text-gray-500 mt-8 mb-3 hover:text-gray-700">
+                aria-expanded={doneOpen}
+                className="flex items-center gap-1.5 text-sm font-medium text-gray-500 mt-8 mb-3 py-2 min-h-[44px] hover:text-gray-700">
                 <span className={`inline-block transition-transform ${doneOpen ? 'rotate-90' : ''}`}>▶</span>
                 已結案（{done.length}）
               </button>
@@ -331,15 +336,15 @@ export default function RequestsTablePage() {
           modalDeleteConfirm ? (
             <>
               <button onClick={() => handleDelete(detail)} disabled={busy === detail.id}
-                className="flex-1 bg-red-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-red-700 disabled:opacity-50">
+                className="sm:flex-1 bg-red-600 text-white text-sm px-4 py-2.5 min-h-[44px] rounded-lg hover:bg-red-700 disabled:opacity-50">
                 確認刪除
               </button>
               <button onClick={() => setModalDeleteConfirm(false)}
-                className="px-4 py-2 text-sm text-gray-500 hover:bg-gray-100 rounded-lg">取消</button>
+                className="px-4 py-2.5 min-h-[44px] text-sm text-gray-500 hover:bg-gray-100 rounded-lg border border-gray-200 sm:border-0">取消</button>
             </>
           ) : (
             <button onClick={() => setModalDeleteConfirm(true)}
-              className="text-sm text-red-500 hover:text-red-700 px-4 py-2 rounded-lg hover:bg-red-50">
+              className="text-sm text-red-500 hover:text-red-700 px-4 py-2.5 min-h-[44px] rounded-lg hover:bg-red-50">
               🗑 刪除此需求
             </button>
           )

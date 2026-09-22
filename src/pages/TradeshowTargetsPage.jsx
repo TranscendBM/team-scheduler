@@ -87,11 +87,12 @@ export default function TradeshowTargetsPage() {
   }
 
   return (
-    <div className="p-8 max-w-full mx-auto">
-      <h1 className="text-2xl font-bold text-gray-800 mb-1">年度秀展目標</h1>
-      <p className="text-sm text-gray-500 mb-6">依分公司設定每年度計畫參展場數，接近試算表格式方便逐年核對；HQ（COMPUTEX 主辦單位）獨立於 TW 欄位</p>
+    <div className="p-4 sm:p-6 lg:p-8 max-w-full mx-auto min-w-0">
+      <h1 className="text-xl sm:text-2xl font-bold text-gray-800 mb-1">年度秀展目標</h1>
+      <p className="text-sm text-gray-500 mb-6 break-words">依分公司設定每年度計畫參展場數，接近試算表格式方便逐年核對；HQ（COMPUTEX 主辦單位）獨立於 TW 欄位</p>
 
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto">
+      {/* 分公司數量會成長的矩陣表：手機在這個容器內橫向捲動，年度/標題兩欄 sticky 不會捲走 */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto max-w-full">
         <table className="text-sm border-collapse min-w-full">
           <thead>
             <tr className="bg-gray-600 text-white">
@@ -117,11 +118,11 @@ export default function TradeshowTargetsPage() {
                   <tr key={year} className="border-b border-gray-100">
                     <td className="px-3 py-2 font-bold text-gray-800 sticky left-0 bg-white">{year}</td>
                     <td colSpan={COLUMNS.length + 2} className="px-3 py-2 bg-amber-50">
-                      <div className="flex items-center justify-between">
-                        <span className="text-amber-700">舊格式（未分公司，共 {yearTarget} 場），需轉換後才能依分公司設定</span>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-amber-700 break-words min-w-0">舊格式（未分公司，共 {yearTarget} 場），需轉換後才能依分公司設定</span>
                         {isManager && (
                           <button onClick={() => convertLegacy(year, yearTarget)} disabled={saving}
-                            className="text-xs bg-amber-600 text-white px-3 py-1 rounded-lg hover:bg-amber-700 disabled:opacity-50 whitespace-nowrap ml-3">
+                            className="text-xs bg-amber-600 text-white px-3 py-2 min-h-[36px] rounded-lg hover:bg-amber-700 disabled:opacity-50 whitespace-nowrap">
                             轉換為「未分公司」→ 可再拆分
                           </button>
                         )}
@@ -152,7 +153,7 @@ export default function TradeshowTargetsPage() {
                               className="w-14 border border-blue-400 rounded px-1 py-0.5 text-sm text-center" />
                           ) : isManager ? (
                             <button onClick={() => startEdit(year, col, val)}
-                              className="w-full py-0.5 rounded hover:bg-blue-100 text-gray-700 tabular-nums">
+                              className="w-full py-2 min-h-[36px] rounded hover:bg-blue-100 text-gray-700 tabular-nums">
                               {val ?? <span className="text-gray-500">—</span>}
                             </button>
                           ) : (
@@ -188,12 +189,12 @@ export default function TradeshowTargetsPage() {
       </div>
 
       {isManager && (
-        <div className="flex items-center gap-2 mt-4">
+        <div className="flex flex-wrap items-center gap-2 mt-4">
           <input type="number" placeholder="新增年度，例：2028" value={newYear}
             onChange={e => setNewYear(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') addYear() }}
-            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-40" />
-          <button onClick={addYear} className="text-sm text-blue-600 hover:underline">+ 新增年度</button>
+            className="border border-gray-300 rounded-lg px-3 py-2 min-h-[44px] text-sm w-full sm:w-52" />
+          <button onClick={addYear} className="text-sm text-blue-600 hover:underline px-2 py-2 min-h-[44px]">+ 新增年度</button>
         </div>
       )}
     </div>

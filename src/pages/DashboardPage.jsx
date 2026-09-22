@@ -18,7 +18,7 @@ function addDaysStr(days) { return addDays(todayStr(), days) }
 // 主管儀表板：活動／報獎／設計三個獨立區塊共用的卡片渲染（純函式，非元件，避免每次 render 都重新定義元件）
 function projectBlock(icon, label, list, linkTo, emptyText) {
   return (
-    <div key={label} className="bg-white rounded-xl border border-gray-200 p-5">
+    <div key={label} className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 min-w-0">
       <p className="text-sm font-semibold text-gray-700 mb-3">{icon} {label}</p>
       {list.length === 0 ? (
         <p className="text-sm text-gray-500 py-4 text-center">{emptyText}</p>
@@ -26,7 +26,7 @@ function projectBlock(icon, label, list, linkTo, emptyText) {
         <div className="space-y-2 max-h-80 overflow-y-auto">
           {list.map(p => (
             <Link key={p.id} to={linkTo}
-              className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors">
+              className="flex items-center justify-between gap-2 px-3 py-2 min-h-[44px] rounded-lg hover:bg-gray-50 transition-colors">
               <p className="text-sm font-medium text-gray-800 truncate flex-1 min-w-0">{p.name}</p>
               {/* 活動／報獎／設計只需要看到最後截止日，起始日不重要，故只顯示 endDate(沒有才退回 startDate) */}
               <span className="text-xs text-gray-500 whitespace-nowrap ml-2">{p.endDate || p.startDate || ''}</span>
@@ -143,7 +143,7 @@ export default function DashboardPage() {
     : []
 
   return (
-    <div className="p-8 max-w-5xl mx-auto">
+    <div className="p-4 sm:p-6 lg:p-8 max-w-5xl mx-auto min-w-0">
       <h1 className="text-2xl font-bold text-gray-800 mb-1">{user?.displayName ? `${user.displayName}，你好` : '總覽'}</h1>
       <p className="text-sm text-gray-500 mb-6">登入時的重點資訊一覽</p>
 
@@ -157,17 +157,17 @@ export default function DashboardPage() {
       {role !== 'manager' && (
       <>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 min-w-0">
           <div className="flex items-center justify-between mb-3">
             <p className="text-sm font-semibold text-gray-700">🎪 進行中的秀展</p>
-            <Link to="/tradeshow-list" className="text-xs text-blue-500 hover:underline">查看全部 →</Link>
+            <Link to="/tradeshow-list" className="text-xs text-blue-500 hover:underline shrink-0 inline-flex items-center min-h-[36px] px-1 -mr-1">查看全部 →</Link>
           </div>
           {ongoingShows.length === 0 ? (
             <p className="text-sm text-gray-500 py-4 text-center">目前沒有進行中的秀展</p>
           ) : (
             <div className="space-y-2">
               {ongoingShows.map(p => (
-                <div key={p.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-blue-50/60">
+                <div key={p.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 px-3 py-2 rounded-lg bg-blue-50/60">
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-gray-800 truncate">{p.name}</p>
                     <p className="text-xs text-gray-500">{p.office || ''} {p.location || ''}</p>
@@ -179,17 +179,17 @@ export default function DashboardPage() {
           )}
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 min-w-0">
           <div className="flex items-center justify-between mb-3">
             <p className="text-sm font-semibold text-gray-700">📅 未來三個月即將開展</p>
-            <Link to="/tradeshow-gantt" className="text-xs text-blue-500 hover:underline">查看甘特圖 →</Link>
+            <Link to="/tradeshow-gantt" className="text-xs text-blue-500 hover:underline shrink-0 inline-flex items-center min-h-[36px] px-1 -mr-1">查看甘特圖 →</Link>
           </div>
           {upcomingShows.length === 0 ? (
             <p className="text-sm text-gray-500 py-4 text-center">未來三個月沒有你負責的秀展</p>
           ) : (
             <div className="space-y-2">
               {upcomingShows.map(p => (
-                <div key={p.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-50">
+                <div key={p.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 px-3 py-2 rounded-lg bg-gray-50">
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-gray-800 truncate">{p.name}</p>
                     <p className="text-xs text-gray-500">{p.office || ''} {p.location || ''}</p>
@@ -203,7 +203,7 @@ export default function DashboardPage() {
       </div>
 
       {/* 專案項目（活動/報獎/設計） */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+      <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 mb-6 min-w-0">
         <p className="text-sm font-semibold text-gray-700 mb-3">📁 我近期要負責的專案項目</p>
         {myProjects.length === 0 ? (
           <p className="text-sm text-gray-500 py-4 text-center">目前沒有你負責的活動／報獎／設計項目</p>
@@ -211,7 +211,7 @@ export default function DashboardPage() {
           <div className="space-y-2">
             {myProjects.map(p => (
               <Link key={p.id} to={PROJECT_LINK[p.type] || '/projects/event'}
-                className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors">
+                className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 px-3 py-2 min-h-[44px] rounded-lg hover:bg-gray-50 transition-colors">
                 <div className="flex items-center gap-2 min-w-0">
                   <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: TYPE_COLORS[p.type] }} />
                   <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 flex-shrink-0">{TYPE_LABELS[p.type]}</span>
@@ -231,10 +231,10 @@ export default function DashboardPage() {
       {/* 主管：近三個月秀展清單 + 活動／報獎／設計（各自獨立區塊）+ 未來一個月休假預排 */}
       {role === 'manager' && (
         <>
-          <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+          <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 mb-6 min-w-0">
             <div className="flex items-center justify-between mb-3">
               <p className="text-sm font-semibold text-gray-700">🎪 近三個月的秀展清單</p>
-              <Link to="/tradeshow-list" className="text-xs text-blue-500 hover:underline">查看全部 →</Link>
+              <Link to="/tradeshow-list" className="text-xs text-blue-500 hover:underline shrink-0 inline-flex items-center min-h-[36px] px-1 -mr-1">查看全部 →</Link>
             </div>
             {companyUpcomingShows.length === 0 ? (
               <p className="text-sm text-gray-500 py-4 text-center">近三個月沒有秀展</p>
@@ -243,12 +243,12 @@ export default function DashboardPage() {
                 {companyUpcomingShows.map(p => {
                   const cd = showCountdown(p, today)
                   return (
-                    <div key={p.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-50">
+                    <div key={p.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 px-3 py-2 rounded-lg bg-gray-50">
                       <div className="min-w-0">
                         <p className="text-sm font-medium text-gray-800 truncate">{p.name}</p>
-                        <p className="text-xs text-gray-500">{p.office || ''} {p.location || ''}</p>
+                        <p className="text-xs text-gray-500 break-words">{p.office || ''} {p.location || ''}</p>
                       </div>
-                      <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                      <div className="flex items-center flex-wrap gap-2 sm:flex-shrink-0 sm:ml-2">
                         {cd.weekTag && (
                           <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-100 text-red-600 whitespace-nowrap">
                             {cd.weekTag}
@@ -276,17 +276,17 @@ export default function DashboardPage() {
             {projectBlock('🎨', '設計', companyDesigns, '/projects/design', '未來三個月沒有設計項目')}
           </div>
 
-          <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+          <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 mb-6 min-w-0">
             <div className="flex items-center justify-between mb-3">
               <p className="text-sm font-semibold text-gray-700">🏖️ 未來一個月的休假預排</p>
-              <Link to="/leave" className="text-xs text-blue-500 hover:underline">查看全部 →</Link>
+              <Link to="/leave" className="text-xs text-blue-500 hover:underline shrink-0 inline-flex items-center min-h-[36px] px-1 -mr-1">查看全部 →</Link>
             </div>
             {upcomingLeaves.length === 0 ? (
               <p className="text-sm text-gray-500 py-4 text-center">未來一個月沒有排休</p>
             ) : (
               <div className="space-y-2 max-h-80 overflow-y-auto">
                 {upcomingLeaves.map(l => (
-                  <div key={l.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-50">
+                  <div key={l.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 px-3 py-2 rounded-lg bg-gray-50">
                     <div className="flex items-center gap-2 min-w-0">
                       <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: LEAVE_COLORS[l.type] || '#d1d5db' }} />
                       <p className="text-sm font-medium text-gray-800 truncate">{l.personName}</p>
@@ -305,10 +305,10 @@ export default function DashboardPage() {
 
       {/* Planner：我送出的發稿需求 */}
       {role === 'planner' && (
-        <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+        <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 mb-6 min-w-0">
           <div className="flex items-center justify-between mb-3">
             <p className="text-sm font-semibold text-gray-700">📝 我近期提交的發稿需求</p>
-            <Link to="/my-requests" className="text-xs text-blue-500 hover:underline">查看全部 →</Link>
+            <Link to="/my-requests" className="text-xs text-blue-500 hover:underline shrink-0 inline-flex items-center min-h-[36px] px-1 -mr-1">查看全部 →</Link>
           </div>
           {myRequests.length === 0 ? (
             <p className="text-sm text-gray-500 py-4 text-center">你還沒有送出任何需求</p>
@@ -318,7 +318,7 @@ export default function DashboardPage() {
                 const meta = statusMeta(r.status)
                 return (
                   <button key={r.id} onClick={() => setDetail(r)}
-                    className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors text-left">
+                    className="w-full flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 min-h-[44px] rounded-lg hover:bg-gray-50 transition-colors text-left">
                     <span className={`w-2 h-2 rounded-full flex-shrink-0 ${meta.dot}`} />
                     <p className="flex-1 min-w-0 text-sm font-medium text-gray-800 truncate">{r.projectName || r.title}</p>
                     <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${meta.color}`}>{meta.label}</span>
@@ -332,10 +332,10 @@ export default function DashboardPage() {
 
       {/* Designer：我負責的發稿（設計中/確認中） */}
       {role === 'designer' && (
-        <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+        <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 mb-6 min-w-0">
           <div className="flex items-center justify-between mb-3">
             <p className="text-sm font-semibold text-gray-700">🎨 我負責的發稿（設計中／確認中）</p>
-            <Link to="/requests" className="text-xs text-blue-500 hover:underline">查看總表 →</Link>
+            <Link to="/requests" className="text-xs text-blue-500 hover:underline shrink-0 inline-flex items-center min-h-[36px] px-1 -mr-1">查看總表 →</Link>
           </div>
           {assignedRequests.length === 0 ? (
             <p className="text-sm text-gray-500 py-4 text-center">目前沒有設計中或確認中的發稿</p>
@@ -345,7 +345,7 @@ export default function DashboardPage() {
                 const meta = statusMeta(r.status)
                 return (
                   <button key={r.id} onClick={() => setDetail(r)}
-                    className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors text-left">
+                    className="w-full flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 min-h-[44px] rounded-lg hover:bg-gray-50 transition-colors text-left">
                     <span className={`w-2 h-2 rounded-full flex-shrink-0 ${meta.dot}`} />
                     <p className="flex-1 min-w-0 text-sm font-medium text-gray-800 truncate">
                       {r.urgent && <span className="text-red-500 mr-1">🔥</span>}{r.projectName || r.title}

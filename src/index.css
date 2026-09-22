@@ -6,8 +6,30 @@
   box-sizing: border-box;
 }
 
+/*
+  全站 z-index 層級（避免 sticky/fixed 元件互相遮蓋，新增元件請沿用這組刻度）：
+    10  頁面內部的 sticky 表頭 / sticky 欄位
+    20  甘特圖的 sticky 時間軸表頭
+    30  行動版 top bar
+    40  行動版導覽 drawer（backdrop 與面板）
+    50  Modal / Dialog（一定要高於 drawer）
+    60  附件全螢幕預覽（疊在 Modal 之上）
+    70  tooltip（pointer-events:none，只是浮層）
+*/
+
 html {
   font-size: 18px;
+}
+
+/*
+  手機把基準字級降回 16px。桌面 18px 的資訊密度在窄螢幕會讓每行字數太少、
+  卡片與表格被迫不斷換行。這是響應式字級，不是把整頁等比縮小——版面本身
+  另外用 mobile-first 的 breakpoint 重排（見各頁的 sm:/md:/lg: class）。
+*/
+@media (max-width: 640px) {
+  html {
+    font-size: 16px;
+  }
 }
 
 body {
@@ -15,6 +37,36 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang TC',
     'Microsoft JhengHei', sans-serif;
   background-color: #f9fafb;
+}
+
+/*
+  iOS Safari 在 focus 字級小於 16px 的輸入元件時，會自動把整頁放大（而且不會縮回去）。
+  選擇器刻意各帶一個屬性條件把 specificity 拉到 class 等級，否則單純的 element selector
+  會被 Tailwind 的 .text-sm / .text-xs（0,1,0）蓋過去。只在手機寬度生效，桌面維持原本字級。
+*/
+@media (max-width: 767px) {
+  input:not([type='checkbox']):not([type='radio']),
+  select:not([hidden]),
+  textarea:not([hidden]) {
+    font-size: 16px;
+  }
+}
+
+/*
+  App 外框高度：100dvh 在行動版瀏覽器會扣掉網址列，避免底部操作列被裁掉；
+  先寫 100vh 當作不支援 dvh 的瀏覽器的 fallback。
+*/
+.app-shell {
+  height: 100vh;
+  height: 100dvh;
+}
+
+/*
+  drawer / modal 開啟時鎖住背景捲動（見 src/utils/scrollLock.js，會自動補上
+  scrollbar 寬度避免版面跳動）。
+*/
+body.ts-scroll-locked {
+  overflow: hidden;
 }
 
 /* Gantt scrollbar */

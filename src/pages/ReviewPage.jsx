@@ -169,7 +169,7 @@ export default function ReviewPage() {
           const on = d.designers.includes(dz.email)
           return (
             <button type="button" key={dz.email} onClick={() => toggleDesigner(r, dz.email)}
-              className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${
+              className={`text-xs px-2.5 py-2 min-h-[36px] rounded-lg border transition-colors ${
                 on ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-500 hover:bg-gray-50'
               }`}>
               {on ? '✓ ' : ''}{dz.displayName || dz.email}
@@ -189,7 +189,7 @@ export default function ReviewPage() {
           const on = d.ccPlanners.includes(pz.email)
           return (
             <button type="button" key={pz.email} onClick={() => togglePlannerCc(r, pz.email)}
-              className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${
+              className={`text-xs px-2.5 py-2 min-h-[36px] rounded-lg border transition-colors ${
                 on ? 'border-teal-400 bg-teal-50 text-teal-700' : 'border-gray-200 text-gray-500 hover:bg-gray-50'
               }`}>
               {on ? '✓ ' : ''}{pz.displayName || pz.email}
@@ -208,24 +208,24 @@ export default function ReviewPage() {
   const reviewerOptions = [...designers, ...planners]
 
   return (
-    <div className="p-8 max-w-4xl mx-auto">
-      <h1 className="text-2xl font-bold text-gray-800 mb-1">需求審核</h1>
-      <p className="text-sm text-gray-500 mb-5">核准並指派設計師(可多位)、填寫注意事項、可變更交期,或駁回</p>
+    <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto min-w-0">
+      <h1 className="text-xl sm:text-2xl font-bold text-gray-800 mb-1">需求審核</h1>
+      <p className="text-sm text-gray-500 mb-5 break-words">核准並指派設計師(可多位)、填寫注意事項、可變更交期,或駁回</p>
 
       {/* 代理審核中的人看到的提示（manager 不會看到，因為 manager 本來就有完整權限） */}
       {isDelegatedReviewer && !isManager && (
-        <div className="mb-5 text-sm bg-amber-50 border border-amber-200 text-amber-700 rounded-xl px-4 py-2.5">
+        <div className="mb-5 text-sm bg-amber-50 border border-amber-200 text-amber-700 rounded-xl px-4 py-2.5 break-words">
           你目前是臨時審核代理人（{fmtDate(reviewDelegation.startsAt)} – {fmtDate(reviewDelegation.expiresAt)}）。可以核准/駁回待審核需求，但無法編輯已審核過的需求。
         </div>
       )}
 
       {/* manager 專屬：指派/取消臨時審核代理人 */}
       {isManager && (
-        <div className="mb-5 bg-white rounded-xl border border-gray-200 p-4">
+        <div className="mb-5 bg-white rounded-xl border border-gray-200 p-4 min-w-0">
           <p className="text-sm font-medium text-gray-700 mb-2">臨時審核代理人</p>
           {delegationExists ? (
             <div className="flex flex-wrap items-center gap-3 text-sm">
-              <span className="text-gray-600">
+              <span className="text-gray-600 break-words min-w-0">
                 {delegationStarted ? '目前代理人：' : '已排定代理人：'}
                 <b className="text-gray-800">{reviewDelegation.personName}</b>
                 {reviewDelegation.startsAt && !delegationStarted && <>，{fmtDate(reviewDelegation.startsAt)} 開始</>}
@@ -236,43 +236,43 @@ export default function ReviewPage() {
                 className="text-red-500 hover:underline disabled:opacity-50">取消代理</button>
             </div>
           ) : (
-            <div className="flex flex-wrap items-end gap-2">
-              <div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-end gap-2">
+              <div className="min-w-0">
                 <label className="block text-xs text-gray-500 mb-1">代理人</label>
                 <select value={delegateEmail} onChange={e => setDelegateEmail(e.target.value)}
-                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm min-w-[160px]">
+                  className="w-full lg:w-auto border border-gray-300 rounded-lg px-3 py-2 min-h-[44px] text-sm lg:min-w-[160px]">
                   <option value="">請選擇</option>
                   {reviewerOptions.map(p => (
                     <option key={p.email} value={p.email}>{p.displayName || p.email}</option>
                   ))}
                 </select>
               </div>
-              <div>
+              <div className="min-w-0">
                 <label className="block text-xs text-gray-500 mb-1">代理起始日</label>
                 <input type="date" value={delegateStartDate} onChange={e => setDelegateStartDate(e.target.value)}
-                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                  className="w-full lg:w-auto border border-gray-300 rounded-lg px-3 py-2 min-h-[44px] text-sm" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <label className="block text-xs text-gray-500 mb-1">代理到（含當天）</label>
                 <input type="date" value={delegateEndDate} onChange={e => setDelegateEndDate(e.target.value)}
-                  className="border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                  className="w-full lg:w-auto border border-gray-300 rounded-lg px-3 py-2 min-h-[44px] text-sm" />
               </div>
               <button onClick={grantDelegation} disabled={delegateBusy}
-                className="bg-gray-800 text-white text-sm px-4 py-2 rounded-lg hover:bg-gray-900 disabled:opacity-50">指派</button>
-              {delegateErr && <p className="text-xs text-red-500 w-full">{delegateErr}</p>}
+                className="bg-gray-800 text-white text-sm px-4 py-2.5 min-h-[44px] rounded-lg hover:bg-gray-900 disabled:opacity-50">指派</button>
+              {delegateErr && <p className="text-xs text-red-500 sm:col-span-2 lg:w-full break-words">{delegateErr}</p>}
             </div>
           )}
           <p className="text-xs text-gray-400 mt-2">代理人可以核准/駁回待審核需求，無法編輯已審核過的需求或動用其他主管功能，到期後自動失效。</p>
         </div>
       )}
 
-      <div className="flex gap-2 mb-5">
+      <div className="flex flex-wrap gap-2 mb-5">
         <button onClick={() => setTab('pending')}
-          className={`text-sm px-4 py-1.5 rounded-full ${tab === 'pending' ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>
+          className={`text-sm px-4 py-2 min-h-[40px] rounded-full ${tab === 'pending' ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>
           待審核 {pending.length > 0 && <span className="ml-1">({pending.length})</span>}
         </button>
         <button onClick={() => setTab('all')}
-          className={`text-sm px-4 py-1.5 rounded-full ${tab === 'all' ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>
+          className={`text-sm px-4 py-2 min-h-[40px] rounded-full ${tab === 'all' ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>
           全部總覽 ({requests.length})
         </button>
       </div>
@@ -283,17 +283,17 @@ export default function ReviewPage() {
           const d = eff(r)
           const isEditing = editing === r.id
           return (
-            <div key={r.id} className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
+            <div key={r.id} className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 sm:p-5 min-w-0">
               <div className="flex items-start gap-3">
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-gray-800">
+                  <p className="font-medium text-gray-800 break-words">
                     {r.urgent && <span className="text-red-500 mr-1">🔥</span>}
                     {r.projectName || r.title}
                   </p>
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-gray-500 mt-1 break-words">
                     {r.region ? r.region + ' · ' : ''}{(r.docTypes || []).join('、')} · 交期 {r.dueDate || '未指定'}
                   </p>
-                  <p className="text-xs text-gray-500 mt-0.5">提交：{r.submittedByName || r.submittedBy} · {fmt(r.createdAt)}</p>
+                  <p className="text-xs text-gray-500 mt-0.5 break-words">提交：{r.submittedByName || r.submittedBy} · {fmt(r.createdAt)}</p>
                   {r.description && (
                     <p className="text-sm text-gray-600 mt-2 whitespace-pre-wrap bg-gray-50 rounded-lg p-2">
                       <Linkify text={r.description} />
@@ -339,25 +339,25 @@ export default function ReviewPage() {
                         <textarea rows={2} value={d.comment} onChange={e => setDraft(r.id, { comment: e.target.value })}
                           className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="回給 planner 或設計師的注意事項" />
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2">
                         <button onClick={() => approve(r)} disabled={busy === r.id}
-                          className="bg-blue-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50">核准並指派</button>
+                          className="bg-blue-600 text-white text-sm px-4 py-2.5 min-h-[44px] rounded-lg hover:bg-blue-700 disabled:opacity-50">核准並指派</button>
                         <button onClick={() => setDraft(r.id, { rejecting: true, err: '' })}
-                          className="text-sm px-3 py-2 rounded-lg text-red-500 hover:bg-red-50">駁回</button>
+                          className="text-sm px-3 py-2.5 min-h-[44px] rounded-lg text-red-500 hover:bg-red-50">駁回</button>
                       </div>
                     </>
                   ) : (
                     <div className="flex flex-wrap items-center gap-2">
                       <input type="text" placeholder="駁回原因" value={d.reason}
                         onChange={e => setDraft(r.id, { reason: e.target.value })}
-                        className="border border-gray-300 rounded-lg px-3 py-2 text-sm flex-1 min-w-[200px]" />
+                        className="w-full sm:w-auto border border-gray-300 rounded-lg px-3 py-2 min-h-[44px] text-sm sm:flex-1 sm:min-w-[200px]" />
                       <button onClick={() => reject(r)} disabled={busy === r.id}
-                        className="bg-red-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-red-700 disabled:opacity-50">確認駁回</button>
+                        className="bg-red-600 text-white text-sm px-4 py-2.5 min-h-[44px] rounded-lg hover:bg-red-700 disabled:opacity-50">確認駁回</button>
                       <button onClick={() => setDraft(r.id, { rejecting: false, err: '' })}
-                        className="text-sm px-3 py-2 rounded-lg text-gray-500 hover:bg-gray-100">取消</button>
+                        className="text-sm px-3 py-2.5 min-h-[44px] rounded-lg text-gray-500 hover:bg-gray-100">取消</button>
                     </div>
                   )}
-                  {d.err && <p className="text-xs text-red-500">{d.err}</p>}
+                  {d.err && <p className="text-xs text-red-500 break-words">{d.err}</p>}
                 </div>
               )}
 
@@ -372,14 +372,14 @@ export default function ReviewPage() {
                         {r.completedAt && <span>結案：{fmt(r.completedAt)}</span>}
                       </div>
                       {(r.ccPlanners?.length > 0) && <div>CC：{plannerNamesOf(r.ccPlanners).join('、')}</div>}
-                      {r.reviewNote && <div>審核備註：{r.reviewNote}</div>}
-                      {r.comment && <div className="text-amber-700 bg-amber-50 rounded px-2 py-1 inline-block">📌 注意事項：{r.comment}</div>}
-                      {r.rejectReason && <div className="text-red-500">駁回原因：{r.rejectReason}</div>}
+                      {r.reviewNote && <div className="break-words">審核備註：{r.reviewNote}</div>}
+                      {r.comment && <div className="text-amber-700 bg-amber-50 rounded px-2 py-1 inline-block break-words max-w-full">📌 注意事項：{r.comment}</div>}
+                      {r.rejectReason && <div className="text-red-500 break-words">駁回原因：{r.rejectReason}</div>}
                       {/* 事後編輯是 manager 專屬（firestore.rules 的 isManagerMetaEdit 沒開放給代理人），
                           代理人身分就不顯示這顆按鈕，不然點了也只會被規則擋掉 */}
                       {r.status !== 'rejected' && isManager && (
                         <button onClick={() => { setEditing(r.id); setDraft(r.id, {}) }}
-                          className="text-blue-500 hover:underline mt-1">✎ 編輯指派 / 交期 / 注意事項</button>
+                          className="text-blue-500 hover:underline mt-1 py-2 min-h-[36px] text-left">✎ 編輯指派 / 交期 / 注意事項</button>
                       )}
                     </div>
                   ) : (
@@ -404,13 +404,13 @@ export default function ReviewPage() {
                         <textarea rows={2} value={d.comment} onChange={e => setDraft(r.id, { comment: e.target.value })}
                           className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2">
                         <button onClick={() => saveChanges(r)} disabled={busy === r.id}
-                          className="bg-blue-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50">儲存變更</button>
+                          className="bg-blue-600 text-white text-sm px-4 py-2.5 min-h-[44px] rounded-lg hover:bg-blue-700 disabled:opacity-50">儲存變更</button>
                         <button onClick={() => { setEditing(null); setDrafts(p => ({ ...p, [r.id]: {} })) }}
-                          className="text-sm px-3 py-2 rounded-lg text-gray-500 hover:bg-gray-100">取消</button>
+                          className="text-sm px-3 py-2.5 min-h-[44px] rounded-lg text-gray-500 hover:bg-gray-100">取消</button>
                       </div>
-                      {d.err && <p className="text-xs text-red-500">{d.err}</p>}
+                      {d.err && <p className="text-xs text-red-500 break-words">{d.err}</p>}
                     </div>
                   )}
                 </div>

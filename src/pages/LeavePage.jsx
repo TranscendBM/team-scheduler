@@ -2,6 +2,10 @@ import { useEffect, useState } from 'react'
 import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
+import PageHeader from '../components/ui/PageHeader'
+import ModalShell from '../components/ui/ModalShell'
+import ConfirmDialog from '../components/ui/ConfirmDialog'
+import EmptyState from '../components/ui/EmptyState'
 
 const LEAVE_TYPES = ['特休', '病假', '事假', '出差', '其他']
 
@@ -166,7 +170,7 @@ export default function LeavePage() {
     const d = days(leave)
     const isExpired = leave.endDate < TODAY
     return (
-      <div className={`bg-white rounded-xl border border-gray-200 px-4 py-3 flex items-start justify-between hover:shadow-sm transition-shadow ${isExpired ? 'opacity-60' : ''}`}>
+      <div className={`bg-white rounded-xl border border-gray-200 px-4 py-3 flex items-start justify-between gap-2 hover:shadow-sm transition-shadow min-w-0 ${isExpired ? 'opacity-60' : ''}`}>
         <div className="flex items-start gap-3 min-w-0">
           <div className="w-1 h-full min-h-[36px] rounded-full flex-shrink-0 mt-0.5" style={{ backgroundColor: LEAVE_COLORS[leave.type] || '#d1d5db' }} />
           <div className="min-w-0">
@@ -176,16 +180,16 @@ export default function LeavePage() {
               <span className="text-xs text-gray-500">{d}{typeof d === 'number' ? ' 天' : ''}</span>
               {isExpired && <span className="text-xs text-gray-500">已過期</span>}
             </div>
-            <p className="text-xs text-gray-500 mt-0.5">
+            <p className="text-xs text-gray-500 mt-0.5 break-words">
               {formatTimeRange(leave)}
               {leave.note && <span className="text-gray-500 ml-2">· {leave.note}</span>}
             </p>
           </div>
         </div>
         {isManager && (
-          <div className="flex gap-1.5 flex-shrink-0 ml-2">
-            <button onClick={() => openEdit(leave)} className="text-xs text-blue-500 hover:text-blue-700 px-2 py-1 rounded hover:bg-blue-50">編輯</button>
-            <button onClick={() => setDeleteConfirm(leave.id)} className="text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded hover:bg-red-50">刪除</button>
+          <div className="flex gap-1.5 flex-shrink-0">
+            <button onClick={() => openEdit(leave)} className="text-xs text-blue-500 hover:text-blue-700 px-2 py-2 min-h-[36px] rounded hover:bg-blue-50">編輯</button>
+            <button onClick={() => setDeleteConfirm(leave.id)} className="text-xs text-red-400 hover:text-red-600 px-2 py-2 min-h-[36px] rounded hover:bg-red-50">刪除</button>
           </div>
         )}
       </div>
@@ -196,43 +200,44 @@ export default function LeavePage() {
   const planners = people.filter(p => p.role !== 'designer')
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-w-0">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b bg-white">
-        <div>
-          <h2 className="text-xl font-bold text-gray-800">休假預排</h2>
-          <p className="text-sm text-gray-500">{baseFiltered.length} 筆休假記錄</p>
-        </div>
-        <div className="flex items-center gap-3 flex-wrap">
-          <select value={filterPerson} onChange={e => setFilterPerson(e.target.value)}
-            className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 bg-white text-gray-700">
-            <option value="all">全部成員</option>
-            {people.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-          {expiredCount > 0 && (
-            <label className="flex items-center gap-1.5 text-sm text-gray-500 cursor-pointer select-none">
-              <input type="checkbox" checked={showExpired} onChange={e => setShowExpired(e.target.checked)}
-                className="rounded" />
-              顯示過期（{expiredCount}）
-            </label>
-          )}
-          <button onClick={() => setShowExportModal(true)} disabled={baseFiltered.length === 0}
-            className="flex items-center gap-1.5 bg-white border border-gray-200 text-gray-600 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">
-            📋 匯出文字
-          </button>
-          {isManager && (
-            <button onClick={openCreate}
-              className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors">
-              + 新增休假
+      <PageHeader
+        title="休假預排"
+        subtitle={`${baseFiltered.length} 筆休假記錄`}
+        actions={
+          <>
+            <select value={filterPerson} onChange={e => setFilterPerson(e.target.value)}
+              aria-label="篩選成員"
+              className="text-sm border border-gray-200 rounded-lg px-3 py-2 min-h-[44px] bg-white text-gray-700">
+              <option value="all">全部成員</option>
+              {people.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            {expiredCount > 0 && (
+              <label className="flex items-center gap-1.5 text-sm text-gray-500 cursor-pointer select-none px-1 py-2 min-h-[44px]">
+                <input type="checkbox" checked={showExpired} onChange={e => setShowExpired(e.target.checked)}
+                  className="rounded" />
+                顯示過期（{expiredCount}）
+              </label>
+            )}
+            <button onClick={() => setShowExportModal(true)} disabled={baseFiltered.length === 0}
+              className="flex items-center gap-1.5 bg-white border border-gray-200 text-gray-600 px-3 py-2 min-h-[44px] rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">
+              📋 匯出文字
             </button>
-          )}
-        </div>
-      </div>
+            {isManager && (
+              <button onClick={openCreate}
+                className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 min-h-[44px] rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors">
+                + 新增休假
+              </button>
+            )}
+          </>
+        }
+      />
 
       {/* Leave list */}
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 min-h-0 overflow-auto p-4 sm:p-6">
         {/* Type legend */}
-        <div className="flex items-center gap-3 mb-5 flex-wrap">
+        <div className="flex items-center gap-x-3 gap-y-1.5 mb-5 flex-wrap">
           {LEAVE_TYPES.map(t => (
             <div key={t} className="flex items-center gap-1.5">
               <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: LEAVE_COLORS[t] }} />
@@ -242,12 +247,7 @@ export default function LeavePage() {
         </div>
 
         {monthKeys.length === 0 ? (
-          <div className="flex items-center justify-center h-64 text-gray-500">
-            <div className="text-center">
-              <div className="text-4xl mb-2">🏖️</div>
-              <p>尚無休假記錄</p>
-            </div>
-          </div>
+          <EmptyState icon="🏖️" title="尚無休假記錄" />
         ) : (
           <div className="space-y-8">
             {monthKeys.map(ym => {
@@ -269,8 +269,8 @@ export default function LeavePage() {
                     <span className="text-xs text-gray-500">{monthLeaves.length} 筆</span>
                   </div>
 
-                  {/* Two columns */}
-                  <div className="grid grid-cols-2 gap-4">
+                  {/* 設計師 / Planner 兩欄：手機改成上下單欄（兩欄在窄螢幕會把卡片內容擠爆） */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     {/* 設計師 */}
                     <div>
                       <div className="flex items-center gap-2 mb-2">
@@ -316,14 +316,20 @@ export default function LeavePage() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
-          onClick={e => e.target === e.currentTarget && setShowModal(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-            <div className="px-6 py-4 border-b flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-800">{editLeave ? '編輯休假' : '新增休假'}</h3>
-              <button onClick={() => setShowModal(false)} className="text-gray-500 hover:text-gray-600 text-xl">×</button>
+        <ModalShell
+          onClose={() => setShowModal(false)}
+          title={editLeave ? '編輯休假' : '新增休假'}
+          maxWidth="max-w-md"
+          footer={
+            <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 sm:justify-end">
+              <button onClick={() => setShowModal(false)} className="w-full sm:w-auto px-4 py-2.5 min-h-[44px] text-sm text-gray-600 hover:bg-gray-100 rounded-lg border border-gray-200 sm:border-0">取消</button>
+              <button onClick={handleSave} disabled={saving || !form.personId || !form.startDate || !form.endDate}
+                className="w-full sm:w-auto px-5 py-2.5 min-h-[44px] text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-40 font-medium">
+                {saving ? '儲存中…' : '儲存'}
+              </button>
             </div>
-            <div className="px-6 py-5 space-y-4">
+          }
+        >
               {/* Person */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">成員 *</label>
@@ -344,7 +350,7 @@ export default function LeavePage() {
                 <div className="flex flex-wrap gap-2">
                   {LEAVE_TYPES.map(t => (
                     <button key={t} onClick={() => setForm(f => ({ ...f, type: t }))}
-                      className={`px-3 py-1.5 text-sm rounded-lg border-2 font-medium transition-colors ${form.type === t ? 'text-white border-transparent' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}
+                      className={`px-3 py-2 min-h-[40px] text-sm rounded-lg border-2 font-medium transition-colors ${form.type === t ? 'text-white border-transparent' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}
                       style={form.type === t ? { backgroundColor: LEAVE_COLORS[t], borderColor: LEAVE_COLORS[t] } : {}}>
                       {t}
                     </button>
@@ -352,13 +358,13 @@ export default function LeavePage() {
                 </div>
               </div>
               {/* Date range */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="min-w-0">
                   <label className="block text-sm font-medium text-gray-700 mb-1">開始日 *</label>
                   <input type="date" value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <label className="block text-sm font-medium text-gray-700 mb-1">結束日 *</label>
                   <input type="date" value={form.endDate} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500" />
@@ -369,11 +375,11 @@ export default function LeavePage() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">時間範圍</label>
                 <div className="flex rounded-lg border border-gray-200 overflow-hidden text-sm w-fit">
                   <button onClick={() => setForm(f => ({ ...f, allDay: true, startTime: '', endTime: '' }))}
-                    className={`px-4 py-1.5 font-medium transition-colors ${form.allDay ? 'bg-purple-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                    className={`px-4 py-2 min-h-[40px] font-medium transition-colors ${form.allDay ? 'bg-purple-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
                     整天
                   </button>
                   <button onClick={() => setForm(f => ({ ...f, allDay: false }))}
-                    className={`px-4 py-1.5 font-medium transition-colors ${!form.allDay ? 'bg-purple-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                    className={`px-4 py-2 min-h-[40px] font-medium transition-colors ${!form.allDay ? 'bg-purple-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
                     指定時間
                   </button>
                 </div>
@@ -397,7 +403,7 @@ export default function LeavePage() {
               </div>
               {/* Preview */}
               {form.startDate && form.endDate && form.endDate >= form.startDate && (
-                <div className="bg-purple-50 rounded-lg px-4 py-2 text-sm text-purple-700">
+                <div className="bg-purple-50 rounded-lg px-4 py-2 text-sm text-purple-700 break-words">
                   {form.allDay
                     ? form.startDate === form.endDate
                       ? `${form.startDate}（整天）`
@@ -408,56 +414,40 @@ export default function LeavePage() {
                   }
                 </div>
               )}
-            </div>
-            <div className="px-6 py-4 border-t flex gap-3 justify-end">
-              <button onClick={() => setShowModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">取消</button>
-              <button onClick={handleSave} disabled={saving || !form.personId || !form.startDate || !form.endDate}
-                className="px-5 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-40 font-medium">
-                {saving ? '儲存中…' : '儲存'}
-              </button>
-            </div>
-          </div>
-        </div>
+        </ModalShell>
       )}
 
       {/* 匯出純文字（LINE 用） */}
       {showExportModal && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
-          onClick={e => e.target === e.currentTarget && setShowExportModal(false)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
-            <div className="px-6 py-4 border-b flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-800">匯出純文字</h3>
-              <button onClick={() => setShowExportModal(false)} className="text-gray-500 hover:text-gray-600 text-xl">×</button>
-            </div>
-            <div className="px-6 py-5 space-y-3">
-              <p className="text-xs text-gray-500">內容跟目前畫面上的篩選條件一致，可直接複製貼到 LINE 群組。</p>
-              <textarea readOnly value={exportText} rows={Math.min(12, Math.max(4, exportText.split('\n').length))}
-                onFocus={e => e.target.select()}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono text-gray-700 resize-none" />
-            </div>
-            <div className="px-6 py-4 border-t flex gap-3 justify-end">
-              <button onClick={() => setShowExportModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">關閉</button>
+        <ModalShell
+          onClose={() => setShowExportModal(false)}
+          title="匯出純文字"
+          maxWidth="max-w-md"
+          bodyClassName="px-4 sm:px-6 py-5 space-y-3"
+          footer={
+            <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 sm:justify-end">
+              <button onClick={() => setShowExportModal(false)} className="w-full sm:w-auto px-4 py-2.5 min-h-[44px] text-sm text-gray-600 hover:bg-gray-100 rounded-lg border border-gray-200 sm:border-0">關閉</button>
               <button onClick={handleCopyExport}
-                className="px-5 py-2 text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium">
+                className="w-full sm:w-auto px-5 py-2.5 min-h-[44px] text-sm bg-purple-600 text-white rounded-lg hover:bg-purple-700 font-medium">
                 {copied ? '已複製' : '複製'}
               </button>
             </div>
-          </div>
-        </div>
+          }
+        >
+              <p className="text-xs text-gray-500 break-words">內容跟目前畫面上的篩選條件一致，可直接複製貼到 LINE 群組。</p>
+              <textarea readOnly value={exportText} rows={Math.min(12, Math.max(4, exportText.split('\n').length))}
+                onFocus={e => e.target.select()}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono text-gray-700 resize-none" />
+        </ModalShell>
       )}
 
       {/* Delete confirm */}
       {deleteConfirm && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full">
-            <h3 className="text-lg font-semibold text-gray-800 mb-2">確認刪除</h3>
-            <p className="text-sm text-gray-500 mb-6">確定要刪除這筆休假記錄嗎？</p>
-            <div className="flex gap-3 justify-end">
-              <button onClick={() => setDeleteConfirm(null)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">取消</button>
-              <button onClick={() => handleDelete(deleteConfirm)} className="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700">刪除</button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          message="確定要刪除這筆休假記錄嗎？"
+          onCancel={() => setDeleteConfirm(null)}
+          onConfirm={() => handleDelete(deleteConfirm)}
+        />
       )}
     </div>
   )
