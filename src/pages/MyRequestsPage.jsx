@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { statusMeta } from '../utils/requestConstants'
 import { groupRequestsForList, sortByDueDate } from '../utils/requestActions'
 import RequestDetailModal from '../components/RequestDetailModal'
+import CountBadge from '../components/CountBadge'
 
 const FILTERS = [
   { key: 'all', label: '全部' },
@@ -116,7 +117,8 @@ export default function MyRequestsPage() {
             <button onClick={() => setCompletedOpen(v => !v)}
               className="flex items-center gap-1.5 text-xs text-gray-500 font-medium mb-3 hover:text-gray-700">
               <span className={`inline-block transition-transform ${completedOpen ? 'rotate-90' : ''}`}>▶</span>
-              已結案（{completed.length}）
+              已結案
+              <CountBadge count={completed.length} tone="gray" />
             </button>
             {completedOpen && (
               <div className="space-y-3">

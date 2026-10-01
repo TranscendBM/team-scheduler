@@ -7,19 +7,10 @@ import { useNotifications } from '../contexts/NotificationsContext'
 import { STATUS, statusMeta, STATUS_TIMESTAMP } from '../utils/requestConstants'
 import { getRequestAction, groupByDesigner } from '../utils/requestActions'
 import RequestDetailModal from '../components/RequestDetailModal'
+import CountBadge from '../components/CountBadge'
 
 const shortEmail = (e) => (e || '—').split('@')[0]
 const submitterName = (r) => r.submittedByName || shortEmail(r.submittedBy)
-
-// 設計師名稱後面的案件數量，比照 iOS 未讀訊息紅點樣式（紅底白字圓角），
-// 比純文字「（9）」更顯眼，一眼就能看出哪個設計師手上案件比較多
-function CountBadge({ count }) {
-  return (
-    <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-[11px] font-bold leading-none">
-      {count}
-    </span>
-  )
-}
 
 const SORTS = [
   { key: 'due-asc', label: '交期 舊→新' },
@@ -324,7 +315,8 @@ export default function RequestsTablePage() {
               <button onClick={() => setDoneOpen(v => !v)}
                 className="flex items-center gap-1.5 text-sm font-medium text-gray-500 mt-8 mb-3 hover:text-gray-700">
                 <span className={`inline-block transition-transform ${doneOpen ? 'rotate-90' : ''}`}>▶</span>
-                已結案（{done.length}）
+                已結案
+                <CountBadge count={done.length} tone="gray" />
               </button>
               {doneOpen && groupByDesigner(done, DESIGNER_ORDER).map(([designer, list]) => (
                 <div key={designer} className="mb-4">

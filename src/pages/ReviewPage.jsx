@@ -447,7 +447,10 @@ export default function ReviewPage() {
           ) : (
             <div className="space-y-4">
               {designers.map(dz => {
-                const items = requests.filter(r => ACTIVE_STATUSES.includes(r.status) && (r.assignedDesigners || []).includes(dz.email))
+                // 有標記重要(★，見需求總表的 toggleImportant)的案件排前面，避免超過 4 筆被截斷時剛好漏掉
+                const items = requests
+                  .filter(r => ACTIVE_STATUSES.includes(r.status) && (r.assignedDesigners || []).includes(dz.email))
+                  .sort((a, b) => (b.important ? 1 : 0) - (a.important ? 1 : 0))
                 const n = items.length
                 const level = workloadLevel(n)
                 const maxCount = Math.max(1, ...designers.map(d2 =>
@@ -469,8 +472,9 @@ export default function ReviewPage() {
                     {n > 0 && (
                       <ul className="space-y-0.5">
                         {items.slice(0, 4).map(r => (
-                          <li key={r.id} className="text-xs text-gray-500 truncate" title={r.projectName || r.title}>
-                            · {r.projectName || r.title || '（未命名）'}
+                          <li key={r.id} className={`text-xs truncate ${r.important ? 'text-amber-600 font-medium' : 'text-gray-500'}`}
+                            title={r.important ? `★ 重要：${r.projectName || r.title}` : (r.projectName || r.title)}>
+                            {r.important ? '★ ' : '· '}{r.projectName || r.title || '（未命名）'}
                           </li>
                         ))}
                         {items.length > 4 && <li className="text-xs text-gray-400">+{items.length - 4} 筆</li>}
