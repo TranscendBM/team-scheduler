@@ -11,6 +11,16 @@ import RequestDetailModal from '../components/RequestDetailModal'
 const shortEmail = (e) => (e || '—').split('@')[0]
 const submitterName = (r) => r.submittedByName || shortEmail(r.submittedBy)
 
+// 設計師名稱後面的案件數量，比照 iOS 未讀訊息紅點樣式（紅底白字圓角），
+// 比純文字「（9）」更顯眼，一眼就能看出哪個設計師手上案件比較多
+function CountBadge({ count }) {
+  return (
+    <span className="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-[11px] font-bold leading-none">
+      {count}
+    </span>
+  )
+}
+
 const SORTS = [
   { key: 'due-asc', label: '交期 舊→新' },
   { key: 'due-desc', label: '交期 新→舊' },
@@ -300,7 +310,10 @@ export default function RequestsTablePage() {
           ) : (
             groupByDesigner(active, DESIGNER_ORDER).map(([designer, list]) => (
               <div key={designer} className="mb-6">
-                <h2 className="text-sm font-semibold text-gray-600 mb-2">{designer}（{list.length}）</h2>
+                <h2 className="flex items-center gap-1.5 text-sm font-semibold text-gray-600 mb-2">
+                  {designer}
+                  <CountBadge count={list.length} />
+                </h2>
                 {table(list, false, '')}
               </div>
             ))
@@ -315,7 +328,10 @@ export default function RequestsTablePage() {
               </button>
               {doneOpen && groupByDesigner(done, DESIGNER_ORDER).map(([designer, list]) => (
                 <div key={designer} className="mb-4">
-                  <h3 className="text-xs font-medium text-gray-500 mb-2">{designer}（{list.length}）</h3>
+                  <h3 className="flex items-center gap-1.5 text-xs font-medium text-gray-500 mb-2">
+                    {designer}
+                    <CountBadge count={list.length} />
+                  </h3>
                   {table(list, true, '')}
                 </div>
               ))}

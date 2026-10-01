@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { collection, onSnapshot, doc, updateDoc, deleteDoc, setDoc, serverTimestamp, Timestamp } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
-import { statusMeta } from '../utils/requestConstants'
+import { statusMeta, ACTIVE_STATUSES } from '../utils/requestConstants'
 import Attachments from '../components/Attachments'
 import Linkify from '../components/Linkify'
 import ShareLinkPanel from '../components/ShareLinkPanel'
@@ -207,8 +207,17 @@ export default function ReviewPage() {
   const delegationStarted = !reviewDelegation?.startsAt || reviewDelegation.startsAt.toDate() <= new Date()
   const reviewerOptions = [...designers, ...planners]
 
+  // 右側「設計師工作量」面板的分級：門檻跟顏色只是給審核者快速判斷輕重的視覺輔助，
+  // 不是正式的產能上限設定，所以寫死在這裡就好，不需要另外做成可設定項目
+  function workloadLevel(n) {
+    if (n === 0) return { label: '目前沒有進行中案件', color: 'bg-gray-300' }
+    if (n <= 2) return { label: '輕鬆', color: 'bg-emerald-500' }
+    if (n <= 5) return { label: '適中', color: 'bg-amber-500' }
+    return { label: '吃緊', color: 'bg-red-500' }
+  }
+
   return (
-    <div className="p-8 max-w-4xl mx-auto">
+    <div className="p-8 max-w-7xl mx-auto">
       <h1 className="text-2xl font-bold text-gray-800 mb-1">需求審核</h1>
       <p className="text-sm text-gray-500 mb-5">核准並指派設計師(可多位)、填寫注意事項、可變更交期,或駁回</p>
 
@@ -266,6 +275,8 @@ export default function ReviewPage() {
         </div>
       )}
 
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+      <div className="flex-1 min-w-0">
       <div className="flex gap-2 mb-5">
         <button onClick={() => setTab('pending')}
           className={`text-sm px-4 py-1.5 rounded-full ${tab === 'pending' ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-600'}`}>
@@ -423,6 +434,55 @@ export default function ReviewPage() {
             {tab === 'pending' ? '目前沒有待審核的需求 🎉' : '尚無需求'}
           </div>
         )}
+      </div>
+      </div>
+
+      {/* 右側面板：每個設計師目前手中進行中案件數與工作量，方便審核當下就能評估要發稿給誰，
+          不用切去別頁查。lg 以上跟左側清單並排、sticky 在畫面上；再窄的螢幕退回堆疊在下方 */}
+      <div className="w-full lg:w-80 shrink-0 lg:sticky lg:top-6">
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <p className="text-sm font-semibold text-gray-700 mb-3">👥 設計師工作量</p>
+          {designers.length === 0 ? (
+            <p className="text-xs text-gray-500">尚無設計師，請先到人員管理新增</p>
+          ) : (
+            <div className="space-y-4">
+              {designers.map(dz => {
+                const items = requests.filter(r => ACTIVE_STATUSES.includes(r.status) && (r.assignedDesigners || []).includes(dz.email))
+                const n = items.length
+                const level = workloadLevel(n)
+                const maxCount = Math.max(1, ...designers.map(d2 =>
+                  requests.filter(r => ACTIVE_STATUSES.includes(r.status) && (r.assignedDesigners || []).includes(d2.email)).length
+                ))
+                return (
+                  <div key={dz.email}>
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <span className="text-sm font-medium text-gray-700 truncate">{dz.displayName || dz.email}</span>
+                      <span className={`inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-white text-[11px] font-bold leading-none shrink-0 ${level.color}`}>
+                        {n}
+                      </span>
+                    </div>
+                    <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden mb-1">
+                      <div className={`h-full rounded-full transition-all ${level.color}`}
+                        style={{ width: `${n > 0 ? Math.max((n / maxCount) * 100, 8) : 0}%` }} />
+                    </div>
+                    <p className="text-xs text-gray-500 mb-1">{level.label}</p>
+                    {n > 0 && (
+                      <ul className="space-y-0.5">
+                        {items.slice(0, 4).map(r => (
+                          <li key={r.id} className="text-xs text-gray-500 truncate" title={r.projectName || r.title}>
+                            · {r.projectName || r.title || '（未命名）'}
+                          </li>
+                        ))}
+                        {items.length > 4 && <li className="text-xs text-gray-400">+{items.length - 4} 筆</li>}
+                      </ul>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      </div>
       </div>
     </div>
   )

@@ -29,6 +29,7 @@ export default function MyRequestsPage() {
   const [filter, setFilter] = useState('all')
   const [dueDateSort, setDueDateSort] = useState(null) // null | 'asc' | 'desc'
   const [detail, setDetail] = useState(null)
+  const [completedOpen, setCompletedOpen] = useState(false) // 已結案區塊預設收起
 
   useEffect(() => {
     if (!email) return
@@ -112,10 +113,16 @@ export default function MyRequestsPage() {
 
         {completed.length > 0 && (
           <div className="pt-3 mt-3 border-t border-gray-200">
-            <p className="text-xs text-gray-500 font-medium mb-3">已結案（{completed.length}）</p>
-            <div className="space-y-3">
-              {completed.map(RequestRow)}
-            </div>
+            <button onClick={() => setCompletedOpen(v => !v)}
+              className="flex items-center gap-1.5 text-xs text-gray-500 font-medium mb-3 hover:text-gray-700">
+              <span className={`inline-block transition-transform ${completedOpen ? 'rotate-90' : ''}`}>▶</span>
+              已結案（{completed.length}）
+            </button>
+            {completedOpen && (
+              <div className="space-y-3">
+                {completed.map(RequestRow)}
+              </div>
+            )}
           </div>
         )}
 
