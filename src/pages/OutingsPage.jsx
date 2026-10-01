@@ -21,6 +21,20 @@ function fmtMonth(ym) {
   return `${y} 年 ${parseInt(m)} 月`
 }
 
+// M/D，不含年份——LINE 訊息給團隊看的是近期行程，不需要年份(跟休假預排的匯出文字一致)
+function fmtMD(dateStr) {
+  const [, m, d] = dateStr.split('-')
+  return `${parseInt(m)}/${parseInt(d)}`
+}
+
+// 匯出純文字一行：M/D [時間] [內容]，時間/內容都選填，沒填就不留空白
+function outingLineText(o) {
+  const parts = [fmtMD(o.date)]
+  if (o.time) parts.push(o.time)
+  const prefix = parts.join(' ')
+  return o.note ? `${prefix} ${o.note}` : prefix
+}
+
 export default function OutingsPage() {
   const { isManager } = useAuth()
   const [people, setPeople] = useState([])
@@ -33,6 +47,8 @@ export default function OutingsPage() {
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [filterPerson, setFilterPerson] = useState('all')
   const [showExpired, setShowExpired] = useState(false)
+  const [showExportModal, setShowExportModal] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     const u1 = onSnapshot(collection(db, 'people'), snap =>
@@ -108,6 +124,27 @@ export default function OutingsPage() {
     (filterPerson === 'all' || o.personId === filterPerson) && o.date && o.date < TODAY
   ).length
 
+  // 匯出純文字：跟目前畫面上看到的（篩選成員 / 是否顯示過期）一致，依人分組，方便貼到 LINE 群組公告
+  const exportGroups = new Map()
+  baseFiltered.forEach(o => {
+    const name = people.find(p => p.id === o.personId)?.name || o.personName || '未指定'
+    if (!exportGroups.has(name)) exportGroups.set(name, [])
+    exportGroups.get(name).push(o)
+  })
+  const exportText = [...exportGroups.entries()]
+    .map(([name, list]) => [name, ...list.map(outingLineText)].join('\n'))
+    .join('\n\n')
+
+  async function handleCopyExport() {
+    try {
+      await navigator.clipboard.writeText(exportText)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // clipboard API 被封鎖時（例如非 https），使用者仍可從文字框手動選取複製
+    }
+  }
+
   // ── Outing card ────────────────────────────────────────────────
   function OutingCard({ outing }) {
     const person = people.find(p => p.id === outing.personId)
@@ -161,6 +198,10 @@ export default function OutingsPage() {
               顯示過期（{expiredCount}）
             </label>
           )}
+          <button onClick={() => setShowExportModal(true)} disabled={baseFiltered.length === 0}
+            className="flex items-center gap-1.5 bg-white border border-gray-200 text-gray-600 px-3 py-1.5 rounded-lg text-sm font-medium hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed">
+            📋 匯出文字
+          </button>
           {isManager && (
             <button onClick={openCreate}
               className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
@@ -268,6 +309,32 @@ export default function OutingsPage() {
               <button onClick={handleSave} disabled={saving}
                 className="px-5 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 font-medium">
                 {saving ? '儲存中…' : '儲存'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 匯出純文字（LINE 用） */}
+      {showExportModal && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
+          onClick={e => e.target === e.currentTarget && setShowExportModal(false)}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="px-6 py-4 border-b flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-800">匯出純文字</h3>
+              <button onClick={() => setShowExportModal(false)} className="text-gray-500 hover:text-gray-600 text-xl">×</button>
+            </div>
+            <div className="px-6 py-5 space-y-3">
+              <p className="text-xs text-gray-500">內容跟目前畫面上的篩選條件一致，依人分組，可直接複製貼到 LINE 群組。</p>
+              <textarea readOnly value={exportText} rows={Math.min(14, Math.max(4, exportText.split('\n').length))}
+                onFocus={e => e.target.select()}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono text-gray-700 resize-none" />
+            </div>
+            <div className="px-6 py-4 border-t flex gap-3 justify-end">
+              <button onClick={() => setShowExportModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">關閉</button>
+              <button onClick={handleCopyExport}
+                className="px-5 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">
+                {copied ? '已複製' : '複製'}
               </button>
             </div>
           </div>
