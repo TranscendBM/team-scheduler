@@ -3,6 +3,7 @@ import { collection, onSnapshot, doc, updateDoc, deleteDoc, setDoc, serverTimest
 import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
 import { statusMeta, ACTIVE_STATUSES } from '../utils/requestConstants'
+import { findSimilarPastRequest } from '../utils/requestActions'
 import Attachments from '../components/Attachments'
 import Linkify from '../components/Linkify'
 import ShareLinkPanel from '../components/ShareLinkPanel'
@@ -293,6 +294,12 @@ export default function ReviewPage() {
           const meta = statusMeta(r.status)
           const d = eff(r)
           const isEditing = editing === r.id
+          // 待審核時才需要提醒「近期同一個案子是誰負責的」，幫助決定要發稿給誰
+          const similarPast = r.status === 'pending' ? findSimilarPastRequest(requests, r) : null
+          const similarPastDesigners = similarPast?.assignedDesigners || []
+          const similarPastDesignerNames = similarPast?.assignedDesignersNames?.length
+            ? similarPast.assignedDesignersNames
+            : similarPastDesigners
           return (
             <div key={r.id} className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
               <div className="flex items-start gap-3">
@@ -325,6 +332,17 @@ export default function ReviewPage() {
                 <div className="mt-4 pt-4 border-t border-gray-100 space-y-3">
                   {!d.rejecting ? (
                     <>
+                      {similarPast && (
+                        <div className="bg-indigo-50 border border-indigo-100 rounded-lg px-3 py-2 flex items-center justify-between gap-2 flex-wrap">
+                          <p className="text-xs text-indigo-700">
+                            💡 近期「{similarPast.projectName || similarPast.title}」是由 <b>{similarPastDesignerNames.join('、') || '—'}</b> 負責，建議可優先指派給同樣的設計師
+                          </p>
+                          {similarPastDesigners.length > 0 && (
+                            <button onClick={() => setDraft(r.id, { designers: [...new Set([...d.designers, ...similarPastDesigners])] })}
+                              className="text-xs text-indigo-600 hover:underline font-medium shrink-0">套用</button>
+                          )}
+                        </div>
+                      )}
                       <div>
                         <p className="text-xs font-medium text-gray-600 mb-1.5">指派設計師(可多位)</p>
                         <DesignerPicker r={r} />

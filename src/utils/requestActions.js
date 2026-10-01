@@ -53,6 +53,35 @@ export function designerNamesFor(r) {
   return emails.map((email, i) => r.assignedDesignersNames?.[i] || String(email || '—').split('@')[0])
 }
 
+// 需求審核：新案件如果跟「近期已發稿過」的案件是同一個專案(例如年年都有的「乖乖」、
+// 「Halloween」、同個秀展名稱)，提示審核者這筆過去是指派給哪位設計師，方便優先排給
+// 同一人(維持對同一個案子的熟悉度)。只比對名稱、不比對其他欄位——這類案件通常隔一段
+// 時間(例如隔年)才會再出現一次，region/交期/稿件類型都可能不一樣。
+export function normalizeProjectName(name) {
+  return String(name || '').trim().toLowerCase().replace(/\s+/g, '')
+}
+
+// 只採計「已經有設計師指派過」的歷史案件(pending/rejected 沒有指派對象，比對沒有意義)。
+// 名稱完全相同，或其中一個名稱包含另一個(且較短的那個至少 2 個字，避免被單一個字誤判)，
+// 都算同一個案子。有多筆符合時，取建立時間最新的一筆(最近一次怎麼分派的，參考價值最高)。
+export function findSimilarPastRequest(requests, current) {
+  const name = normalizeProjectName(current?.projectName || current?.title)
+  if (!name) return null
+  const matches = (requests || []).filter((r) => {
+    if (!r || r.id === current?.id) return false
+    if (r.status === 'pending' || r.status === 'rejected') return false
+    if (!(r.assignedDesigners || []).length) return false
+    const otherName = normalizeProjectName(r.projectName || r.title)
+    if (!otherName) return false
+    if (otherName === name) return true
+    const shorter = otherName.length < name.length ? otherName : name
+    const longer = otherName.length < name.length ? name : otherName
+    return shorter.length >= 2 && longer.includes(shorter)
+  })
+  if (matches.length === 0) return null
+  return matches.slice().sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0))[0]
+}
+
 // 把一批需求依設計師分組，回傳 [[設計師名稱, 這位設計師的需求陣列], ...] 依 designerOrder
 // 排序(不在清單內的依字母序排在後面，'未指派' 永遠排最後)。
 // 修正重點(先前的 bug)：多位設計師的需求會出現在「每一位」設計師的分組裡，不是只掛在

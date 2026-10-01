@@ -144,11 +144,17 @@ export default function TradeshowListPage() {
       </div>
       <p className="text-sm text-gray-500 mb-4">{filtered.length} 場秀展，接近試算表格式方便核對資料</p>
 
-      <div className="flex items-center gap-2 mb-3">
-        <select value={year} onChange={e => setYear(parseInt(e.target.value))}
-          className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white">
-          {years.map(y => <option key={y} value={y}>{y}</option>)}
-        </select>
+      <div className="flex items-center gap-2 mb-3 flex-wrap">
+        <div className="flex items-center gap-1.5">
+          {years.map(y => (
+            <button key={y} onClick={() => setYear(y)}
+              className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                year === y ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+              }`}>
+              {y}
+            </button>
+          ))}
+        </div>
         {(officeFilters.length > 0 || statusFilters.length > 0 || plannerFilters.length > 0 || designerFilters.length > 0) && (
           <button onClick={() => { setOfficeFilters([]); setStatusFilters([]); setPlannerFilters([]); setDesignerFilters([]) }}
             className="text-xs text-gray-500 hover:text-gray-600">✕ 清除篩選</button>

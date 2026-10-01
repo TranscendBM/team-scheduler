@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { getRequestAction, groupRequestsForList, sortByDueDate, designerNamesFor, groupByDesigner } from '../../src/utils/requestActions.js'
+import {
+  getRequestAction, groupRequestsForList, sortByDueDate, designerNamesFor, groupByDesigner,
+  normalizeProjectName, findSimilarPastRequest,
+} from '../../src/utils/requestActions.js'
 
 const DESIGNER = 'designer.a@example.com'
 const OTHER_DESIGNER = 'designer.b@example.com'
@@ -215,5 +218,71 @@ describe('designerNamesFor / groupByDesigner — 需求總表依設計師分組(
   it('空陣列／undefined 輸入都安全回傳空陣列，不會噴錯', () => {
     expect(groupByDesigner([])).toEqual([])
     expect(groupByDesigner(undefined)).toEqual([])
+  })
+})
+
+describe('normalizeProjectName', () => {
+  it('去除前後空白、轉小寫、去除中間空白', () => {
+    expect(normalizeProjectName('  Halloween 2025  ')).toBe('halloween2025')
+  })
+  it('空值/undefined 安全回傳空字串', () => {
+    expect(normalizeProjectName(null)).toBe('')
+    expect(normalizeProjectName(undefined)).toBe('')
+  })
+})
+
+describe('findSimilarPastRequest — 需求審核：新案件是否跟近期已發稿案件同一個專案', () => {
+  const current = { id: 'new-1', projectName: '乖乖' }
+
+  it('名稱完全相同(且已有指派設計師)：找到歷史案件', () => {
+    const past = { id: 'past-1', projectName: '乖乖', status: 'completed', assignedDesigners: ['tingwei@x.com'] }
+    expect(findSimilarPastRequest([past, current], current)?.id).toBe('past-1')
+  })
+
+  it('大小寫/前後空白不同仍視為同一個名稱', () => {
+    const past = { id: 'past-1', projectName: ' 乖乖 ', status: 'assigned', assignedDesigners: ['tingwei@x.com'] }
+    expect(findSimilarPastRequest([past], current)?.id).toBe('past-1')
+  })
+
+  it('其中一個名稱包含另一個(例如「Halloween」vs「Halloween 2025 布展」)也算同一個案子', () => {
+    const halloweenNew = { id: 'new-2', projectName: 'Halloween' }
+    const halloweenPast = { id: 'past-2', projectName: 'Halloween 2025 布展', status: 'assigned', assignedDesigners: ['sherry@x.com'] }
+    expect(findSimilarPastRequest([halloweenPast], halloweenNew)?.id).toBe('past-2')
+  })
+
+  it('較短名稱只有 1 個字時不算同一個案子(避免誤判)', () => {
+    const shortName = { id: 'new-3', projectName: 'A' }
+    const past = { id: 'past-3', projectName: 'A 專案全名', status: 'assigned', assignedDesigners: ['sherry@x.com'] }
+    expect(findSimilarPastRequest([past], shortName)).toBeNull()
+  })
+
+  it('pending/rejected 的歷史案件不採計(沒有指派對象，比對沒有意義)', () => {
+    const pendingPast = { id: 'p1', projectName: '乖乖', status: 'pending', assignedDesigners: [] }
+    const rejectedPast = { id: 'p2', projectName: '乖乖', status: 'rejected', assignedDesigners: [] }
+    expect(findSimilarPastRequest([pendingPast, rejectedPast], current)).toBeNull()
+  })
+
+  it('沒有指派任何設計師的歷史案件不採計', () => {
+    const past = { id: 'past-1', projectName: '乖乖', status: 'assigned', assignedDesigners: [] }
+    expect(findSimilarPastRequest([past], current)).toBeNull()
+  })
+
+  it('自己不會跟自己比對', () => {
+    expect(findSimilarPastRequest([current], current)).toBeNull()
+  })
+
+  it('有多筆符合時，取建立時間最新的一筆', () => {
+    const older = { id: 'older', projectName: '乖乖', status: 'completed', assignedDesigners: ['tingwei@x.com'], createdAt: { seconds: 100 } }
+    const newer = { id: 'newer', projectName: '乖乖', status: 'completed', assignedDesigners: ['sherry@x.com'], createdAt: { seconds: 200 } }
+    expect(findSimilarPastRequest([older, newer], current)?.id).toBe('newer')
+  })
+
+  it('完全沒有符合的歷史案件回傳 null', () => {
+    const past = { id: 'past-1', projectName: '不相關的案子', status: 'completed', assignedDesigners: ['tingwei@x.com'] }
+    expect(findSimilarPastRequest([past], current)).toBeNull()
+  })
+
+  it('當前案件沒有名稱時安全回傳 null，不會誤比對到其他沒名稱的案件', () => {
+    expect(findSimilarPastRequest([{ id: 'x' }], { id: 'current', projectName: '' })).toBeNull()
   })
 })

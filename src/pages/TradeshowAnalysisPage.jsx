@@ -204,10 +204,16 @@ export default function TradeshowAnalysisPage() {
     <div className="p-8 max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-1">
         <h1 className="text-2xl font-bold text-gray-800">秀展預算分析</h1>
-        <select value={year} onChange={e => setYear(parseInt(e.target.value))}
-          className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white text-gray-700">
-          {years.map(y => <option key={y} value={y}>{y}</option>)}
-        </select>
+        <div className="flex items-center gap-1.5">
+          {years.map(y => (
+            <button key={y} onClick={() => setYear(y)}
+              className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                year === y ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+              }`}>
+              {y}
+            </button>
+          ))}
+        </div>
       </div>
       <p className="text-sm text-gray-500 mb-6">{year} 年度秀展數量、月份分布與各地區費用比較</p>
 
