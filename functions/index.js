@@ -1035,6 +1035,7 @@ export const notifyUpcomingOuting = onSchedule(
 // ⚠️ 這份狀態清單跟 src/utils/requestActions.js 的 OVERDUE_WATCH_STATUSES 必須一致：
 // functions/ 是獨立部署單元無法共用檔案，兩邊一致，需求總表上的紅色逾期標示才會跟提醒信對得上。
 const OVERDUE_WATCH_STATUSES = ['assigned', 'in_progress']
+const OVERDUE_MANAGER_LOGIN = 'tselvis814@gmail.com' // Elvis 的登入帳號，逾期彙整信只寄給他
 
 function daysOverdue(dueDate, todayStr) {
   const diff = Math.round((Date.parse(`${todayStr}T00:00:00Z`) - Date.parse(`${dueDate}T00:00:00Z`)) / 86400000)
@@ -1114,22 +1115,19 @@ export const notifyOverdueRequests = onSchedule(
       logger.info('沒有逾期未更新狀態的需求，略過寄信')
       return
     }
-    const managers = await getManagerEmails()
     const mailer = getMailer()
     const failures = []
     try {
-      if (managers.length > 0) {
-        try {
-          await mailer.send({
-            to: managers,
-            subject: `[逾期未更新提醒] ${items.length} 件需求已超過交期`,
-            html: buildOverdueReminderHtml(items, 'manager'),
-          })
-          logger.info('已寄逾期提醒信(主管)', { to: managers, count: items.length })
-        } catch (e) { logger.error('逾期提醒信(主管)寄送失敗', e); failures.push('manager') }
-      } else {
-        logger.warn('找不到任何啟用中的主管信箱，略過逾期提醒信(主管)')
-      }
+      // 主管彙整信只寄給 Elvis 一人(使用者指定)，不是所有主管；用登入帳號解析成通知信箱
+      try {
+        const to = await resolveNotifyEmail(OVERDUE_MANAGER_LOGIN)
+        await mailer.send({
+          to,
+          subject: `[逾期未更新提醒] ${items.length} 件需求已超過交期`,
+          html: buildOverdueReminderHtml(items, 'manager'),
+        })
+        logger.info('已寄逾期提醒信(主管)', { to, count: items.length })
+      } catch (e) { logger.error('逾期提醒信(主管)寄送失敗', e); failures.push('manager') }
       for (const [loginEmail, list] of groupOverdueByDesigner(items)) {
         try {
           const to = await resolveNotifyEmail(loginEmail)
