@@ -53,6 +53,21 @@ export function designerNamesFor(r) {
   return emails.map((email, i) => r.assignedDesignersNames?.[i] || String(email || '—').split('@')[0])
 }
 
+// 逾期未更新狀態：已經超過交期、卻還停在「已發稿 / 設計中」(代表設計師還沒送出初稿確認)的需求，
+// 需求總表要特別標示，避免漏掉沒提供初稿的案子。「設計確認中」(reviewing)代表初稿已送出、
+// 等待確認，不算逾期未更新；已結案/待審核/已駁回更不用管。
+// ⚠️ 這份狀態清單跟 functions/index.js 的 OVERDUE_WATCH_STATUSES 必須一致(兩邊是獨立部署
+// 單元，無法共用檔案)：畫面標示跟每天早上的提醒信才會對得上同一批案件。
+export const OVERDUE_WATCH_STATUSES = ['assigned', 'in_progress']
+
+// 回傳逾期天數(交期隔天算逾期 1 天)；沒逾期、沒填交期、或狀態不在監控範圍都回傳 0。
+// todayStr/dueDate 都是 yyyy-mm-dd 日曆日期字串，用 UTC 解析再相減，避免時區造成差一天。
+export function overdueDays(r, todayStr) {
+  if (!r?.dueDate || !todayStr || !OVERDUE_WATCH_STATUSES.includes(r.status)) return 0
+  const diff = Math.round((Date.parse(`${todayStr}T00:00:00Z`) - Date.parse(`${r.dueDate}T00:00:00Z`)) / 86400000)
+  return Number.isFinite(diff) && diff > 0 ? diff : 0
+}
+
 // 需求審核：新案件如果跟「近期已發稿過」的案件是同一個專案(例如年年都有的「乖乖」、
 // 「Halloween」、同個秀展名稱)，提示審核者這筆過去是指派給哪位設計師，方便優先排給
 // 同一人(維持對同一個案子的熟悉度)。只比對名稱、不比對其他欄位——這類案件通常隔一段

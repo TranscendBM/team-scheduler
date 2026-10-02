@@ -1030,6 +1030,124 @@ export const notifyUpcomingOuting = onSchedule(
   }
 )
 
+// ── 逾期未更新狀態提醒：週一到週五早上 8 點，提醒負責設計師與主管 ──────────────
+// 「逾期未更新」= 已超過交期、狀態卻還停在「已發稿 / 設計中」(代表初稿還沒送出確認)。
+// ⚠️ 這份狀態清單跟 src/utils/requestActions.js 的 OVERDUE_WATCH_STATUSES 必須一致：
+// functions/ 是獨立部署單元無法共用檔案，兩邊一致，需求總表上的紅色逾期標示才會跟提醒信對得上。
+const OVERDUE_WATCH_STATUSES = ['assigned', 'in_progress']
+
+function daysOverdue(dueDate, todayStr) {
+  const diff = Math.round((Date.parse(`${todayStr}T00:00:00Z`) - Date.parse(`${dueDate}T00:00:00Z`)) / 86400000)
+  return Number.isFinite(diff) && diff > 0 ? diff : 0
+}
+
+// 純函式：從需求清單找出逾期未更新的案件，附上 overdueDays，逾期最久的排最前面。
+// 交期當天不算逾期(隔天才算)；沒填交期、狀態不在監控範圍的一律略過。
+export function findOverdueRequests(requests, todayStr) {
+  return (requests || [])
+    .filter((r) => r?.dueDate && OVERDUE_WATCH_STATUSES.includes(r.status))
+    .map((r) => ({ ...r, overdueDays: daysOverdue(r.dueDate, todayStr) }))
+    .filter((r) => r.overdueDays > 0)
+    .sort((a, b) => b.overdueDays - a.overdueDays)
+}
+
+// 純函式：把逾期案件依「被指派的設計師登入 email」分組(一筆需求指派給多位設計師時，
+// 每位都會在自己的清單裡看到)，沒有指派設計師的案件不會出現在任何設計師的清單。
+export function groupOverdueByDesigner(items) {
+  const groups = new Map()
+  for (const r of items || []) {
+    for (const loginEmail of r.assignedDesigners || []) {
+      if (!loginEmail) continue
+      if (!groups.has(loginEmail)) groups.set(loginEmail, [])
+      groups.get(loginEmail).push(r)
+    }
+  }
+  return groups
+}
+
+// 逾期提醒信。audience: 'manager' 多一欄設計師名稱(主管要看是誰逾期)；'designer' 只列自己的案件。
+// 專案名稱/設計師名稱都是使用者輸入，一律 escapeHtml。
+export function buildOverdueReminderHtml(items, audience = 'designer') {
+  const th = (t) => `<th style="font-family:${FONT};text-align:left;padding:8px 12px;color:#6b7280;font-size:12px">${t}</th>`
+  const td = (html, extra = '') => `<td style="font-family:${FONT};padding:8px 12px;font-size:13px;${extra}">${html}</td>`
+  const isManager = audience === 'manager'
+  const rows = items.map((r) => {
+    const names = (r.assignedDesignersNames?.length ? r.assignedDesignersNames : (r.assignedDesigners || []).map((e) => String(e).split('@')[0])).join('、')
+    return `<tr style="border-bottom:1px solid #f0f0f0">
+      ${td(`${r.urgent ? '🔥 ' : ''}${escapeHtml(r.projectName || r.title || '')}`, 'font-weight:500')}
+      ${isManager ? td(escapeHtml(names || '未指派')) : ''}
+      ${td(escapeHtml(r.dueDate || ''), 'white-space:nowrap')}
+      ${td(`<span style="color:#dc2626;font-weight:600">逾期 ${r.overdueDays} 天</span>`, 'white-space:nowrap')}
+      ${td(escapeHtml(STATUS_LABELS[r.status] || r.status || ''), 'color:#6b7280')}
+    </tr>`
+  }).join('')
+  const intro = isManager
+    ? `共 ${items.length} 件需求已超過交期、狀態卻還沒更新，請留意設計師是否已提供初稿`
+    : `你負責的 ${items.length} 件需求已超過交期、狀態卻還沒更新，請盡快送出初稿確認，或更新目前進度`
+  return `
+  <div style="font-family:${FONT};color:#1f2937;max-width:620px;margin:auto;padding:24px">
+    <div style="background:#fef2f2;border-left:4px solid #dc2626;padding:14px 18px;border-radius:8px;margin-bottom:18px">
+      <h2 style="font-family:${FONT};margin:0 0 4px;font-size:17px">⏰ 逾期未更新提醒</h2>
+      <p style="font-family:${FONT};margin:0;color:#6b7280;font-size:13px">${intro}</p>
+    </div>
+    <table style="font-family:${FONT};width:100%;border-collapse:collapse;font-size:13px;border:1px solid #f0f0f0">
+      <thead><tr style="background:#f9fafb">${th('專案')}${isManager ? th('設計師') : ''}${th('交期')}${th('逾期')}${th('目前狀態')}</tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <a href="${SITE}/#/requests" style="font-family:${FONT};display:inline-block;margin-top:20px;background:#dc2626;color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-size:14px">前往需求總表 →</a>
+    <p style="font-family:${FONT};color:#9ca3af;font-size:12px;margin-top:24px">此信由 Team Scheduler 於週一至週五早上 8 點自動寄出。</p>
+    ${LOGO_HTML}
+  </div>`
+}
+
+const STATUS_LABELS = { assigned: '已發稿', in_progress: '設計中' }
+
+// 週一到週五 08:00(台灣時間)：主管收一封彙整信(全部逾期案件、含設計師名稱)，
+// 每位負責設計師各收一封只有自己案件的信。單一設計師寄送失敗不影響其他人，跑完才統一拋錯讓排程標記失敗。
+export const notifyOverdueRequests = onSchedule(
+  { schedule: '0 8 * * 1-5', timeZone: 'Asia/Taipei', region: 'asia-east1', secrets: [SMTP_PASS] },
+  async () => {
+    const today = taipeiTodayStr()
+    const snap = await db.collection('requests').where('status', 'in', OVERDUE_WATCH_STATUSES).get()
+    const items = findOverdueRequests(snap.docs.map((d) => ({ id: d.id, ...d.data() })), today)
+    if (items.length === 0) {
+      logger.info('沒有逾期未更新狀態的需求，略過寄信')
+      return
+    }
+    const managers = await getManagerEmails()
+    const mailer = getMailer()
+    const failures = []
+    try {
+      if (managers.length > 0) {
+        try {
+          await mailer.send({
+            to: managers,
+            subject: `[逾期未更新提醒] ${items.length} 件需求已超過交期`,
+            html: buildOverdueReminderHtml(items, 'manager'),
+          })
+          logger.info('已寄逾期提醒信(主管)', { to: managers, count: items.length })
+        } catch (e) { logger.error('逾期提醒信(主管)寄送失敗', e); failures.push('manager') }
+      } else {
+        logger.warn('找不到任何啟用中的主管信箱，略過逾期提醒信(主管)')
+      }
+      for (const [loginEmail, list] of groupOverdueByDesigner(items)) {
+        try {
+          const to = await resolveNotifyEmail(loginEmail)
+          await mailer.send({
+            to,
+            subject: `[逾期未更新提醒] 你有 ${list.length} 件需求已超過交期`,
+            html: buildOverdueReminderHtml(list, 'designer'),
+          })
+          logger.info('已寄逾期提醒信(設計師)', { to, count: list.length })
+        } catch (e) { logger.error('逾期提醒信(設計師)寄送失敗', { loginEmail, e: e.message }); failures.push(loginEmail) }
+      }
+    } finally {
+      await mailer.close()
+    }
+    if (failures.length > 0) throw new Error(`逾期提醒信有 ${failures.length} 封寄送失敗：${failures.join(', ')}`)
+  }
+)
+
 // ── 秀展清單同步：Google Sheet 是資料來源，Firestore projects 只是唯讀鏡像 ────────
 // 背景：秀展的「基本資料」(名稱/日期/地點/預算…) 改由 Google Sheet 維護，不想要使用者
 // 同時在 App 跟 Sheet 兩邊輸入。但「負責人與設計師指派」(assignments)明確留在 Firebase，

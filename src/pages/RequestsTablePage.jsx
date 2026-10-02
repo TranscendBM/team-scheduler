@@ -5,7 +5,7 @@ import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationsContext'
 import { STATUS, statusMeta, STATUS_TIMESTAMP } from '../utils/requestConstants'
-import { getRequestAction, groupByDesigner } from '../utils/requestActions'
+import { getRequestAction, groupByDesigner, overdueDays } from '../utils/requestActions'
 import RequestDetailModal from '../components/RequestDetailModal'
 import CountBadge from '../components/CountBadge'
 
@@ -35,6 +35,11 @@ export default function RequestsTablePage() {
   const [sort, setSort] = useState('due-asc')
   const [modalDeleteConfirm, setModalDeleteConfirm] = useState(false)
   const [doneOpen, setDoneOpen] = useState(false)   // 已結案區塊預設收起
+  // 本地時區的今天(yyyy-mm-dd)，用來判斷逾期；不能用 toISOString(UTC，接近午夜會差一天)
+  const [today] = useState(() => {
+    const n = new Date()
+    return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`
+  })
 
   useEffect(() => {
     let q
@@ -153,9 +158,10 @@ export default function RequestsTablePage() {
   function row(r, faded) {
     const meta = statusMeta(r.status)
     const isNew = newIds.has(r.id)
+    const lateDays = overdueDays(r, today)
     return (
       <tr key={r.id} onClick={() => openDetail(r)}
-        className={`border-t border-gray-100 cursor-pointer ${faded ? 'text-gray-500 hover:bg-gray-50/50' : 'hover:bg-gray-50'} ${isNew ? 'bg-blue-50/40' : ''}`}>
+        className={`border-t border-gray-100 cursor-pointer ${faded ? 'text-gray-500 hover:bg-gray-50/50' : 'hover:bg-gray-50'} ${isNew ? 'bg-blue-50/40' : ''} ${lateDays > 0 ? 'bg-red-50/60' : ''}`}>
         <td className="px-3 py-2.5 overflow-hidden">
           <div className={`text-sm truncate ${faded ? '' : 'text-gray-800 font-medium'}`}>
             {role === 'manager' && (
@@ -169,12 +175,18 @@ export default function RequestsTablePage() {
             {isNew && (
               <span className="inline-block text-[10px] font-bold bg-red-500 text-white rounded px-1 py-0.5 mr-1.5 align-middle leading-none">NEW</span>
             )}
+            {lateDays > 0 && (
+              <span title="已超過交期，狀態還沒更新（尚未送出初稿確認）"
+                className="inline-block text-[10px] font-bold bg-red-600 text-white rounded px-1 py-0.5 mr-1.5 align-middle leading-none">
+                逾期 {lateDays} 天
+              </span>
+            )}
             {r.urgent && !faded && <span className="text-red-500 mr-1">🔥</span>}
             {r.projectName || r.title}
           </div>
         </td>
         <td className="px-3 py-2.5 text-xs truncate">{r.region}</td>
-        <td className="px-3 py-2.5 text-xs whitespace-nowrap">{r.dueDate || '—'}</td>
+        <td className={`px-3 py-2.5 text-xs whitespace-nowrap ${lateDays > 0 ? 'text-red-600 font-semibold' : ''}`}>{r.dueDate || '—'}</td>
         <td className="px-3 py-2.5 text-xs truncate">{submitterName(r)}</td>
         <td className="px-3 py-2.5">
           <span className={`text-xs px-2 py-0.5 rounded-full ${faded ? 'bg-gray-100 text-gray-500' : meta.color}`}>{meta.label}</span>

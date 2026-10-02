@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   getRequestAction, groupRequestsForList, sortByDueDate, designerNamesFor, groupByDesigner,
-  normalizeProjectName, findSimilarPastRequest,
+  normalizeProjectName, findSimilarPastRequest, overdueDays, OVERDUE_WATCH_STATUSES,
 } from '../../src/utils/requestActions.js'
 
 const DESIGNER = 'designer.a@example.com'
@@ -284,5 +284,40 @@ describe('findSimilarPastRequest — 需求審核：新案件是否跟近期已�
 
   it('當前案件沒有名稱時安全回傳 null，不會誤比對到其他沒名稱的案件', () => {
     expect(findSimilarPastRequest([{ id: 'x' }], { id: 'current', projectName: '' })).toBeNull()
+  })
+})
+
+describe('overdueDays — 需求總表標示逾期未更新狀態的案件', () => {
+  const today = '2026-10-10'
+
+  it('已發稿/設計中且超過交期：回傳逾期天數(交期隔天算 1 天)', () => {
+    expect(overdueDays({ status: 'assigned', dueDate: '2026-10-09' }, today)).toBe(1)
+    expect(overdueDays({ status: 'in_progress', dueDate: '2026-10-05' }, today)).toBe(5)
+  })
+
+  it('交期是今天或未來：不算逾期', () => {
+    expect(overdueDays({ status: 'assigned', dueDate: '2026-10-10' }, today)).toBe(0)
+    expect(overdueDays({ status: 'assigned', dueDate: '2026-10-11' }, today)).toBe(0)
+  })
+
+  it('設計確認中(初稿已送出)、已結案、待審核、已駁回都不算逾期未更新', () => {
+    for (const status of ['reviewing', 'completed', 'pending', 'rejected']) {
+      expect(overdueDays({ status, dueDate: '2026-10-01' }, today)).toBe(0)
+    }
+  })
+
+  it('沒填交期或欄位缺失：安全回傳 0，不噴錯', () => {
+    expect(overdueDays({ status: 'assigned' }, today)).toBe(0)
+    expect(overdueDays({ status: 'assigned', dueDate: '2026-10-01' }, '')).toBe(0)
+    expect(overdueDays(null, today)).toBe(0)
+  })
+
+  it('跨月/跨年也能正確計算', () => {
+    expect(overdueDays({ status: 'assigned', dueDate: '2026-09-30' }, '2026-10-02')).toBe(2)
+    expect(overdueDays({ status: 'assigned', dueDate: '2025-12-31' }, '2026-01-02')).toBe(2)
+  })
+
+  it('監控的狀態清單固定為 assigned / in_progress(與 functions/index.js 保持一致)', () => {
+    expect(OVERDUE_WATCH_STATUSES).toEqual(['assigned', 'in_progress'])
   })
 })
