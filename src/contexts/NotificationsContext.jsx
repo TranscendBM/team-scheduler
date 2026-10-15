@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState } from 'react'
 import { collection, query, where, onSnapshot } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from './AuthContext'
+import { buildAssignmentAlerts } from '../utils/assignmentAlerts'
 
 // 新任務提示:
 // - designer / planner:localStorage 記錄「看過」的需求 id,沒點開過的進行中需求顯示 NEW(側邊欄+總表列)
@@ -23,6 +24,8 @@ export function NotificationsProvider({ children }) {
   const { role, email, regions, unauthorized, canReview } = useAuth()
   const [rows, setRows] = useState([])
   const [delegateRows, setDelegateRows] = useState([])   // 臨時審核代理人專用：待審核數量
+  const [ownRows, setOwnRows] = useState([])             // 我提交的需求(提交人要知道何時被指派)
+  const [nowMs] = useState(() => Date.now())             // 站內通知只看「最近指派」的時間窗，開著不動也不影響
   const [seen, setSeen] = useState(() => loadSeen(email))
   const [seenForEmail, setSeenForEmail] = useState(email)
 
@@ -58,6 +61,15 @@ export function NotificationsProvider({ children }) {
     return () => { unsub(); setDelegateRows([]) }
   }, [role, canReview])
 
+  // 「我提交的需求」：planner 的發稿被主管指派下去時要通知提交人(上面 role 分支是依地區查詢，
+  // 不保證涵蓋自己提交但地區不在負責範圍內的需求，所以另開一個依 submittedBy 的訂閱)
+  useEffect(() => {
+    if (!email || unauthorized || !role || role === 'manager') return
+    const q = query(collection(db, 'requests'), where('submittedBy', '==', email))
+    const unsub = onSnapshot(q, snap => setOwnRows(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
+    return () => { unsub(); setOwnRows([]) }
+  }, [role, email, unauthorized])
+
   function markSeen(id) {
     if (!email) return
     setSeen(prev => {
@@ -67,6 +79,18 @@ export function NotificationsProvider({ children }) {
       return next
     })
   }
+
+  function markAllSeen(ids) {
+    if (!email || !ids.length) return
+    setSeen(prev => {
+      const next = new Set(prev)
+      ids.forEach(id => next.add(id))
+      persistSeen(email, next)
+      return next
+    })
+  }
+
+  const alerts = buildAssignmentAlerts({ role, email, assignedRows: rows, ownRows, seen, nowMs })
 
   const pendingCount = role === 'manager' ? rows.length : (canReview ? delegateRows.length : 0)
   const newIds = new Set(
@@ -78,7 +102,7 @@ export function NotificationsProvider({ children }) {
   )
 
   return (
-    <NotificationsContext.Provider value={{ newIds, newCount: newIds.size, pendingCount, markSeen }}>
+    <NotificationsContext.Provider value={{ newIds, newCount: newIds.size, pendingCount, markSeen, markAllSeen, alerts }}>
       {children}
     </NotificationsContext.Provider>
   )

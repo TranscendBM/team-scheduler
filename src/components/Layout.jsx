@@ -9,6 +9,7 @@ import { usePermissions } from '../contexts/PermissionsContext'
 import { useNotifications } from '../contexts/NotificationsContext'
 import { PAGES, GROUPS } from '../utils/pages'
 import transcendLogo from '../assets/transcend-logo.svg'
+import AssignmentAlertBanner from './AssignmentAlertBanner'
 
 const ROLE_LABELS = { manager: '主管', designer: '設計師', planner: 'Planner' }
 
@@ -149,6 +150,7 @@ export default function Layout() {
 
       {/* Main content */}
       <main className="flex-1 overflow-auto">
+        <AssignmentAlertBanner />
         <Outlet />
       </main>
     </div>

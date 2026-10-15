@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useCallback, useEffect, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { collection, query, where, onSnapshot } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
+import { useNotifications } from '../contexts/NotificationsContext'
 import { statusMeta } from '../utils/requestConstants'
 import { groupRequestsForList, sortByDueDate } from '../utils/requestActions'
 import RequestDetailModal from '../components/RequestDetailModal'
@@ -26,6 +27,8 @@ const SORT_OPTIONS = [
 export default function MyRequestsPage() {
   const { email } = useAuth()
   const navigate = useNavigate()
+  const { markSeen } = useNotifications()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [requests, setRequests] = useState([])
   const [filter, setFilter] = useState('all')
   const [dueDateSort, setDueDateSort] = useState(null) // null | 'asc' | 'desc'
@@ -42,6 +45,25 @@ export default function MyRequestsPage() {
     })
     return unsub
   }, [email])
+
+  // 開啟詳情時一併標記「已看過」，讓「需求已被指派」的站內通知橫幅跟著消失
+  const openDetail = useCallback((r) => {
+    setDetail(r)
+    markSeen(r.id)
+  }, [markSeen])
+
+  // 從站內通知橫幅等外部連結帶 ?open=id 進來時，直接開該筆的詳情視窗
+  useEffect(() => {
+    const openId = searchParams.get('open')
+    if (!openId) return
+    const target = requests.find(r => r.id === openId)
+    if (target) {
+      queueMicrotask(() => {
+        openDetail(target)
+        setSearchParams({}, { replace: true })
+      })
+    }
+  }, [searchParams, requests, setSearchParams, openDetail])
 
   const filtered = requests.filter(r => {
     if (filter === 'all') return true
@@ -63,7 +85,7 @@ export default function MyRequestsPage() {
   function RequestRow(r) {
     const meta = statusMeta(r.status)
     return (
-      <button key={r.id} onClick={() => setDetail(r)}
+      <button key={r.id} onClick={() => openDetail(r)}
         className="w-full flex items-center gap-3 px-5 py-4 text-left bg-white rounded-xl border border-gray-200 shadow-sm hover:bg-gray-50 transition-colors">
         <span className={`w-2 h-2 rounded-full ${meta.dot}`} />
         <div className="flex-1 min-w-0">
