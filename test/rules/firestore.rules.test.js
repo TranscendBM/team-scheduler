@@ -606,8 +606,8 @@ describe('臨時審核代理人（settings/reviewDelegation）', () => {
   })
 })
 
-describe('projects / people / leaves / settings / hbl* — 讀白名單、寫僅 manager', () => {
-  const collections = ['projects', 'people', 'leaves', 'outings', 'hblPayments', 'hblSchedule', 'hblAdStatus']
+describe('projects / people / leaves / outings / settings — 讀白名單、寫僅 manager', () => {
+  const collections = ['projects', 'people', 'leaves', 'outings']
 
   for (const col of collections) {
     it(`${col}: 白名單使用者可讀`, async () => {
@@ -630,4 +630,16 @@ describe('projects / people / leaves / settings / hbl* — 讀白名單、寫僅
     await assertFails(setDoc(doc(dbAs(DESIGNER_A), 'settings', 'permissions'), { pages: {} }))
     await assertSucceeds(setDoc(doc(dbAs(MANAGER), 'settings', 'permissions'), { pages: {} }))
   })
+})
+
+describe('已移除的體總贊助 collections', () => {
+  for (const col of ['hblPayments', 'hblSchedule', 'hblAdStatus']) {
+    it(`${col}: 所有用戶端存取均拒絕`, async () => {
+      await testEnv.withSecurityRulesDisabled(async (ctx) => {
+        await setDoc(doc(ctx.firestore(), col, 'seed'), { name: '保留的既有資料' })
+      })
+      await assertFails(getDoc(doc(dbAs(MANAGER), col, 'seed')))
+      await assertFails(setDoc(doc(dbAs(MANAGER), col, 'new'), { name: 'x' }))
+    })
+  }
 })

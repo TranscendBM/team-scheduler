@@ -43,6 +43,11 @@ describe('canAccess', () => {
     expect(canAccess({}, 'not-a-real-page', 'designer')).toBe(false)
   })
 
+  it('已移除的體總贊助頁面不再提供存取', () => {
+    expect(PAGES.map((p) => p.key)).not.toContain('sponsor')
+    expect(canAccess({ sponsor: { designer: true } }, 'sponsor', 'manager')).toBe(false)
+  })
+
   it('沒有 perms 覆蓋時使用 defaults', () => {
     expect(canAccess({}, 'tradeshow-list', 'designer')).toBe(true)   // defaults.designer = true
     expect(canAccess({}, 'tradeshow-list', 'planner')).toBe(true)    // defaults.planner = true

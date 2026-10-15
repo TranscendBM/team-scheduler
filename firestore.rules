@@ -256,10 +256,6 @@ service cloud.firestore {
       allow write: if isManager();
     }
 
-    match /hblPayments/{id}  { allow read: if whitelisted(); allow write: if isManager(); }
-    match /hblSchedule/{id}  { allow read: if whitelisted(); allow write: if isManager(); }
-    match /hblAdStatus/{id}  { allow read: if whitelisted(); allow write: if isManager(); }
-
     // Gmail 改名操作的 durable 紀錄(見 functions/index.js renameUserLogin)：
     // 只有 Cloud Function 用 Admin SDK 寫(Admin SDK 本來就不受這份規則限制)，
     // 客戶端一律不可寫；開放 manager 讀取方便需要時查操作狀態/除錯。

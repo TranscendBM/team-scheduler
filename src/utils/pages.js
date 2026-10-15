@@ -35,7 +35,6 @@ export const PAGES = [
   { key: 'calendar',    path: '/calendar',    label: '日曆',     icon: '📅', group: 'schedule', defaults: { designer: true,  planner: false } },
   { key: 'leave',       path: '/leave',       label: '休假預排', icon: '🏖️', group: 'schedule', defaults: { designer: true,  planner: false } },
   { key: 'outings',     path: '/outings',     label: '外出通知', icon: '🚗', group: 'schedule', defaults: { designer: true,  planner: false } },
-  { key: 'sponsor',     path: '/sponsor',     label: '體總贊助', icon: '🏆', group: 'schedule', defaults: { designer: true,  planner: false } },
   { key: 'people',      path: '/people',      label: '人員管理', icon: '👥', group: 'schedule', defaults: { designer: true,  planner: false } },
   { key: 'settings',    path: '/settings',    label: '里程碑設定', icon: '⚙️', group: 'schedule', defaults: { designer: false, planner: false } },
 
