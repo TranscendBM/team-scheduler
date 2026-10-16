@@ -1,18 +1,22 @@
 import { useState } from 'react'
 import { getSafeAttachmentUrl } from '../utils/attachmentUrl'
 import { buildOfficeViewerUrl } from '../utils/officePreview'
+import PowerPointPreview from './PowerPointPreview'
 
 const IMG_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp']
-const OFFICE_EXT = ['ppt', 'pptx', 'doc', 'docx', 'xls', 'xlsx']
+const POWERPOINT_EXT = ['ppt', 'pptx']
+const OFFICE_EXT = ['doc', 'docx', 'xls', 'xlsx']
 
 const ext = (name) => ((name || '').split('.').pop() || '').toLowerCase()
 
-// 依副檔名決定預覽方式:image / pdf 原生、office 走 MS 線上檢視器、其他下載。
+// 依副檔名決定預覽方式：image / pdf 原生、PowerPoint 在瀏覽器內解析、
+// Word / Excel 走 MS 線上檢視器、其他下載。
 // safeUrl 一律是已驗證過的網址(見 getSafeAttachmentUrl)，這裡不會再碰原始 a.url。
-function previewInfo(a, safeUrl, requestId, idx) {
+export function getAttachmentPreviewInfo(a, safeUrl, requestId, idx) {
   const e = ext(a.name)
   if (IMG_EXT.includes(e)) return { kind: 'image', src: safeUrl }
   if (e === 'pdf') return { kind: 'iframe', src: safeUrl }
+  if (POWERPOINT_EXT.includes(e)) return { kind: 'powerpoint', src: safeUrl }
   if (OFFICE_EXT.includes(e)) {
     const viewerUrl = buildOfficeViewerUrl(safeUrl, requestId, idx, a.name)
     if (!viewerUrl) return { kind: 'download', src: safeUrl }
@@ -49,7 +53,7 @@ export default function Attachments({ items, requestId }) {
       alert('這個附件的連結驗證失敗，無法開啟（可能是資料異常或遭竄改）。')
       return
     }
-    const info = previewInfo(a, safeUrl, requestId, idx)
+    const info = getAttachmentPreviewInfo(a, safeUrl, requestId, idx)
     if (info.kind === 'download') {
       window.open(safeUrl, '_blank', 'noopener,noreferrer')
       return
@@ -73,8 +77,10 @@ export default function Attachments({ items, requestId }) {
           {/* 頂欄 */}
           <div className="flex items-center gap-3 px-4 py-3 bg-gray-900/90 text-white" onClick={e => e.stopPropagation()}>
             <span className="text-sm truncate flex-1">{icon(preview.a.name)} {preview.a.name}</span>
-            <a href={preview.info.src} target="_blank" rel="noreferrer noopener"
-              className="text-xs bg-white/10 hover:bg-white/20 rounded-lg px-3 py-1.5">另開視窗</a>
+            {preview.info.kind !== 'powerpoint' && (
+              <a href={preview.info.src} target="_blank" rel="noreferrer noopener"
+                className="text-xs bg-white/10 hover:bg-white/20 rounded-lg px-3 py-1.5">另開視窗</a>
+            )}
             <a href={preview.safeUrl} target="_blank" rel="noreferrer noopener"
               className="text-xs bg-white/10 hover:bg-white/20 rounded-lg px-3 py-1.5">下載</a>
             <button onClick={() => setPreview(null)}
@@ -85,6 +91,8 @@ export default function Attachments({ items, requestId }) {
             {preview.info.kind === 'image' ? (
               <img src={preview.info.src} alt={preview.a.name}
                 className="max-w-full max-h-full object-contain rounded-lg shadow-2xl" />
+            ) : preview.info.kind === 'powerpoint' ? (
+              <PowerPointPreview src={preview.info.src} name={preview.a.name} />
             ) : (
               <iframe src={preview.info.src} title={preview.a.name}
                 className="w-full h-full bg-white rounded-lg shadow-2xl" />

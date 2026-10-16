@@ -14,6 +14,8 @@
   },
   "dependencies": {
     "@e965/xlsx": "^0.20.3",
+    "@web-ppt/core": "0.4.5",
+    "@web-ppt/viewer-core": "0.4.5",
     "date-fns": "^3.2.0",
     "firebase": "^12.16.0",
     "lucide-react": "^1.28.0",
