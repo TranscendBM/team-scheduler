@@ -20,4 +20,15 @@ describe('getAttachmentPreviewInfo', () => {
     expect(info.kind).toBe('iframe')
     expect(info.src).toContain('view.officeapps.live.com')
   })
+
+  it.each(['sheet.xls', 'sheet.xlsx', 'SHEET.XLSX'])(
+    'uses the local browser renderer for %s',
+    name => {
+      const extension = name.split('.').pop().toLowerCase()
+      expect(getAttachmentPreviewInfo({ name }, SAFE_URL, 'req-1', 0)).toEqual({
+        kind: 'excel',
+        src: `https://asia-east1-team-scheduler-dc7ce.cloudfunctions.net/previewFile/req-1/0/123456789012/file.${extension}`,
+      })
+    },
+  )
 })

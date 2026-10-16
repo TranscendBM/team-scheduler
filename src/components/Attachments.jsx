@@ -2,15 +2,17 @@ import { useState } from 'react'
 import { getSafeAttachmentUrl } from '../utils/attachmentUrl'
 import { buildOfficeProxyUrl, buildOfficeViewerUrl } from '../utils/officePreview'
 import PowerPointPreview from './PowerPointPreview'
+import ExcelPreview from './ExcelPreview'
 
 const IMG_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp']
 const POWERPOINT_EXT = ['ppt', 'pptx']
-const OFFICE_EXT = ['doc', 'docx', 'xls', 'xlsx']
+const EXCEL_EXT = ['xls', 'xlsx']
+const OFFICE_EXT = ['doc', 'docx']
 
 const ext = (name) => ((name || '').split('.').pop() || '').toLowerCase()
 
 // 依副檔名決定預覽方式：image / pdf 原生、PowerPoint 在瀏覽器內解析、
-// Word / Excel 走 MS 線上檢視器、其他下載。
+// Excel 也在瀏覽器內解析、Word 走 MS 線上檢視器、其他下載。
 // safeUrl 一律是已驗證過的網址(見 getSafeAttachmentUrl)，這裡不會再碰原始 a.url。
 export function getAttachmentPreviewInfo(a, safeUrl, requestId, idx) {
   const e = ext(a.name)
@@ -20,6 +22,11 @@ export function getAttachmentPreviewInfo(a, safeUrl, requestId, idx) {
     const proxyUrl = buildOfficeProxyUrl(safeUrl, requestId, idx, a.name)
     if (!proxyUrl) return { kind: 'download', src: safeUrl }
     return { kind: 'powerpoint', src: proxyUrl }
+  }
+  if (EXCEL_EXT.includes(e)) {
+    const proxyUrl = buildOfficeProxyUrl(safeUrl, requestId, idx, a.name)
+    if (!proxyUrl) return { kind: 'download', src: safeUrl }
+    return { kind: 'excel', src: proxyUrl }
   }
   if (OFFICE_EXT.includes(e)) {
     const viewerUrl = buildOfficeViewerUrl(safeUrl, requestId, idx, a.name)
@@ -81,7 +88,7 @@ export default function Attachments({ items, requestId }) {
           {/* 頂欄 */}
           <div className="flex items-center gap-3 px-4 py-3 bg-gray-900/90 text-white" onClick={e => e.stopPropagation()}>
             <span className="text-sm truncate flex-1">{icon(preview.a.name)} {preview.a.name}</span>
-            {preview.info.kind !== 'powerpoint' && (
+            {!['powerpoint', 'excel'].includes(preview.info.kind) && (
               <a href={preview.info.src} target="_blank" rel="noreferrer noopener"
                 className="text-xs bg-white/10 hover:bg-white/20 rounded-lg px-3 py-1.5">另開視窗</a>
             )}
@@ -97,6 +104,8 @@ export default function Attachments({ items, requestId }) {
                 className="max-w-full max-h-full object-contain rounded-lg shadow-2xl" />
             ) : preview.info.kind === 'powerpoint' ? (
               <PowerPointPreview src={preview.info.src} name={preview.a.name} />
+            ) : preview.info.kind === 'excel' ? (
+              <ExcelPreview src={preview.info.src} name={preview.a.name} />
             ) : (
               <iframe src={preview.info.src} title={preview.a.name}
                 className="w-full h-full bg-white rounded-lg shadow-2xl" />
