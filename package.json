@@ -14,6 +14,8 @@
   },
   "dependencies": {
     "@e965/xlsx": "^0.20.3",
+    "@web-ppt/core": "0.4.5",
+    "@web-ppt/viewer-core": "0.4.5",
     "date-fns": "^3.2.0",
     "firebase": "^12.16.0",
     "lucide-react": "^1.28.0",
@@ -25,16 +27,17 @@
     "@eslint/js": "^10.0.1",
     "@firebase/rules-unit-testing": "^5.0.1",
     "@vitejs/plugin-react": "^5.0.4",
-    "autoprefixer": "^10.4.16",
+    "@tailwindcss/postcss": "^4.3.3",
     "eslint": "^10.8.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.8.0",
     "postcss": "^8.4.32",
-    "tailwindcss": "^3.4.0",
+    "tailwindcss": "^4.3.3",
     "vite": "^6.4.3",
-    "vitest": "^3.2.4"
+    "vitest": "^4.1.11"
   },
   "overrides": {
-    "brace-expansion": "^5.0.9"
+    "@grpc/grpc-js": "^1.14.6",
+    "brace-expansion": "^5.0.12"
   }
 }
