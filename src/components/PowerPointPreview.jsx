@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
 const LOAD_ERROR = 'PowerPoint 預覽載入失敗，請改用下載開啟。'
+const DOWNLOAD_ERROR = '無法安全下載 PowerPoint 預覽資料，請改用下載開啟。'
 
 export default function PowerPointPreview({ src, name }) {
   const containerRef = useRef(null)
@@ -9,6 +10,7 @@ export default function PowerPointPreview({ src, name }) {
   const [status, setStatus] = useState('loading')
   const [current, setCurrent] = useState(0)
   const [count, setCount] = useState(0)
+  const [errorMessage, setErrorMessage] = useState(LOAD_ERROR)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -21,7 +23,11 @@ export default function PowerPointPreview({ src, name }) {
           import('@web-ppt/core'),
           import('@web-ppt/viewer-core'),
         ])
-        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        if (!response.ok) {
+          const error = new Error(`HTTP ${response.status}`)
+          error.kind = 'download'
+          throw error
+        }
 
         const presentation = await core.parse(await response.blob())
         if (cancelled) {
@@ -46,6 +52,7 @@ export default function PowerPointPreview({ src, name }) {
       } catch (error) {
         if (error?.name === 'AbortError' || cancelled) return
         console.error('PowerPoint preview failed:', error)
+        setErrorMessage(error?.kind === 'download' || error instanceof TypeError ? DOWNLOAD_ERROR : LOAD_ERROR)
         setStatus('error')
       }
     }
@@ -75,7 +82,7 @@ export default function PowerPointPreview({ src, name }) {
         <div className="flex-1 flex items-center justify-center text-sm text-white">正在解析 PowerPoint…</div>
       )}
       {status === 'error' && (
-        <div className="flex-1 flex items-center justify-center text-sm text-white">{LOAD_ERROR}</div>
+        <div className="flex-1 flex items-center justify-center text-sm text-white">{errorMessage}</div>
       )}
       <div
         ref={containerRef}

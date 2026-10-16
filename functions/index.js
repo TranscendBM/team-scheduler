@@ -188,6 +188,17 @@ export function previewContentType(path, fallback) {
   return types[extension] || fallback || 'application/octet-stream'
 }
 
+const PREVIEW_ALLOWED_ORIGINS = new Set([
+  'https://ts-mkd.web.app',
+  'https://ts-mkd.firebaseapp.com',
+])
+
+// previewFile 是公開但帶不可猜 token 前綴的唯讀代理。只有正式 ts-mkd 網域能用
+// JavaScript 讀取回應；其他網站即使知道 URL，也拿不到 CORS 授權。
+export function previewCorsOrigin(origin) {
+  return PREVIEW_ALLOWED_ORIGINS.has(origin) ? origin : null
+}
+
 // 依登入 email 查該使用者的公司通知信箱；沒設定就退回原本的登入 email
 async function resolveNotifyEmail(loginEmail) {
   if (!loginEmail) return ''
@@ -1420,6 +1431,19 @@ export const syncTradeshowsFromSheet = onSchedule(
 export const previewFile = onRequest(
   { region: 'asia-east1' },
   async (req, res) => {
+    const allowedOrigin = previewCorsOrigin(req.get('origin'))
+    if (allowedOrigin) {
+      res.set('Access-Control-Allow-Origin', allowedOrigin)
+      res.set('Vary', 'Origin')
+      res.set('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS')
+      res.set('Access-Control-Allow-Headers', 'Range')
+      res.set('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges')
+    }
+    if (req.method === 'OPTIONS') {
+      return allowedOrigin ? res.status(204).end() : res.status(403).end()
+    }
+    if (req.method !== 'GET' && req.method !== 'HEAD') return res.status(405).send('method not allowed')
+
     try {
       const [docId, idxStr, tok] = req.path.split('/').filter(Boolean)
       if (!docId || !idxStr || !tok) return res.status(400).send('bad request')

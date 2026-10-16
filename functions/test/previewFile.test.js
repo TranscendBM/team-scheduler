@@ -6,6 +6,7 @@ import assert from 'node:assert/strict'
 import {
   resolveAttachmentPath, parseAttachmentStoragePath, isAttachmentPathForRequest,
   extractDownloadToken, isValidPreviewToken, parseByteRange, previewContentType,
+  previewCorsOrigin,
 } from '../index.js'
 
 const BUCKET = 'team-scheduler-dc7ce.firebasestorage.app'
@@ -141,4 +142,12 @@ test('previewContentType：Office 格式使用明確 MIME，未知格式保留 m
   assert.equal(previewContentType('attachments/r/file.pptx', 'application/octet-stream'), 'application/vnd.openxmlformats-officedocument.presentationml.presentation')
   assert.equal(previewContentType('attachments/r/file.docx', 'application/octet-stream'), 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
   assert.equal(previewContentType('attachments/r/file.bin', 'custom/type'), 'custom/type')
+})
+
+test('previewCorsOrigin：只允許正式 ts-mkd 網域讀取預覽代理', () => {
+  assert.equal(previewCorsOrigin('https://ts-mkd.web.app'), 'https://ts-mkd.web.app')
+  assert.equal(previewCorsOrigin('https://ts-mkd.firebaseapp.com'), 'https://ts-mkd.firebaseapp.com')
+  assert.equal(previewCorsOrigin('https://evil.example'), null)
+  assert.equal(previewCorsOrigin('http://ts-mkd.web.app'), null)
+  assert.equal(previewCorsOrigin(undefined), null)
 })

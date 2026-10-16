@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { getSafeAttachmentUrl } from '../utils/attachmentUrl'
-import { buildOfficeViewerUrl } from '../utils/officePreview'
+import { buildOfficeProxyUrl, buildOfficeViewerUrl } from '../utils/officePreview'
 import PowerPointPreview from './PowerPointPreview'
 
 const IMG_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp']
@@ -16,7 +16,11 @@ export function getAttachmentPreviewInfo(a, safeUrl, requestId, idx) {
   const e = ext(a.name)
   if (IMG_EXT.includes(e)) return { kind: 'image', src: safeUrl }
   if (e === 'pdf') return { kind: 'iframe', src: safeUrl }
-  if (POWERPOINT_EXT.includes(e)) return { kind: 'powerpoint', src: safeUrl }
+  if (POWERPOINT_EXT.includes(e)) {
+    const proxyUrl = buildOfficeProxyUrl(safeUrl, requestId, idx, a.name)
+    if (!proxyUrl) return { kind: 'download', src: safeUrl }
+    return { kind: 'powerpoint', src: proxyUrl }
+  }
   if (OFFICE_EXT.includes(e)) {
     const viewerUrl = buildOfficeViewerUrl(safeUrl, requestId, idx, a.name)
     if (!viewerUrl) return { kind: 'download', src: safeUrl }

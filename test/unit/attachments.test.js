@@ -7,9 +7,10 @@ describe('getAttachmentPreviewInfo', () => {
   it.each(['deck.ppt', 'deck.pptx', 'DECK.PPTX'])(
     'uses the local browser renderer for %s',
     name => {
+      const extension = name.split('.').pop().toLowerCase()
       expect(getAttachmentPreviewInfo({ name }, SAFE_URL, 'req-1', 0)).toEqual({
         kind: 'powerpoint',
-        src: SAFE_URL,
+        src: `https://asia-east1-team-scheduler-dc7ce.cloudfunctions.net/previewFile/req-1/0/123456789012/file.${extension}`,
       })
     },
   )
