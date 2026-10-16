@@ -1,19 +1,11 @@
 import { useState } from 'react'
 import { getSafeAttachmentUrl } from '../utils/attachmentUrl'
+import { buildOfficeViewerUrl } from '../utils/officePreview'
 
 const IMG_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp']
 const OFFICE_EXT = ['ppt', 'pptx', 'doc', 'docx', 'xls', 'xlsx']
 
 const ext = (name) => ((name || '').split('.').pop() || '').toLowerCase()
-
-// Office 檢視器吃不下 Firebase URL 的 %-編碼路徑 → 走 previewFile 代理(乾淨網址、逐檔驗 token)。
-// safeUrl 一定是已經通過 getSafeAttachmentUrl 驗證的網址，不是原始未驗證的 a.url。
-const PROXY = 'https://asia-east1-team-scheduler-dc7ce.cloudfunctions.net/previewFile'
-function proxyUrl(safeUrl, requestId, idx) {
-  const token = (safeUrl.match(/token=([\w-]+)/) || [])[1] || ''
-  if (!requestId || !token) return null
-  return `${PROXY}/${requestId}/${idx}/${token.slice(0, 12)}`
-}
 
 // 依副檔名決定預覽方式:image / pdf 原生、office 走 MS 線上檢視器、其他下載。
 // safeUrl 一律是已驗證過的網址(見 getSafeAttachmentUrl)，這裡不會再碰原始 a.url。
@@ -22,9 +14,9 @@ function previewInfo(a, safeUrl, requestId, idx) {
   if (IMG_EXT.includes(e)) return { kind: 'image', src: safeUrl }
   if (e === 'pdf') return { kind: 'iframe', src: safeUrl }
   if (OFFICE_EXT.includes(e)) {
-    const clean = proxyUrl(safeUrl, requestId, idx)
-    if (!clean) return { kind: 'download', src: safeUrl }
-    return { kind: 'iframe', src: `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(clean)}` }
+    const viewerUrl = buildOfficeViewerUrl(safeUrl, requestId, idx, a.name)
+    if (!viewerUrl) return { kind: 'download', src: safeUrl }
+    return { kind: 'iframe', src: viewerUrl }
   }
   return { kind: 'download', src: safeUrl }
 }

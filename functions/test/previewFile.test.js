@@ -5,7 +5,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   resolveAttachmentPath, parseAttachmentStoragePath, isAttachmentPathForRequest,
-  extractDownloadToken, isValidPreviewToken,
+  extractDownloadToken, isValidPreviewToken, parseByteRange, previewContentType,
 } from '../index.js'
 
 const BUCKET = 'team-scheduler-dc7ce.firebasestorage.app'
@@ -121,4 +121,24 @@ test('整合情境：previewFile 實際用的判斷順序 —— extractDownload
   assert.equal(isValidPreviewToken(extractDownloadToken(url), CORRECT_12), true)
   assert.equal(isValidPreviewToken(extractDownloadToken(url), FULL_TOKEN[0]), false)
   assert.equal(isValidPreviewToken(extractDownloadToken('not a url'), CORRECT_12), false)
+})
+
+test('parseByteRange：支援完整、開放結尾與 suffix ranges', () => {
+  assert.deepEqual(parseByteRange('bytes=0-99', 1000), { start: 0, end: 99 })
+  assert.deepEqual(parseByteRange('bytes=500-', 1000), { start: 500, end: 999 })
+  assert.deepEqual(parseByteRange('bytes=-100', 1000), { start: 900, end: 999 })
+  assert.equal(parseByteRange(undefined, 1000), null)
+})
+
+test('parseByteRange：拒絕多段、反向與超出檔案大小的 range', () => {
+  assert.equal(parseByteRange('bytes=0-1,4-5', 1000), false)
+  assert.equal(parseByteRange('bytes=100-99', 1000), false)
+  assert.equal(parseByteRange('bytes=1000-', 1000), false)
+  assert.equal(parseByteRange('not-a-range', 1000), false)
+})
+
+test('previewContentType：Office 格式使用明確 MIME，未知格式保留 metadata fallback', () => {
+  assert.equal(previewContentType('attachments/r/file.pptx', 'application/octet-stream'), 'application/vnd.openxmlformats-officedocument.presentationml.presentation')
+  assert.equal(previewContentType('attachments/r/file.docx', 'application/octet-stream'), 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+  assert.equal(previewContentType('attachments/r/file.bin', 'custom/type'), 'custom/type')
 })

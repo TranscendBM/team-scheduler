@@ -150,6 +150,44 @@ export function isValidPreviewToken(fullToken, providedPrefix) {
   return fullToken.slice(0, PREVIEW_TOKEN_LENGTH) === providedPrefix
 }
 
+// Office Viewer 會視情況用 Range request 讀取檔案。沒有 Range 時回傳 null；
+// 格式錯誤或超出檔案範圍時回傳 false；合法時回傳閉區間 { start, end }。
+export function parseByteRange(rangeHeader, size) {
+  if (!rangeHeader) return null
+  if (!Number.isSafeInteger(size) || size <= 0 || typeof rangeHeader !== 'string') return false
+  const match = rangeHeader.match(/^bytes=(\d*)-(\d*)$/)
+  if (!match || (!match[1] && !match[2])) return false
+
+  let start
+  let end
+  if (!match[1]) {
+    const suffixLength = Number(match[2])
+    if (!Number.isSafeInteger(suffixLength) || suffixLength <= 0) return false
+    start = Math.max(0, size - suffixLength)
+    end = size - 1
+  } else {
+    start = Number(match[1])
+    end = match[2] ? Number(match[2]) : size - 1
+    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end)) return false
+    if (start < 0 || start >= size || end < start) return false
+    end = Math.min(end, size - 1)
+  }
+  return { start, end }
+}
+
+export function previewContentType(path, fallback) {
+  const extension = String(path || '').split('.').pop()?.toLowerCase()
+  const types = {
+    ppt: 'application/vnd.ms-powerpoint',
+    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    doc: 'application/msword',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    xls: 'application/vnd.ms-excel',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  }
+  return types[extension] || fallback || 'application/octet-stream'
+}
+
 // 依登入 email 查該使用者的公司通知信箱；沒設定就退回原本的登入 email
 async function resolveNotifyEmail(loginEmail) {
   if (!loginEmail) return ''
@@ -1409,9 +1447,30 @@ export const previewFile = onRequest(
       const [exists] = await file.exists()
       if (!exists) return res.status(404).send('file gone')
       const [meta] = await file.getMetadata()
-      res.set('Content-Type', meta.contentType || 'application/octet-stream')
+      const size = Number(meta.size)
+      if (!Number.isSafeInteger(size) || size <= 0) return res.status(500).send('invalid file metadata')
+      const range = parseByteRange(req.get('range'), size)
+      if (range === false) {
+        res.set('Content-Range', `bytes */${size}`)
+        return res.status(416).end()
+      }
+
+      const objectName = path.split('/').pop()
+      res.set('Content-Type', previewContentType(path, meta.contentType))
+      res.set('Content-Disposition', `inline; filename="${objectName}"`)
+      res.set('Accept-Ranges', 'bytes')
+      res.set('X-Content-Type-Options', 'nosniff')
       res.set('Cache-Control', 'public, max-age=300')
-      file.createReadStream().pipe(res)
+      if (range) {
+        const contentLength = range.end - range.start + 1
+        res.status(206)
+        res.set('Content-Range', `bytes ${range.start}-${range.end}/${size}`)
+        res.set('Content-Length', String(contentLength))
+      } else {
+        res.set('Content-Length', String(size))
+      }
+      if (req.method === 'HEAD') return res.end()
+      file.createReadStream(range ? { start: range.start, end: range.end } : undefined).pipe(res)
     } catch (e) {
       logger.error('previewFile 失敗', e.message)
       res.status(500).send('error')
