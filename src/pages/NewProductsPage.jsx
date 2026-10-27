@@ -181,10 +181,10 @@ export default function NewProductsPage() {
               return (
                 <li key={s.key} className="flex items-center">
                   {i > 0 && (
-                    <span aria-hidden="true" className={`flex items-center ${i <= cur ? 'text-emerald-400' : 'text-gray-300'}`}>
-                      <span className={`block w-5 h-0.5 ${i <= cur ? 'bg-emerald-400' : 'bg-gray-200'}`} />
-                      <span className="-ml-1 text-sm leading-none">▸</span>
-                    </span>
+                    <svg aria-hidden="true" viewBox="0 0 36 16" className={`block shrink-0 w-9 h-4 mx-1 ${i <= cur ? 'text-emerald-500' : 'text-gray-300'}`}
+                      fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M2 8h30M25 2l7 6-7 6" />
+                    </svg>
                   )}
                   <button type="button" disabled={!canEdit} onClick={() => setStage(p, s.key)}
                     aria-current={current ? 'step' : undefined}
