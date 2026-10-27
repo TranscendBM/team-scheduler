@@ -4,8 +4,8 @@ import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
 import CountBadge from '../components/CountBadge'
 import {
-  PRODUCT_LINES, STAGES, PREP_TASKS, LIVE_STAGE, lineMeta, categoryMeta, categoryUrl,
-  stageIndex, isLive, launchStatus, sortByLaunch, countByCategory, prepProgress, validateProduct,
+  PRODUCT_LINES, STAGES, LIVE_STAGE, lineMeta, categoryMeta, categoryUrl,
+  stageIndex, normalizeStage, isLive, launchStatus, sortByLaunch, countByCategory, validateProduct,
 } from '../utils/newProducts'
 
 const emptyForm = { line: '', category: '', model: '', launchDate: '', note: '' }
@@ -97,7 +97,7 @@ export default function NewProductsPage() {
         await updateDoc(doc(db, 'newProducts', editProduct.id), base)
       } else {
         await addDoc(collection(db, 'newProducts'), {
-          ...base, stage: STAGES[0].key, prep: {}, liveAt: '', createdAt: new Date().toISOString(),
+          ...base, stage: STAGES[0].key, liveAt: '', createdAt: new Date().toISOString(),
         })
       }
       setShowModal(false)
@@ -114,12 +114,9 @@ export default function NewProductsPage() {
 
   // 切換進度階段；到「已上線」時記下上線日，退回來就清掉
   const setStage = (p, stage) => {
-    if (stage === p.stage) return
+    if (stage === normalizeStage(p.stage)) return
     return patchProduct(p, { stage, liveAt: stage === LIVE_STAGE ? today : '' })
   }
-  const togglePrep = (p, taskKey) =>
-    patchProduct(p, { prep: { ...(p.prep || {}), [taskKey]: !p.prep?.[taskKey] } })
-
   async function handleDelete(id) {
     try { await deleteDoc(doc(db, 'newProducts', id)) } catch (e) { setActionError('刪除失敗：' + e.message) }
     setDeleteConfirm(null)
@@ -144,7 +141,6 @@ export default function NewProductsPage() {
     const cat = categoryMeta(p.line, p.category)
     const status = launchStatus(p, today)
     const cur = stageIndex(p.stage)
-    const prep = prepProgress(p)
     return (
       <div className={`bg-white rounded-xl border shadow-sm px-5 py-4 ${status?.tone === 'overdue' ? 'border-red-200 bg-red-50/40' : 'border-gray-200'}`}>
         <div className="flex items-start justify-between gap-3">
@@ -172,34 +168,34 @@ export default function NewProductsPage() {
           </div>
         </div>
 
-        {/* 進度：5 個階段，已走過的綠、目前的藍；有編輯權限可直接點選要切到哪一步 */}
-        <div className="flex flex-wrap gap-1.5 mt-3">
-          {STAGES.map((s, i) => {
-            const cls = i === cur
-              ? 'bg-blue-600 text-white border-blue-600'
-              : i < cur ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-white text-gray-500 border-gray-200'
-            return (
-              <button key={s.key} type="button" disabled={!canEdit} title={s.hint}
-                onClick={() => setStage(p, s.key)}
-                className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${cls} ${canEdit ? 'hover:opacity-80 cursor-pointer' : 'cursor-default'}`}>
-                {i < cur ? '✓ ' : ''}{s.label}
-              </button>
-            )
-          })}
+        {/* 進度流程圖：節點由左到右串起來，走過的綠、目前的藍(外圈強調)、還沒到的灰；
+            有編輯權限可直接點節點切換。窄螢幕時可橫向捲動，不換行以免流程方向錯亂 */}
+        <div className="mt-4 overflow-x-auto pb-1">
+          <ol className="flex items-center min-w-max">
+            {STAGES.map((s, i) => {
+              const done = i < cur
+              const current = i === cur
+              const node = current
+                ? 'bg-blue-600 text-white border-blue-600 ring-4 ring-blue-100 font-semibold'
+                : done ? 'bg-emerald-50 text-emerald-700 border-emerald-300' : 'bg-white text-gray-500 border-gray-200'
+              return (
+                <li key={s.key} className="flex items-center">
+                  {i > 0 && (
+                    <span aria-hidden="true" className={`flex items-center ${i <= cur ? 'text-emerald-400' : 'text-gray-300'}`}>
+                      <span className={`block w-5 h-0.5 ${i <= cur ? 'bg-emerald-400' : 'bg-gray-200'}`} />
+                      <span className="-ml-1 text-sm leading-none">▸</span>
+                    </span>
+                  )}
+                  <button type="button" disabled={!canEdit} onClick={() => setStage(p, s.key)}
+                    aria-current={current ? 'step' : undefined}
+                    className={`text-xs whitespace-nowrap px-3 py-1.5 rounded-lg border transition-colors ${node} ${canEdit && !current ? 'hover:border-blue-300 cursor-pointer' : 'cursor-default'}`}>
+                    {done ? '✓ ' : ''}{s.label}
+                  </button>
+                </li>
+              )
+            })}
+          </ol>
         </div>
-
-        {p.stage === 'prep' && (
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3 text-sm text-gray-600">
-            {PREP_TASKS.map(t => (
-              <label key={t.key} className={`flex items-center gap-1.5 select-none ${canEdit ? 'cursor-pointer' : ''}`}>
-                <input type="checkbox" checked={!!p.prep?.[t.key]} disabled={!canEdit}
-                  onChange={() => togglePrep(p, t.key)} />
-                <span className={p.prep?.[t.key] ? 'text-gray-500 line-through' : ''}>{t.label}</span>
-              </label>
-            ))}
-            <span className="text-xs text-gray-500">{prep.done}/{prep.total}</span>
-          </div>
-        )}
 
         {p.note && <p className="text-xs text-gray-500 mt-3 whitespace-pre-wrap">{p.note}</p>}
       </div>

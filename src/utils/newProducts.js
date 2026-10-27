@@ -42,26 +42,24 @@ export function categoryUrl(lineKey, catKey) {
   return line && categoryMeta(lineKey, catKey) ? line.urlBase + catKey : ''
 }
 
-// 上官網的固定流程，順序即進度。live 是最後一步，代表已上線、退出主清單。
+// 上官網的固定流程(畫成流程圖)，順序即進度。live 是最後一步，代表已上線、退出主清單。
 export const STAGES = [
-  { key: 'rd', label: '收到通知', hint: 'RD 開發中' },
-  { key: 'prep', label: '準備中', hint: '文案初稿 / 產品圖拍攝 / ePage 設計' },
-  { key: 'rd_confirm', label: 'RD 確認文案', hint: 'RD 確認文案初稿' },
-  { key: 'epage_confirm', label: 'ePage 確認', hint: 'ePage 設計確認' },
-  { key: 'live', label: '已上線', hint: '已上官網' },
+  { key: 'rd', label: '收到通知' },
+  { key: 'copy', label: '準備文案' },
+  { key: 'copy_confirm', label: '文案確認' },
+  { key: 'design', label: '設計中' },
+  { key: 'design_confirm', label: '設計確認' },
+  { key: 'live', label: '上線' },
 ]
 export const LIVE_STAGE = 'live'
 
-// 「準備中」階段底下的三項工作，各自勾選完成
-export const PREP_TASKS = [
-  { key: 'copy', label: '文案初稿' },
-  { key: 'photo', label: '產品圖拍攝' },
-  { key: 'epage', label: 'ePage 設計' },
-]
+// 流程從 5 步改成 6 步之前存下的舊階段 key，對應到新流程上最接近的一步，舊資料不用搬
+const LEGACY_STAGES = { prep: 'copy', rd_confirm: 'copy_confirm', epage_confirm: 'design_confirm' }
+export const normalizeStage = (key) => LEGACY_STAGES[key] || key
 
-export const stageIndex = (key) => Math.max(0, STAGES.findIndex(s => s.key === key))
+export const stageIndex = (key) => Math.max(0, STAGES.findIndex(s => s.key === normalizeStage(key)))
 export const stageMeta = (key) => STAGES[stageIndex(key)]
-export const isLive = (p) => p?.stage === LIVE_STAGE
+export const isLive = (p) => normalizeStage(p?.stage) === LIVE_STAGE
 
 // 兩個 yyyy-mm-dd 相差天數(b - a)。用 UTC 計算避免夏令時間/時區造成差一天。
 function dayDiff(a, b) {
@@ -98,12 +96,6 @@ export function countByCategory(list, lineKey) {
     counts[p.category] = (counts[p.category] || 0) + 1
   }
   return counts
-}
-
-// 「準備中」階段的三項工作完成數(例如 2/3)
-export function prepProgress(p) {
-  const done = PREP_TASKS.filter(t => p?.prep?.[t.key]).length
-  return { done, total: PREP_TASKS.length }
 }
 
 // 新增/編輯表單送出前的驗證，回傳錯誤訊息，沒問題回 ''

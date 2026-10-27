@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   PRODUCT_LINES, STAGES, categoryMeta, categoryUrl, stageIndex, launchStatus, sortByLaunch,
-  countByCategory, prepProgress, validateProduct,
+  countByCategory, validateProduct, isLive,
 } from '../../src/utils/newProducts.js'
 
 describe('分類資料', () => {
@@ -22,9 +22,17 @@ describe('分類資料', () => {
 })
 
 describe('進度階段', () => {
-  it('順序為 收到通知 → 準備中 → RD 確認 → ePage 確認 → 已上線', () => {
-    expect(STAGES.map(s => s.key)).toEqual(['rd', 'prep', 'rd_confirm', 'epage_confirm', 'live'])
-    expect(stageIndex('epage_confirm')).toBe(3)
+  it('順序為 收到通知 → 準備文案 → 文案確認 → 設計中 → 設計確認 → 上線', () => {
+    expect(STAGES.map(s => s.label)).toEqual(['收到通知', '準備文案', '文案確認', '設計中', '設計確認', '上線'])
+    expect(stageIndex('design')).toBe(3)
+  })
+
+  it('舊版階段 key 對應到新流程最接近的一步', () => {
+    expect(stageIndex('prep')).toBe(stageIndex('copy'))
+    expect(stageIndex('rd_confirm')).toBe(stageIndex('copy_confirm'))
+    expect(stageIndex('epage_confirm')).toBe(stageIndex('design_confirm'))
+    expect(isLive({ stage: 'live' })).toBe(true)
+    expect(isLive({ stage: 'prep' })).toBe(false)
   })
 
   it('未知或沒填的階段視為第一步', () => {
@@ -79,13 +87,6 @@ describe('countByCategory', () => {
       { line: 'consumer', category: 'usb', stage: 'prep' },
     ]
     expect(countByCategory(list, 'embedded')).toEqual({ ssd: 2, flash: 1 })
-  })
-})
-
-describe('prepProgress', () => {
-  it('計算準備中三項工作完成數', () => {
-    expect(prepProgress({ prep: { copy: true, photo: true } })).toEqual({ done: 2, total: 3 })
-    expect(prepProgress({})).toEqual({ done: 0, total: 3 })
   })
 })
 
