@@ -606,6 +606,46 @@ describe('臨時審核代理人（settings/reviewDelegation）', () => {
   })
 })
 
+describe('newProducts — 白名單可讀、manager/planner 可新增修改、僅 manager 可刪', () => {
+  const seed = async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'newProducts', 'seed'), { model: 'MTE775A', stage: 'rd' })
+    })
+  }
+
+  it('白名單使用者(designer)可讀', async () => {
+    await seed()
+    await assertSucceeds(getDoc(doc(dbAs(DESIGNER_A), 'newProducts', 'seed')))
+  })
+
+  it('不在白名單的人不能讀', async () => {
+    await seed()
+    await assertFails(getDoc(doc(dbAs(STRANGER), 'newProducts', 'seed')))
+  })
+
+  it('designer 不能新增也不能修改', async () => {
+    await seed()
+    await assertFails(setDoc(doc(dbAs(DESIGNER_A), 'newProducts', 'x'), { model: 'x' }))
+    await assertFails(updateDoc(doc(dbAs(DESIGNER_A), 'newProducts', 'seed'), { stage: 'prep' }))
+  })
+
+  it('planner 可以新增與更新進度(負責更新進度的角色)', async () => {
+    await seed()
+    await assertSucceeds(setDoc(doc(dbAs(PLANNER_SD1), 'newProducts', 'x'), { model: 'x', stage: 'rd' }))
+    await assertSucceeds(updateDoc(doc(dbAs(PLANNER_SD1), 'newProducts', 'seed'), { stage: 'prep' }))
+  })
+
+  it('planner 不能刪除，manager 可以', async () => {
+    await seed()
+    await assertFails(deleteDoc(doc(dbAs(PLANNER_SD1), 'newProducts', 'seed')))
+    await assertSucceeds(deleteDoc(doc(dbAs(MANAGER), 'newProducts', 'seed')))
+  })
+
+  it('manager 可新增', async () => {
+    await assertSucceeds(setDoc(doc(dbAs(MANAGER), 'newProducts', 'x'), { model: 'x' }))
+  })
+})
+
 describe('projects / people / leaves / settings / hbl* — 讀白名單、寫僅 manager', () => {
   const collections = ['projects', 'people', 'leaves', 'outings', 'hblPayments', 'hblSchedule', 'hblAdStatus']
 

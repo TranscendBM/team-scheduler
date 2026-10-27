@@ -10,6 +10,7 @@ export const GROUPS = [
   { key: 'overview', label: '總覽' },
   { key: 'tradeshow', label: '秀展' },
   { key: 'requests', label: '需求發稿' },
+  { key: 'website', label: '官網' },
   { key: 'projects', label: '專案管理' },
   { key: 'schedule', label: '排程管理' },
 ]
@@ -32,6 +33,8 @@ export const PAGES = [
   { key: 'requests',    path: '/requests',    label: '需求總表', icon: '🗂️', group: 'requests', defaults: { designer: true, planner: true } },
   { key: 'review',      path: '/review',      label: '需求審核', icon: '⚖️', group: 'requests', fixed: 'manager' },
   { key: 'dashboard',   path: '/dashboard',   label: '設計師儀表板', icon: '📈', group: 'requests', fixed: 'manager' },
+  // 新品上官網進度追蹤：planner 負責更新進度，所以 planner 預設可見(寫入權限見 firestore.rules newProducts)
+  { key: 'new-products', path: '/new-products', label: '新品上官網', icon: '🆕', group: 'website', defaults: { designer: true, planner: true } },
   { key: 'calendar',    path: '/calendar',    label: '日曆',     icon: '📅', group: 'schedule', defaults: { designer: true,  planner: false } },
   { key: 'leave',       path: '/leave',       label: '休假預排', icon: '🏖️', group: 'schedule', defaults: { designer: true,  planner: false } },
   { key: 'outings',     path: '/outings',     label: '外出通知', icon: '🚗', group: 'schedule', defaults: { designer: true,  planner: false } },

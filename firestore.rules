@@ -250,6 +250,14 @@ service cloud.firestore {
     match /leaves/{id}       { allow read: if whitelisted(); allow write: if isManager(); }
     match /outings/{id}      { allow read: if whitelisted(); allow write: if isManager(); }
 
+    // 新品上官網進度追蹤：planner 負責更新進度，所以 manager 與 planner 都能新增/修改；
+    // 刪除仍只有 manager(已上線的產品用「已上線」狀態保留紀錄，不需要刪)
+    match /newProducts/{id} {
+      allow read: if whitelisted();
+      allow create, update: if isManager() || (whitelisted() && role() == 'planner');
+      allow delete: if isManager();
+    }
+
     // settings/permissions 只有 manager 能寫；其餘 settings（里程碑規則、設計類別）也收斂為 manager 可寫
     match /settings/{id} {
       allow read: if whitelisted();
