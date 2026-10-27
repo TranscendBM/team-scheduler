@@ -7,6 +7,7 @@ import { statusMeta } from '../utils/requestConstants'
 import { TYPE_COLORS, TYPE_LABELS } from '../utils/milestoneUtils'
 import { addDays, showCountdown } from '../utils/tradeshowCountdown'
 import RequestDetailModal from '../components/RequestDetailModal'
+import { STAGES, lineMeta, categoryMeta, isLive, stageMeta, launchStatus, sortByLaunch, countByStage, localTodayStr } from '../utils/newProducts'
 
 const PROJECT_TYPES = ['event', 'award', 'design', 'seasonal_kv']
 const PROJECT_LINK = { event: '/projects/event', award: '/projects/award', design: '/projects/design', seasonal_kv: '/projects/design' }
@@ -48,6 +49,7 @@ export default function DashboardPage() {
 
   const [myUser, setMyUser] = useState(null)
   const [leaves, setLeaves] = useState([])
+  const [newProducts, setNewProducts] = useState([])
 
   useEffect(() => {
     const u1 = onSnapshot(collection(db, 'people'), snap => setPeople(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
@@ -59,6 +61,13 @@ export default function DashboardPage() {
   useEffect(() => {
     if (role !== 'manager') return
     const unsub = onSnapshot(collection(db, 'leaves'), snap => setLeaves(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
+    return unsub
+  }, [role])
+
+  // 新品上官網進度：主管儀表板要看重點(進行中的數量、各階段分佈、快到期/逾期)，其他角色不訂閱
+  useEffect(() => {
+    if (role !== 'manager') return
+    const unsub = onSnapshot(collection(db, 'newProducts'), snap => setNewProducts(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
     return unsub
   }, [role])
 
@@ -133,6 +142,12 @@ export default function DashboardPage() {
   const companyEvents = companyProjectsByType('event')
   const companyAwards = companyProjectsByType('award')
   const companyDesigns = companyProjectsByType('design')
+
+  // 主管：新品上官網重點。清單依預計上線日排序，逾期/7 天內要上線的標色，最多列 6 筆其餘到完整頁看
+  const npToday = localTodayStr()
+  const activeNewProducts = sortByLaunch(newProducts.filter(p => !isLive(p)))
+  const newProductStageCounts = countByStage(activeNewProducts)
+  const newProductAttention = activeNewProducts.filter(p => ['overdue', 'soon'].includes(launchStatus(p, npToday)?.tone)).length
 
   // 主管：未來一個月的休假預排
   const in30 = addDaysStr(30)
@@ -231,6 +246,55 @@ export default function DashboardPage() {
       {/* 主管：近三個月秀展清單 + 活動／報獎／設計（各自獨立區塊）+ 未來一個月休假預排 */}
       {role === 'manager' && (
         <>
+          <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-sm font-semibold text-gray-700">
+                🆕 新品上官網
+                {activeNewProducts.length > 0 && <span className="ml-2 text-xs font-normal text-gray-500">進行中 {activeNewProducts.length} 項</span>}
+                {newProductAttention > 0 && (
+                  <span className="ml-2 text-xs font-medium px-2 py-0.5 rounded-full bg-red-100 text-red-700">{newProductAttention} 項逾期或即將上線</span>
+                )}
+              </p>
+              <Link to="/new-products" className="text-xs text-blue-500 hover:underline">查看全部 →</Link>
+            </div>
+            {activeNewProducts.length === 0 ? (
+              <p className="text-sm text-gray-500 py-4 text-center">目前沒有準備中的新品</p>
+            ) : (
+              <>
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {STAGES.filter(st => newProductStageCounts[st.key] !== undefined).map(st => (
+                    <span key={st.key} className={`text-xs px-2.5 py-1 rounded-lg border ${newProductStageCounts[st.key] > 0 ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-white text-gray-500 border-gray-200'}`}>
+                      {st.label} <b className="ml-0.5">{newProductStageCounts[st.key]}</b>
+                    </span>
+                  ))}
+                </div>
+                <div className="space-y-2">
+                  {activeNewProducts.slice(0, 6).map(p => {
+                    const ls = launchStatus(p, npToday)
+                    return (
+                      <Link key={p.id} to="/new-products"
+                        className={`flex items-center justify-between gap-2 px-3 py-2 rounded-lg transition-colors ${ls?.tone === 'overdue' ? 'bg-red-50 hover:bg-red-100' : 'bg-gray-50 hover:bg-gray-100'}`}>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-gray-800 truncate">{p.model}</p>
+                          <p className="text-xs text-gray-500 truncate">{lineMeta(p.line)?.label} · {categoryMeta(p.line, p.category)?.label || p.category}</p>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 whitespace-nowrap">{stageMeta(p.stage).label}</span>
+                          {ls?.tone === 'overdue' && <span className="text-xs font-semibold text-red-600 whitespace-nowrap">逾期 {ls.days} 天</span>}
+                          {ls?.tone === 'soon' && <span className="text-xs font-semibold text-amber-600 whitespace-nowrap">{ls.days === 0 ? '今天上線' : `${ls.days} 天後`}</span>}
+                          <span className="text-xs text-gray-500 whitespace-nowrap">{p.launchDate || '日期未定'}</span>
+                        </div>
+                      </Link>
+                    )
+                  })}
+                  {activeNewProducts.length > 6 && (
+                    <p className="text-xs text-gray-500 text-center pt-1">還有 {activeNewProducts.length - 6} 項，到完整頁面查看</p>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+
           <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
             <div className="flex items-center justify-between mb-3">
               <p className="text-sm font-semibold text-gray-700">🎪 近三個月的秀展清單</p>

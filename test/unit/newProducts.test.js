@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   PRODUCT_LINES, STAGES, categoryMeta, categoryUrl, stageIndex, launchStatus, sortByLaunch,
-  countByCategory, validateProduct, isLive,
+  countByCategory, validateProduct, isLive, countByStage,
 } from '../../src/utils/newProducts.js'
 
 describe('分類資料', () => {
@@ -100,5 +100,14 @@ describe('validateProduct', () => {
   })
   it('分類必須屬於所選產品線', () => {
     expect(validateProduct({ ...ok, line: 'consumer' })).toBe('請選擇分類')
+  })
+})
+
+describe('countByStage', () => {
+  it('依階段統計進行中的新品，不含已上線，舊階段 key 也歸到對應階段', () => {
+    const list = [
+      { stage: 'rd' }, { stage: 'copy' }, { stage: 'prep' }, { stage: 'design' }, { stage: 'live' },
+    ]
+    expect(countByStage(list)).toEqual({ rd: 1, copy: 2, copy_confirm: 0, design: 1, design_confirm: 0 })
   })
 })

@@ -61,6 +61,12 @@ export const stageIndex = (key) => Math.max(0, STAGES.findIndex(s => s.key === n
 export const stageMeta = (key) => STAGES[stageIndex(key)]
 export const isLive = (p) => normalizeStage(p?.stage) === LIVE_STAGE
 
+// 本地時區(台北)的今天 yyyy-mm-dd。不用 toISOString().slice：那是 UTC，台北早上 8 點前會差一天。
+export function localTodayStr() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 // 兩個 yyyy-mm-dd 相差天數(b - a)。用 UTC 計算避免夏令時間/時區造成差一天。
 function dayDiff(a, b) {
   const [ay, am, ad] = a.split('-').map(Number)
@@ -94,6 +100,16 @@ export function countByCategory(list, lineKey) {
   for (const p of list) {
     if (p.line !== lineKey || isLive(p)) continue
     counts[p.category] = (counts[p.category] || 0) + 1
+  }
+  return counts
+}
+
+// 各進行中階段的新品數量(不含已上線)，key 為階段 key，沒有的階段是 0
+export function countByStage(list) {
+  const counts = Object.fromEntries(STAGES.filter(s => s.key !== LIVE_STAGE).map(s => [s.key, 0]))
+  for (const p of list) {
+    if (isLive(p)) continue
+    counts[STAGES[stageIndex(p.stage)].key] += 1
   }
   return counts
 }

@@ -5,15 +5,10 @@ import { useAuth } from '../contexts/AuthContext'
 import CountBadge from '../components/CountBadge'
 import {
   PRODUCT_LINES, STAGES, LIVE_STAGE, lineMeta, categoryMeta, categoryUrl,
-  stageIndex, normalizeStage, isLive, launchStatus, sortByLaunch, countByCategory, validateProduct,
+  localTodayStr, stageIndex, normalizeStage, isLive, launchStatus, sortByLaunch, countByCategory, validateProduct,
 } from '../utils/newProducts'
 
 const emptyForm = { line: '', category: '', model: '', launchDate: '', note: '' }
-
-const localToday = () => {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
 
 // 預計上線日旁的倒數標籤：逾期紅、7 天內琥珀、其餘不標
 function LaunchBadge({ status }) {
@@ -37,7 +32,7 @@ const pillClass = (active) =>
 export default function NewProductsPage() {
   const { isManager, isPlanner } = useAuth()
   const canEdit = isManager || isPlanner
-  const [today] = useState(localToday)
+  const [today] = useState(localTodayStr)
   const [products, setProducts] = useState([])
   const [lineFilter, setLineFilter] = useState('all')
   const [catFilter, setCatFilter] = useState('all')
