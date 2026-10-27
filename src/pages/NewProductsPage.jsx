@@ -163,7 +163,7 @@ export default function NewProductsPage() {
           </div>
         </div>
 
-        {/* 進度流程圖：節點由左到右串起來，走過的綠、目前的藍(外圈強調)、還沒到的灰；
+        {/* 進度流程圖：節點由左到右串起來，走過的綠、目前的藍、還沒到的灰；
             有編輯權限可直接點節點切換。窄螢幕時可橫向捲動，不換行以免流程方向錯亂 */}
         <div className="mt-4 overflow-x-auto pb-1">
           <ol className="flex items-center min-w-max">
@@ -171,7 +171,7 @@ export default function NewProductsPage() {
               const done = i < cur
               const current = i === cur
               const node = current
-                ? 'bg-blue-600 text-white border-blue-600 ring-4 ring-blue-100 font-semibold'
+                ? 'bg-blue-600 text-white border-blue-600 font-semibold'
                 : done ? 'bg-emerald-50 text-emerald-700 border-emerald-300' : 'bg-white text-gray-500 border-gray-200'
               return (
                 <li key={s.key} className="flex items-center">
