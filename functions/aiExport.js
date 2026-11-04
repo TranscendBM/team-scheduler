@@ -273,10 +273,10 @@ export function buildSnapshot({ requests, projects, users, people, now, hmacKey,
   const tabs = {
     [TAB.README]: withMeta(readmeRows(meta), meta),
     [TAB.SUMMARY]: withMeta(summaryRows({ meta, stats, workload, risks }), meta),
-    [TAB.REQUESTS]: withMeta(requestTableRows(reqRows, snapId), meta),
-    [TAB.PROJECTS]: withMeta(projectTableRows(projRows, snapId), meta),
+    [TAB.REQUESTS]: withMeta(requestTableRows(reqRows, snapId), meta, reqRows.length),
+    [TAB.PROJECTS]: withMeta(projectTableRows(projRows, snapId), meta, projRows.length),
   }
-  // 每個資料分頁的「資料列數」(不含 meta 與表頭)：之後寫入狀態分頁，驗證時對照
+  // 每個資料分頁的 dataRows(定義見 withMeta)：寫入狀態分頁，並與各分頁 #META 的 dataRows 相同
   const dataRowCounts = {
     [TAB.README]: tabs[TAB.README].length - 1,
     [TAB.SUMMARY]: tabs[TAB.SUMMARY].length - 1,
@@ -391,11 +391,12 @@ export function pickRisks(rows, todayStr, limit = 3) {
 }
 
 // ───────────────────────── 表格版面 ─────────────────────────
-// 每個資料分頁：第 1 列是 #META(snapshotId/版本/產生時間/資料列數)，第 2 列表頭，之後是資料。
-// 「資料列數」= 第 2 列(表頭)之後的列數；AI_README 與 AI_Daily_Summary 是版面型分頁，沒有單一表頭，
-// 資料列數就是 #META 之後的總列數。
-function withMeta(body, meta) {
-  const metaRow = ['#META', `snapshotId=${meta.snapshotId}`, `schemaVersion=${meta.schemaVersion}`, `generatedAt=${meta.generatedAt}`, `bodyRows=${body.length}`]
+// 每個資料分頁：第 1 列是 #META(snapshotId/版本/產生時間/dataRows)，第 2 列表頭，之後是資料。
+// dataRows 的定義(與 AI_Sync_Status 的 rows.<分頁> 完全相同)：
+//   表格型分頁(AI_Requests、AI_Projects)＝資料筆數，不含表頭列
+//   版面型分頁(AI_README、AI_Daily_Summary)＝#META 之後的總列數
+function withMeta(body, meta, dataRows = body.length) {
+  const metaRow = ['#META', `snapshotId=${meta.snapshotId}`, `schemaVersion=${meta.schemaVersion}`, `generatedAt=${meta.generatedAt}`, `dataRows=${dataRows}`]
   return [metaRow, ...body]
 }
 
@@ -467,6 +468,7 @@ function readmeRows(meta) {
     ['進行中 = assigned + in_progress。逾期 = 進行中且交期 < 今天(交期當天不算)。本週到期 = 進行中且今天 ≤ 交期 ≤ 本週日(週一至週日)。'],
     ['待審核與設計確認中即使已過交期也不算逾期(與公司系統一致)，另以 dueBucket=PAST_DUE_NOT_WATCHED 標出。'],
     [`範圍：開放中需求全部 + 近 ${RETENTION_DAYS} 天內結案/駁回，所以這裡的總數不等於公司系統內的歷史總數。`],
+    ['每個資料分頁第一列 #META 的 dataRows，與 AI_Sync_Status 的 rows.<分頁> 定義相同：表格型分頁(AI_Requests、AI_Projects)是資料筆數、不含表頭；AI_README 與 AI_Daily_Summary 是 #META 之後的總列數。'],
     ['每位負責人的工作量：共同指派的需求每人各算一次，所以每人數字加總會大於需求總數，請以總數為準。'],
     ['風險前三名只是依固定規則算出的「候選」，不是結論；請搭配 AI_Requests 自行判斷。'],
     ['分頁：AI_Daily_Summary(彙總與風險候選)、AI_Requests(每筆需求)、AI_Projects(秀展/設計專案)、AI_Sync_Status(同步狀態)。'],

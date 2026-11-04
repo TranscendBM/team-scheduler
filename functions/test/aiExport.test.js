@@ -241,3 +241,14 @@ test('computeStats 對空輸入安全', () => {
   assert.equal(snap.counts.requests, 0)
   assert.equal(snap.risks.length, 0)
 })
+
+test('列數口徑一致：每個分頁 #META 的 dataRows = AI_Sync_Status 的 rows(表格型=資料筆數不含表頭；版面型=#META 之後總列數)', () => {
+  const snap = build()
+  const metaRows = (t) => Number(/dataRows=(\d+)/.exec(snap.tabs[t][0][4])[1])
+  for (const t of DATA_TABS) assert.equal(metaRows(t), snap.dataRowCounts[t], t)
+  assert.equal(metaRows(TAB.REQUESTS), snap.counts.requests)
+  assert.equal(metaRows(TAB.REQUESTS), snap.tabs[TAB.REQUESTS].length - 2) // 扣掉 #META 與表頭
+  assert.equal(metaRows(TAB.PROJECTS), snap.tabs[TAB.PROJECTS].length - 2)
+  assert.equal(metaRows(TAB.SUMMARY), snap.tabs[TAB.SUMMARY].length - 1)   // 版面型：只扣 #META
+  assert.ok(!JSON.stringify(snap.tabs).includes('bodyRows'))
+})

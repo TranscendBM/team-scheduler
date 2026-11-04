@@ -223,3 +223,15 @@ test('狀態分頁序列化/解析互通', () => {
   assert.equal(rows.length, 40)
   assert.deepEqual(parseStatusRows(rows), { status: 'OK', lastSuccessAt: 'T', lastSuccessSnapshotId: 'S1', requestsInScope: 7, projectsExported: 3 })
 })
+
+test('Sheet 上各分頁 #META 的 dataRows 與 AI_Sync_Status 的 rows.<分頁> 完全相同', async () => {
+  const fake = new FakeSheets()
+  await syncToSheet({ sheets: fake, snapshot: snapOf(requests), now: NOW })
+  const st = fake.statusMap()
+  for (const t of DATA_TABS) {
+    const meta = fake.rows(t)[0]
+    assert.equal(meta[4], `dataRows=${st[`rows.${t}`]}`, t)
+  }
+  assert.equal(st[`rows.${TAB.REQUESTS}`], 12)
+  assert.equal(fake.rows(TAB.REQUESTS).length - 2, st[`rows.${TAB.REQUESTS}`])
+})

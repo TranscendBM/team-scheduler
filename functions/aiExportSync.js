@@ -59,7 +59,7 @@ function kvPairs(state) {
     ['errorClass', errorClass || '', ''],
     ['errorNote', errorNote || '', '只含錯誤類別與簡短訊息，不含資料內容'],
   ]
-  for (const t of DATA_TABS) pairs.push([`rows.${t}`, rows?.[t] ?? '', '該分頁 #META 之後的列數'])
+  for (const t of DATA_TABS) pairs.push([`rows.${t}`, rows?.[t] ?? '', '該分頁 #META 的 dataRows(表格型=資料筆數、不含表頭；版面型=#META 之後的總列數)'])
   for (const t of DATA_TABS) pairs.push([`checksum.${t}`, checksums?.[t] ?? '', '分頁內容(不含 #META 列以外)的 sha256；讀回驗證用'])
   return pairs
 }
