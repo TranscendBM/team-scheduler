@@ -22,7 +22,8 @@ const args = Object.fromEntries(process.argv.slice(2).map((a) => {
 }))
 
 const now = args.now ? new Date(args.now) : NOW
-const snapshot = buildSnapshot({ requests, projects, users, people, now, hmacKey: KEY, anonymize: true })
+// 第一階段預設不含專案(AI_Projects 只有表頭)；加 --with-projects 才會用合成專案資料測試該分頁
+const snapshot = buildSnapshot({ requests, projects, users, people, now, hmacKey: KEY, anonymize: true, includeProjects: !!args['with-projects'] })
 
 // 外洩檢查：任何哨兵字串、email、網址出現在輸出中就失敗
 const text = JSON.stringify(snapshot.tabs)

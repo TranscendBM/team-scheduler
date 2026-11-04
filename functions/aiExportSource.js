@@ -10,8 +10,10 @@ const REQ_FIELDS = ['projectName', 'title', 'docTypes', 'region', 'urgent', 'sta
 const PROJECT_FIELDS = ['name', 'type', 'status', 'startDate', 'endDate', 'year', 'assignments']
 const USER_FIELDS = ['role', 'active', 'notifyEmail']
 const PEOPLE_FIELDS = ['role', 'email']
+const EMPTY = Promise.resolve({ size: 0, docs: [] })
 
-export async function collectSourceData(db, { now = new Date(), retentionDays = RETENTION_DAYS } = {}) {
+// includeProjects=false(第一階段預設)時，完全不讀 projects 與 people 兩個集合。
+export async function collectSourceData(db, { now = new Date(), retentionDays = RETENTION_DAYS, includeProjects = false } = {}) {
   const cap = LIMITS.maxSourceReads + 1
   // 多抓 2 天當緩衝(時區與邊界)，精確的 90 天(台灣日期)由 buildSnapshot 再過濾一次
   const cutoff = new Date(now.getTime() - (retentionDays + 2) * 86400000)
@@ -21,9 +23,9 @@ export async function collectSourceData(db, { now = new Date(), retentionDays = 
     reqCol.where('status', 'in', OPEN_STATUSES).select(...REQ_FIELDS).limit(cap).get(),
     reqCol.where('completedAt', '>=', cutoff).select(...REQ_FIELDS).limit(cap).get(),
     reqCol.where('status', '==', 'rejected').select(...REQ_FIELDS).limit(cap).get(),
-    db.collection('projects').select(...PROJECT_FIELDS).limit(cap).get(),
+    includeProjects ? db.collection('projects').select(...PROJECT_FIELDS).limit(cap).get() : EMPTY,
     db.collection('users').select(...USER_FIELDS).limit(cap).get(),
-    db.collection('people').select(...PEOPLE_FIELDS).limit(cap).get(),
+    includeProjects ? db.collection('people').select(...PEOPLE_FIELDS).limit(cap).get() : EMPTY,
   ])
 
   const reads = openSnap.size + doneSnap.size + rejectedSnap.size + projectSnap.size + userSnap.size + peopleSnap.size

@@ -47,7 +47,7 @@ async function seed() {
 
 test('collectSourceData：只取開放中 + 近期已結案 + 已駁回；投影後不含敏感欄位', async () => {
   await seed()
-  const src = await collectSourceData(db, { now: F.NOW })
+  const src = await collectSourceData(db, { now: F.NOW, includeProjects: true })
   const ids = new Set(src.requests.map((r) => r.id))
   // 開放中 10 筆 + 90 天內結案 1 筆 + 太舊的已結案(2026-06-01)被 completedAt 範圍擋掉 + 已駁回 2 筆(含太舊，交給 buildSnapshot 過濾)
   assert.ok(ids.has('reqDocIdAAAA0001') && ids.has('reqDocIdAAAA0008') && ids.has('reqDocIdAAAA0010'))
@@ -62,6 +62,29 @@ test('collectSourceData：只取開放中 + 近期已結案 + 已駁回；投影
   for (const k of ['location', 'office', 'note', 'rentUSD', 'decorUSD']) assert.ok(!(k in proj), `投影後專案不應含 ${k}`)
   assert.equal(src.users.length, 3)
   assert.ok(src.reads <= 40)
+})
+
+test('第一階段預設(不含專案)：完全不讀取 projects 與 people 集合', async () => {
+  await seed()
+  const touched = []
+  const spy = new Proxy(db, { get(t, prop) { if (prop === 'collection') return (name) => { touched.push(name); return t.collection(name) }; const v = t[prop]; return typeof v === 'function' ? v.bind(t) : v } })
+  const src = await collectSourceData(spy, { now: F.NOW })
+  assert.deepEqual([...new Set(touched)].sort(), ['requests', 'users'])
+  assert.equal(src.projects.length, 0)
+  assert.equal(src.people.length, 0)
+  const fake = new FakeSheets()
+  const res = await runAiExport({ db: spy, sheets: fake, hmacKey: F.KEY, now: F.NOW })
+  assert.equal(res.counts.projects, 0)
+  assert.equal(fake.rows(TAB.PROJECTS).length, 2)
+  assert.ok(!fake.dump().includes('J-'))
+})
+
+test('明確開啟專案時才處理專案，且仍無敏感資料', async () => {
+  await seed()
+  const fake = new FakeSheets()
+  const res = await runAiExport({ db, sheets: fake, hmacKey: F.KEY, includeProjects: true, now: F.NOW })
+  assert.equal(res.counts.projects, 1)
+  for (const s of F.SENTINELS) assert.ok(!fake.dump().includes(s), s)
 })
 
 test('整條流程(emulator Firestore + 假 Sheets)：結果與純函式一致、讀者驗證通過、Sheet 無敏感資料', async () => {

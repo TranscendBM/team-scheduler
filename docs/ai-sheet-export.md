@@ -5,6 +5,7 @@
 - 不改 `firestore.rules`、前端、既有函式、`users` 結構；不新增任何 Firestore 集合；對 Firestore **零寫入**。
 - 不使用服務帳戶金鑰；不開放「知道連結者可查看」；不使用公開 CSV。
 - 第一階段名稱一律匿名（`AI_EXPORT_ANONYMIZE` 預設 `true`，只有明確設為 `false` 才會輸出真實名稱）。
+- 第一階段**不匯出專案**（`AI_EXPORT_INCLUDE_PROJECTS` 預設 `false`）：`AI_Projects` 只有表頭，且函式完全不讀取 `projects`、`people` 集合。
 
 ## 檔案
 
@@ -26,7 +27,7 @@
 | `AI_Sync_Status` | `status`（OK / UPDATING / FAILED）、`dataTrusted`、`snapshotId`、`schemaVersion`、`lastAttemptAt`、`lastSuccessAt`、各分頁列數與 checksum、`errorClass` |
 | `AI_Daily_Summary` | 需求總數、各狀態數、逾期、本週到期、無交期、各負責人工作量、風險前三候選 |
 | `AI_Requests` | 每筆需求一列（去識別化） |
-| `AI_Projects` | 秀展 / 設計專案（去識別化） |
+| `AI_Projects` | 秀展 / 設計專案（去識別化）。**第一階段停用**：只有表頭，README 與摘要會明示「沒有匯出 ≠ 沒有專案」 |
 
 每個資料分頁第 1 列是 `#META`（`snapshotId`、`schemaVersion`、`generatedAt`、`bodyRows`），每筆資料列也帶 `snapshotId`。
 
@@ -59,9 +60,16 @@
 
 ## 代號（HMAC，無對照表）
 
-- 負責人：`D-xxxxxx`（設計師）、`P-xxxxxx`（Planner）。本體 = `HMAC-SHA256(密鑰, "person:" + 小寫 email)` 前 6 碼。需求與專案透過公司信箱對應到同一個人，代號一致。
+- 負責人：`D-xxxxxxxx`（設計師）、`P-xxxxxxxx`（Planner）。本體 = `HMAC-SHA256(密鑰, "person:" + 小寫 email)` 前 8 碼（32 bit；30 人以內碰撞機率約 1e-7，萬一碰撞同步會失敗並通知，不會悄悄合併兩個人）。需求與專案透過公司信箱對應到同一個人，代號一致。
 - 需求 / 專案：`R-` / `J-` + 10 碼（`HMAC(密鑰, 類型:文件ID)`）。
-- 同密鑰下穩定；沒有對照表存放在 Firestore、Sheet 或日誌。**更換密鑰會讓所有代號改變**（等於重置）。
+- 沒有對照表存放在 Firestore、Sheet 或日誌。
+- **長期穩定性**：代號只取決於「密鑰 + 小寫 email + 演算法/格式」。因此：
+  - 密鑰不變、演算法不變 → 代號永遠不變（測試用 openssl 獨立算出的固定向量鎖住演算法，改動會讓測試失敗）。
+  - **更換或遺失密鑰 → 所有代號改變**（等同重置，ChatGPT 的歷史對話與代號對不上）。請把密鑰存進密碼管理員，不要輕易輪替。
+  - 某人更換登入 Gmail（人員管理的更換登入帳號）→ 該人視為新代號。
+  - 某人角色改變 → 只有前綴字母（D/P）變，8 碼本體不變。
+  - 代號格式若要調整，必須升 `SCHEMA_VERSION`，並同步告知 ChatGPT 端。
+  - Firestore 文件 ID 不變 → 需求代號不變；刪除重建的需求會是新代號。
 - 反查（只在本機）：`AI_EXPORT_HMAC_KEY='<密鑰>' node scripts/ai-export-person-code.mjs a@gmail.com`
 - 密鑰放 Secret Manager（`AI_EXPORT_HMAC_KEY`），至少 16 字元，建議 48 字元以上；缺少或太短時同步直接失敗，不會用空密鑰產生可預測代號。
 
@@ -71,9 +79,9 @@
 - 需要的專案層級角色：`roles/datastore.viewer`（只讀）、`roles/logging.logWriter`。兩個 secret（`AI_EXPORT_HMAC_KEY`、`SMTP_PASS`）的 `secretAccessor`：Firebase CLI 部署宣告了 secrets 的函式時會自動授予該函式的執行身分，**部署後仍請確認**。
 - **無寫入權限**：Firestore 不給任何寫入角色，`aiExportMeta` 之類的集合不存在。
 - 限制：Firestore 的 IAM 無法限制到「只能讀某幾個集合」。服務帳戶技術上能讀整個資料庫，「只讀 requests / projects / users / people」是由程式碼（`select()` 白名單）與測試保證，不是 IAM 保證。要更嚴格可建自訂角色（僅 `datastore.entities.get`、`datastore.entities.list`），但需要在實際環境驗證查詢是否仍成功，第一階段建議用 `datastore.viewer`。
-- 需讀 `users` / `people` 的原因：把需求的登入 email 與專案負責人（公司信箱）對應成同一個代號，以及寄失敗通知時解析主管的通知信箱。這些資料只在記憶體中使用，不寫入 Sheet。
+- 第一階段實際讀取的集合：`requests`、`users`（用角色決定代號前綴；寄失敗通知時解析主管的通知信箱）。`projects`、`people` 在專案停用時**完全不讀**。這些資料只在記憶體中使用，不寫入 Sheet。
 
-## 同步失敗保護（commit marker）
+## 同步失敗時的資料版本保護（commit marker）
 
 Sheets API 沒有跨分頁交易，所以不依賴「一次寫入就全成全敗」：
 
@@ -87,7 +95,7 @@ Sheets API 沒有跨分頁交易，所以不依賴「一次寫入就全成全敗
 
 讀者（ChatGPT）只信任同時滿足以下條件的資料（`AI_README` 已寫明）：`status = OK`、各分頁 `#META` 的 `snapshotId` 與狀態相同、`schemaVersion` 一致、`lastSuccessAt` 距今不超過 26 小時。
 
-**限制**：中途失敗時，資料分頁可能是清空或新舊混合的狀態（只是被標示為不可信，舊資料沒有雙份備份）。若要「失敗時仍保留可用的昨天資料」需要雙緩衝，第一階段未做。
+**限制（請知悉）**：失敗時能保證的是「讀者不會誤信」，不是「昨天的資料還留著」。在步驟 3 之後才失敗的話，資料分頁可能是清空或新舊混合，只是被標示為不可信，沒有雙份備份。步驟 1 的合理性檢查失敗、來源讀取失敗、Sheets 暫時不可用（尚未動資料分頁）這幾種情況，資料分頁維持昨天內容、狀態標為 `FAILED`。若之後要「失敗時仍保留可用的昨天資料」，需要改成雙緩衝（寫到暫存分頁、驗證後再切換），第一階段未做。
 
 ## 排程與限制
 
@@ -137,6 +145,7 @@ gcloud auth application-default login --impersonate-service-account=ai-sheet-syn
    ```bash
    node scripts/ai-export-synthetic.mjs --write --sheet-id=<測試 Sheet ID>
    ```
+   （預設不含專案；要測 `AI_Projects` 分頁的版面可加 `--with-projects`，仍是合成資料。）
    然後在 ChatGPT 連接 Drive，問它：「先檢查 AI_Sync_Status 與各分頁 snapshotId，再回報本週到期與逾期數」，核對數字與腳本輸出的 stats 相同。
 4. **（核准後）部署函式、指向測試 Sheet、`AI_EXPORT_ANONYMIZE=true`**：驗證服務帳戶權杖能呼叫 Sheets API、排程能觸發、筆數與正式系統（需求總表）相符。
 5. **（核准後）切換到正式 Sheet，仍維持匿名**，與正式系統核對逾期件數與各狀態數。
@@ -147,7 +156,7 @@ gcloud auth application-default login --impersonate-service-account=ai-sheet-syn
 - [ ] Blaze 方案確認；Sheets API 已啟用
 - [ ] 服務帳戶 `ai-sheet-sync` 已建立、**沒有金鑰**，角色只有 Datastore 檢視者 + 記錄寫入者
 - [ ] `AI_EXPORT_HMAC_KEY` 已存入 Secret Manager；Cloud Functions 的該函式執行身分有 `secretAccessor`（`AI_EXPORT_HMAC_KEY`、`SMTP_PASS`）
-- [ ] `functions/.env.team-scheduler-dc7ce` 已設定 `AI_EXPORT_SHEET_ID=<測試 Sheet ID>`、`AI_EXPORT_ANONYMIZE=true`（此檔已被 `.gitignore` 排除，不要 commit）
+- [ ] `functions/.env.team-scheduler-dc7ce` 已設定 `AI_EXPORT_SHEET_ID=<測試 Sheet ID>`、`AI_EXPORT_ANONYMIZE=true`、`AI_EXPORT_INCLUDE_PROJECTS=false`（此檔已被 `.gitignore` 排除，不要 commit）
 - [ ] Sheet 共用：一般存取「受限」；只有服務帳戶（編輯者）與指定檢視者；未開「知道連結者」
 - [ ] 用未登入狀態開 `https://docs.google.com/spreadsheets/d/<ID>/export?format=csv` 與 `.../gviz/tq?tqx=out:csv`，**必須要求登入或回 403**
 - [ ] 用一個「沒被分享」的 Google 帳戶開 Sheet，**必須被擋**

@@ -210,11 +210,11 @@ async function ensureLayout(sheets, snapshot) {
 // ───────────────────────── 整合：讀 Firestore → 建快照 → 寫 Sheet ─────────────────────────
 // db、sheets 都由外部注入。失敗時(任何階段)會盡力把狀態寫成 FAILED，並把錯誤往外丟，
 // 由呼叫端(排程函式)決定寄通知信。
-export async function runAiExport({ db, sheets, hmacKey, anonymize = true, now = new Date() }) {
+export async function runAiExport({ db, sheets, hmacKey, anonymize = true, includeProjects = false, now = new Date() }) {
   let snapshot
   try {
-    const source = await collectSourceData(db, { now })
-    snapshot = buildSnapshot({ ...source, now, hmacKey, anonymize })
+    const source = await collectSourceData(db, { now, includeProjects })
+    snapshot = buildSnapshot({ ...source, now, hmacKey, anonymize, includeProjects })
   } catch (e) {
     // 還沒碰任何資料：只把狀態分頁標成 FAILED(保留上次成功時間)，讓讀的人知道這一輪沒更新成功
     await markFailed(sheets, { attemptAt: now.toISOString(), error: e, fallbackClass: 'SOURCE' })

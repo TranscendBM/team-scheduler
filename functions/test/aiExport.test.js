@@ -8,7 +8,8 @@ import {
 import { findOverdueRequests } from '../index.js'
 import { KEY, NOW, TODAY, SENTINELS, users, people, requests, projects, EXPECTED } from './helpers/aiExportFixtures.js'
 
-const build = (over = {}) => buildSnapshot({ requests, projects, users, people, now: NOW, hmacKey: KEY, anonymize: true, ...over })
+// 預設開啟專案以便測試專案相關邏輯；第一階段的實際預設(關閉)另有專門測試
+const build = (over = {}) => buildSnapshot({ requests, projects, users, people, now: NOW, hmacKey: KEY, anonymize: true, includeProjects: true, ...over })
 const allText = (snap) => JSON.stringify(snap.tabs)
 const reqRow = (snap, docId) => snap.tabs[TAB.REQUESTS].find((r) => r[0] === itemCode('R', docId, KEY))
 
@@ -143,7 +144,7 @@ test('匿名模式：需求/專案名稱是代碼；非匿名模式才輸出清�
 test('代號：同一個人在需求與專案是同一個代號(透過公司信箱對應)、穩定、格式正確、不同密鑰不同代號', () => {
   const a = build(), b = build()
   const d1 = personCode('d1@example.com', KEY, 'designer')
-  assert.match(d1, /^D-[0-9a-f]{6}$/)
+  assert.match(d1, /^D-[0-9a-f]{8}$/)
   assert.equal(personCode('  D1@Example.com ', KEY, 'designer'), d1) // 大小寫與空白不影響
   assert.equal(reqRow(a, 'reqDocIdAAAA0001')[0], reqRow(b, 'reqDocIdAAAA0001')[0]) // 跨次執行穩定
   assert.notEqual(a.snapshotId, b.snapshotId)
@@ -159,6 +160,27 @@ test('專案：不輸出預算、地點、備註、辦公室；太舊的專案�
   const text = JSON.stringify(snap.tabs[TAB.PROJECTS])
   assert.ok(!/SECRET/.test(text))
   assert.equal(snap.tabs[TAB.PROJECTS][2][8], 'UPCOMING')
+})
+
+test('代號固定向量：演算法或格式一旦改變就會失敗(代號是對外契約，改動要升 SCHEMA_VERSION)', () => {
+  // 期待值由 openssl 獨立算出：printf 'person:golden@example.com' | openssl dgst -sha256 -hmac '<key>'，取前 8 碼
+  const k = 'golden-test-key-0123456789abcdef'
+  assert.equal(personCode('golden@example.com', k, 'designer'), 'D-16aa93ee')
+  assert.equal(personCode('  Golden@Example.COM ', k, 'planner'), 'P-16aa93ee') // 正規化後本體相同，只有角色前綴不同
+  assert.equal(itemCode('R', 'doc123', k), 'R-f2d997b511')
+  assert.equal(itemCode('J', 'doc123', k), 'J-70032a4b39')
+})
+
+test('第一階段預設不含專案：AI_Projects 只有表頭、不處理任何專案資料、README 與摘要明示停用', () => {
+  const snap = buildSnapshot({ requests, projects, users, people, now: NOW, hmacKey: KEY }) // 不傳 includeProjects
+  assert.equal(snap.counts.projects, 0)
+  assert.equal(snap.tabs[TAB.PROJECTS].length, 2) // #META + 表頭
+  const text = JSON.stringify(snap.tabs)
+  assert.ok(!text.includes('UPCOMING') && !/J-[0-9a-f]{10}/.test(text))
+  assert.ok(text.includes('AI_Projects 目前停用'))
+  const summary = snap.tabs[TAB.SUMMARY].find((r) => r[1] === 'projectsIncluded')
+  assert.equal(summary[2], false)
+  assert.equal(build().counts.projects, 1) // 明確開啟才會處理
 })
 
 test('密鑰太短或缺少：直接拒絕，不會用空密鑰算出可預測代號', () => {

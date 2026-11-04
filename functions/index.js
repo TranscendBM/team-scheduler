@@ -1453,10 +1453,12 @@ export const updateExchangeRates = onSchedule(
 //   secret  AI_EXPORT_HMAC_KEY  firebase functions:secrets:set AI_EXPORT_HMAC_KEY (至少 32 字元的隨機字串)
 //   param   AI_EXPORT_SHEET_ID  目標 Google Sheet 的 ID(放 functions/.env.<projectId>，不放程式碼)
 //   param   AI_EXPORT_ANONYMIZE 預設 true；只有明確設為 false 才輸出真實專案/需求名稱(第一階段必須維持 true)
+//   param   AI_EXPORT_INCLUDE_PROJECTS 預設 false；只有明確設為 true 才讀取並輸出專案(第一階段必須維持 false)
 // 預設值給空字串/true，是為了「沒設定也不會讓其他函式的部署跳出互動式詢問」，缺設定時由函式本身失敗並通知。
 const AI_EXPORT_HMAC_KEY = defineSecret('AI_EXPORT_HMAC_KEY')
 const AI_EXPORT_SHEET_ID = defineString('AI_EXPORT_SHEET_ID', { default: '' })
 const AI_EXPORT_ANONYMIZE = defineString('AI_EXPORT_ANONYMIZE', { default: 'true' })
+const AI_EXPORT_INCLUDE_PROJECTS = defineString('AI_EXPORT_INCLUDE_PROJECTS', { default: 'false' }) // 第一階段維持 false：不讀 projects/people
 const AI_EXPORT_SERVICE_ACCOUNT = 'ai-sheet-sync@team-scheduler-dc7ce.iam.gserviceaccount.com'
 
 // 失敗通知：只寄給主管本人(跟逾期彙整信同一位)，內容只有時間與錯誤類別，不含任何資料
@@ -1494,10 +1496,12 @@ export const aiExportToSheet = onSchedule(
   async () => {
     // 只有明確寫 'false' 才輸出真實名稱；任何其他值(含打錯字)一律維持匿名，往安全的方向失敗
     const anonymize = AI_EXPORT_ANONYMIZE.value().trim().toLowerCase() !== 'false'
+    // 同樣往安全方向：只有明確寫 'true' 才處理專案資料
+    const includeProjects = AI_EXPORT_INCLUDE_PROJECTS.value().trim().toLowerCase() === 'true'
     try {
       const sheets = await createSheetsClient(AI_EXPORT_SHEET_ID.value().trim())
-      const res = await runAiExport({ db, sheets, hmacKey: AI_EXPORT_HMAC_KEY.value(), anonymize, now: new Date() })
-      logger.info('AI 資料表同步完成', { snapshotId: res.snapshotId, ...res.counts, anonymize })
+      const res = await runAiExport({ db, sheets, hmacKey: AI_EXPORT_HMAC_KEY.value(), anonymize, includeProjects, now: new Date() })
+      logger.info('AI 資料表同步完成', { snapshotId: res.snapshotId, ...res.counts, anonymize, includeProjects })
     } catch (e) {
       // 日誌只記錄錯誤類別與訊息(訊息由我們自己的程式產生，不含資料內容)
       logger.error('AI 資料表同步失敗', { errorClass: e?.errorClass || classifyError(e), message: e?.message })

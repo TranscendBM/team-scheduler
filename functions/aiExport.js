@@ -88,12 +88,14 @@ const normEmail = (e) => String(e || '').trim().toLowerCase()
 
 const ROLE_PREFIX = { designer: 'D', planner: 'P', manager: 'M' }
 // 同一個 email 永遠算出同一個代號(密鑰不變的前提下)；不寫入任何地方、不輸出對照表。
-// 前綴只表示角色(D 設計師 / P Planner / M 主管 / U 未知)，本體 6 碼取自 HMAC。
+// 前綴只表示角色(D 設計師 / P Planner / M 主管 / U 未知)，本體 8 碼(32 bit)取自 HMAC。
+// ⚠️ 代號格式與演算法是「對外契約」：改動會讓所有代號一夜之間改變，任何變更都要升 SCHEMA_VERSION，
+//    並由 test/aiExport.test.js 的固定向量測試把關。
 export function personCode(email, key, role) {
   assertKey(key)
   const e = normEmail(email)
   if (!e) return ''
-  return `${ROLE_PREFIX[role] || 'U'}-${hmacHex(key, `person:${e}`).slice(0, 6)}`
+  return `${ROLE_PREFIX[role] || 'U'}-${hmacHex(key, `person:${e}`).slice(0, 8)}`
 }
 export function itemCode(kind, id, key) {
   assertKey(key)
@@ -132,9 +134,10 @@ function resolveAssigneeRole(email, userByLogin) {
  * @param {Date}  input.now
  * @param {string} input.hmacKey
  * @param {boolean} input.anonymize  true = 專案/需求名稱以代碼取代(第一階段預設)
+ * @param {boolean} [input.includeProjects] 第一階段預設 false：AI_Projects 只輸出表頭、不處理任何專案資料
  * @param {string} [input.snapshotId]
  */
-export function buildSnapshot({ requests, projects, users, people, now, hmacKey, anonymize = true, snapshotId }) {
+export function buildSnapshot({ requests, projects, users, people, now, hmacKey, anonymize = true, includeProjects = false, snapshotId }) {
   assertKey(hmacKey)
   const todayStr = taipeiDateStr(now)
   const week = weekRange(todayStr)
@@ -224,7 +227,7 @@ export function buildSnapshot({ requests, projects, users, people, now, hmacKey,
   // ── 專案 ──
   const projRows = []
   const seenProj = new Set()
-  for (const p of projects || []) {
+  for (const p of (includeProjects ? projects : []) || []) {
     if (!p) continue
     const startDate = dateStrOf(p.startDate)
     const endDate = dateStrOf(p.endDate)
@@ -266,7 +269,7 @@ export function buildSnapshot({ requests, projects, users, people, now, hmacKey,
   const workload = computeWorkload(reqRows)
   const risks = pickRisks(reqRows, todayStr)
 
-  const meta = { snapshotId: snapId, schemaVersion: SCHEMA_VERSION, generatedAt, todayStr, week, anonymize, invalidDueDate }
+  const meta = { snapshotId: snapId, schemaVersion: SCHEMA_VERSION, generatedAt, todayStr, week, anonymize, invalidDueDate, includeProjects }
   const tabs = {
     [TAB.README]: withMeta(readmeRows(meta), meta),
     [TAB.SUMMARY]: withMeta(summaryRows({ meta, stats, workload, risks }), meta),
@@ -418,6 +421,7 @@ function summaryRows({ meta, stats, workload, risks }) {
   kv('todayTaipei', meta.todayStr, '所有日期判斷以台灣時間為準')
   kv('weekMonToSun', `${meta.week.start}..${meta.week.end}`, '本週定義：週一至週日')
   kv('anonymized', meta.anonymize, 'true = 需求/專案名稱已以代碼取代')
+  kv('projectsIncluded', meta.includeProjects, 'false = AI_Projects 為空表(第一階段停用)，請勿根據它推論專案資訊')
   kv('scope', `開放中需求全部 + 近 ${RETENTION_DAYS} 天內結案/駁回`, '更早的已結案/已駁回不在此表，總數不等於系統內歷史總數')
   const m = (metric, value, def = '') => rows.push(['COUNTS', metric, value, def])
   m('totalRequestsInScope', S.total, '範圍內需求總數 = 下列六個狀態加總')
@@ -457,7 +461,7 @@ function readmeRows(meta) {
     ['⚠️ 讀資料前先檢查：AI_Sync_Status 的 status 必須是 OK，且 snapshotId 與 AI_Daily_Summary、AI_Requests、AI_Projects 第一列 #META 的 snapshotId 完全相同，'
       + 'schemaVersion 一致，lastSuccessAt 距今不超過 26 小時。任何一項不符，請先告知使用者「資料可能過期或不完整」，不要直接分析。'],
     ['資料每日台灣時間 07:45 更新一次。所有日期為台灣時間 yyyy-mm-dd。'],
-    ['名稱與負責人已去識別化：reqCode / projCode 是穩定代碼，負責人是 D-xxxxxx(設計師)、P-xxxxxx(Planner)。代碼不能還原為真實姓名或 email。'],
+    ['名稱與負責人已去識別化：reqCode / projCode 是穩定代碼，負責人是 D-xxxxxxxx(設計師)、P-xxxxxxxx(Planner)。代碼不能還原為真實姓名或 email。'],
     ['不含：email、附件、分享連結、需求內容、備註、預算、休假與外出。請勿要求或推測這些資料。'],
     ['需求狀態：pending 待審核 → assigned 已發稿 → in_progress 設計中 → reviewing 設計確認中 → completed 已結案；rejected 已駁回。'],
     ['進行中 = assigned + in_progress。逾期 = 進行中且交期 < 今天(交期當天不算)。本週到期 = 進行中且今天 ≤ 交期 ≤ 本週日(週一至週日)。'],
@@ -466,6 +470,7 @@ function readmeRows(meta) {
     ['每位負責人的工作量：共同指派的需求每人各算一次，所以每人數字加總會大於需求總數，請以總數為準。'],
     ['風險前三名只是依固定規則算出的「候選」，不是結論；請搭配 AI_Requests 自行判斷。'],
     ['分頁：AI_Daily_Summary(彙總與風險候選)、AI_Requests(每筆需求)、AI_Projects(秀展/設計專案)、AI_Sync_Status(同步狀態)。'],
+    meta.includeProjects ? ['AI_Projects 已啟用。'] : ['AI_Projects 目前停用：只有表頭、沒有資料，這代表「沒有匯出」，不代表「沒有專案」。'],
   ]
 }
 
