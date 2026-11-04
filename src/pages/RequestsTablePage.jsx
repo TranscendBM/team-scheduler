@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { collection, query, where, onSnapshot, doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore'
+import { getDoc, collection, query, where, onSnapshot, doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationsContext'
@@ -8,6 +8,7 @@ import { STATUS, statusMeta, STATUS_TIMESTAMP } from '../utils/requestConstants'
 import { getRequestAction, groupByDesigner, overdueDays } from '../utils/requestActions'
 import RequestDetailModal from '../components/RequestDetailModal'
 import CountBadge from '../components/CountBadge'
+import SelfRequestModal from '../components/SelfRequestModal'
 
 const shortEmail = (e) => (e || '—').split('@')[0]
 const submitterName = (r) => r.submittedByName || shortEmail(r.submittedBy)
@@ -35,6 +36,8 @@ export default function RequestsTablePage() {
   const [sort, setSort] = useState('due-asc')
   const [modalDeleteConfirm, setModalDeleteConfirm] = useState(false)
   const [doneOpen, setDoneOpen] = useState(false)   // 已結案區塊預設收起
+  const [selfModal, setSelfModal] = useState(null)   // null=關閉；{request:null}=新增；{request}=編輯自己自建的工作
+  const [myDesignerName, setMyDesignerName] = useState('')   // 自建工作要存的設計師顯示名稱(users.displayName，跟審核指派時存的一致)
   // 本地時區的今天(yyyy-mm-dd)，用來判斷逾期；不能用 toISOString(UTC，接近午夜會差一天)
   const [today] = useState(() => {
     const n = new Date()
@@ -56,6 +59,14 @@ export default function RequestsTablePage() {
     const unsub = onSnapshot(q, snap => setRows(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
     return () => { unsub(); setRows([]) }
   }, [role, email, regions, canReview])
+
+  // 設計師自行新增工作時要帶自己的顯示名稱；分組/篩選都靠這個名稱對得上 DESIGNER_ORDER
+  useEffect(() => {
+    if (role !== 'designer' || !email) return
+    getDoc(doc(db, 'users', email))
+      .then(snap => setMyDesignerName(snap.exists() ? (snap.data().displayName || '') : ''))
+      .catch(() => setMyDesignerName(''))
+  }, [role, email])
 
   const noRegion = role === 'planner' && !canReview && (!regions || regions.length === 0)
 
@@ -86,6 +97,9 @@ export default function RequestsTablePage() {
     } catch (e) { alert('刪除失敗：' + (e.code || e.message)) }
     setBusy(null)
   }
+
+  // 設計師自己登記的工作(selfCreated)：建立者本人可以編輯/刪除，跟 firestore.rules isSelfCreatedOwner 一致
+  const ownSelfCreated = (r) => role === 'designer' && !!r?.selfCreated && r.submittedBy === email
 
   const openDetail = useCallback((r) => {
     setDetail(r)
@@ -181,6 +195,10 @@ export default function RequestsTablePage() {
                 逾期 {lateDays} 天
               </span>
             )}
+            {r.selfCreated && (
+              <span title="設計師自行新增，沒有經過提交審核"
+                className="inline-block text-[10px] font-medium bg-indigo-100 text-indigo-700 rounded px-1 py-0.5 mr-1.5 align-middle leading-none">自建</span>
+            )}
             {r.urgent && !faded && <span className="text-red-500 mr-1">🔥</span>}
             {r.projectName || r.title}
           </div>
@@ -245,11 +263,19 @@ export default function RequestsTablePage() {
 
   return (
     <div className="p-8 max-w-6xl mx-auto">
-      <h1 className="text-2xl font-bold text-gray-800 mb-1">需求總表</h1>
+      <div className="flex items-start justify-between gap-4 mb-1">
+        <h1 className="text-2xl font-bold text-gray-800">需求總表</h1>
+        {role === 'designer' && (
+          <button onClick={() => setSelfModal({ request: null })}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors shrink-0">
+            + 新增工作
+          </button>
+        )}
+      </div>
       <p className="text-sm text-gray-500 mb-5">
         {role === 'manager' && '全部需求一覽,點擊任一列查看完整內容'}
         {role !== 'manager' && canReview && '你目前是臨時審核代理人,這裡顯示全部設計師的需求'}
-        {role === 'designer' && !canReview && '指派給你的需求,可調整進度'}
+        {role === 'designer' && !canReview && '指派給你的需求,可調整進度;窗口直接寄給你的工作可按右上角「新增工作」自行登記'}
         {role === 'planner' && !canReview && `你負責區域(${(regions || []).join('、') || '未設定'})的需求,可勾選結案`}
       </p>
 
@@ -344,10 +370,16 @@ export default function RequestsTablePage() {
         </>
       )}
 
+      {selfModal && (
+        <SelfRequestModal request={selfModal.request} email={email}
+          designerName={myDesignerName || email.split('@')[0]}
+          onClose={() => setSelfModal(null)} />
+      )}
+
       <RequestDetailModal
         r={detail ? rows.find(x => x.id === detail.id) || detail : null}
         onClose={() => setDetail(null)}
-        actions={role === 'manager' && detail ? (
+        actions={detail && (role === 'manager' || ownSelfCreated(detail)) ? (
           modalDeleteConfirm ? (
             <>
               <button onClick={() => handleDelete(detail)} disabled={busy === detail.id}
@@ -358,10 +390,18 @@ export default function RequestsTablePage() {
                 className="px-4 py-2 text-sm text-gray-500 hover:bg-gray-100 rounded-lg">取消</button>
             </>
           ) : (
-            <button onClick={() => setModalDeleteConfirm(true)}
-              className="text-sm text-red-500 hover:text-red-700 px-4 py-2 rounded-lg hover:bg-red-50">
-              🗑 刪除此需求
-            </button>
+            <>
+              {ownSelfCreated(detail) && (
+                <button onClick={() => { setSelfModal({ request: rows.find(x => x.id === detail.id) || detail }); setDetail(null) }}
+                  className="bg-blue-600 text-white text-sm px-4 py-2 rounded-lg hover:bg-blue-700">
+                  ✎ 編輯
+                </button>
+              )}
+              <button onClick={() => setModalDeleteConfirm(true)}
+                className="text-sm text-red-500 hover:text-red-700 px-4 py-2 rounded-lg hover:bg-red-50">
+                🗑 刪除此需求
+              </button>
+            </>
           )
         ) : null}
       />

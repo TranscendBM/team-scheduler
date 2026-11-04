@@ -184,6 +184,39 @@ service cloud.firestore {
         && d.createdAt == request.time;
     }
 
+    // 設計師自行新增工作(窗口直接寄信給設計師時，設計師自己把工作登記進系統，繞過提交→審核→指派)。
+    // 只允許「建給自己」：角色必須是 designer、狀態直接是 in_progress(startedAt 蓋當下時間)、
+    // 指派名單只有自己、沒有附件，並標記 selfCreated 讓主管看得出來這筆沒走審核。
+    // 同樣用「剛好 15 個 key」取代 hasOnly() 控制運算式預算(理由見 isValidRequestCreate)。
+    function isValidSelfCreate() {
+      let d = request.resource.data;
+      return role() == 'designer'
+        && d.keys().size() == 15
+        && d.selfCreated == true
+        && d.status == 'in_progress'
+        && d.startedAt == request.time
+        && d.createdAt == request.time
+        && d.submittedBy == email()
+        && d.submittedByName is string
+        && d.assignedDesigners == [email()]
+        && d.assignedDesignersNames is list && d.assignedDesignersNames.size() == 1
+        && d.assignedDesignersNames[0] is string
+        && d.projectName is string && d.projectName.size() > 0 && d.projectName.size() <= 200
+        && d.region is string && d.region.size() > 0
+        && d.docTypes is list
+        && d.dueDate is string
+        && d.description is string
+        && d.urgent is bool
+        && d.attachments == [];
+    }
+
+    // 設計師自己建的工作(selfCreated)：建立者本人可以改內容、刪掉(登記錯了要能更正)
+    function isSelfCreatedOwner() {
+      return whitelisted()
+        && resource.data.get('selfCreated', false) == true
+        && resource.data.submittedBy == email();
+    }
+
     // 使用者名單：自己可讀自己那筆（登入時查角色用）；主管可讀寫全部
     match /users/{uid} {
       // 臨時審核代理人也要能讀全表：ReviewPage 的設計師/Planner 指派清單來自 users collection
@@ -199,7 +232,7 @@ service cloud.firestore {
         || (whitelisted() && email() in resource.data.get('assignedDesigners', []))      // designer 看指派給自己的
         || (whitelisted() && resource.data.region in myRegions());                       // planner 看負責區域的
 
-      allow create: if whitelisted() && isValidRequestCreate(id);
+      allow create: if whitelisted() && (isValidRequestCreate(id) || isValidSelfCreate());
 
       allow update: if
           // manager 或臨時審核代理人：核准 / 駁回，且 status 必須落在既定 enum 內
@@ -218,6 +251,15 @@ service cloud.firestore {
               && request.resource.data.status == 'completed'
               && changedOnly(['status', 'completedAt'])
               && request.resource.data.completedAt == request.time)
+          // 設計師自建的工作：本人可修改內容欄位(不可動狀態/指派/提交人)，並驗證型別
+          || (isSelfCreatedOwner()
+              && changedOnly(['urgent', 'region', 'projectName', 'docTypes', 'dueDate', 'description'])
+              && request.resource.data.projectName is string && request.resource.data.projectName.size() > 0
+              && request.resource.data.region is string && request.resource.data.region.size() > 0
+              && request.resource.data.docTypes is list
+              && request.resource.data.dueDate is string
+              && request.resource.data.description is string
+              && request.resource.data.urgent is bool)
           // 提交人：需求仍在待審核時可編輯內容（不可改狀態/提交人），並驗證型別
           || (whitelisted()
               && resource.data.submittedBy == email()
@@ -236,6 +278,7 @@ service cloud.firestore {
       // 這個文件唯一可能的狀態(還沒成功寫過任何附件)，同時擋掉刪除「已經有附件、已審核、
       // 或別人送出」的需求 —— 這些情況一律只有 manager 能刪。
       allow delete: if isManager()
+        || isSelfCreatedOwner()
         || (whitelisted()
             && resource.data.submittedBy == email()
             && resource.data.status == 'pending'

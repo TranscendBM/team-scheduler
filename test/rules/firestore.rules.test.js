@@ -606,6 +606,65 @@ describe('臨時審核代理人（settings/reviewDelegation）', () => {
   })
 })
 
+describe('requests — 設計師自行新增工作(selfCreated，繞過審核指派)', () => {
+  const selfDoc = (email, over = {}) => ({
+    projectName: 'LA_Test_Banner', region: 'HQ', docTypes: ['Banner'], dueDate: '2026-12-01',
+    description: '', urgent: false, attachments: [],
+    submittedBy: email, submittedByName: 'Designer', status: 'in_progress',
+    createdAt: serverTimestamp(), startedAt: serverTimestamp(),
+    assignedDesigners: [email], assignedDesignersNames: ['Designer'], selfCreated: true,
+    ...over,
+  })
+
+  it('設計師可以建立「指派給自己」的進行中工作', async () => {
+    await assertSucceeds(addDoc(collection(dbAs(DESIGNER_A), 'requests'), selfDoc(DESIGNER_A)))
+  })
+
+  it('不能把自建工作指派給別人', async () => {
+    await assertFails(addDoc(collection(dbAs(DESIGNER_A), 'requests'),
+      selfDoc(DESIGNER_A, { assignedDesigners: [DESIGNER_B] })))
+    await assertFails(addDoc(collection(dbAs(DESIGNER_A), 'requests'),
+      selfDoc(DESIGNER_A, { assignedDesigners: [DESIGNER_A, DESIGNER_B], assignedDesignersNames: ['A', 'B'] })))
+  })
+
+  it('不能冒用別人當提交人，也不能直接建成已結案或夾帶多餘欄位/附件', async () => {
+    await assertFails(addDoc(collection(dbAs(DESIGNER_A), 'requests'), selfDoc(DESIGNER_A, { submittedBy: DESIGNER_B })))
+    await assertFails(addDoc(collection(dbAs(DESIGNER_A), 'requests'), selfDoc(DESIGNER_A, { status: 'completed' })))
+    await assertFails(addDoc(collection(dbAs(DESIGNER_A), 'requests'), selfDoc(DESIGNER_A, { extra: 1 })))
+    await assertFails(addDoc(collection(dbAs(DESIGNER_A), 'requests'),
+      selfDoc(DESIGNER_A, { attachments: [{ name: 'a', url: 'https://x', size: 1 }] })))
+  })
+
+  it('planner 不能用自建路徑繞過審核(只有 designer 可以)', async () => {
+    await assertFails(addDoc(collection(dbAs(PLANNER_SD1), 'requests'), selfDoc(PLANNER_SD1)))
+  })
+
+  it('建立者本人可以改內容，但不能改指派/狀態以外的欄位', async () => {
+    await seedRequest('s1', { ...selfDoc(DESIGNER_A, { createdAt: new Date(), startedAt: new Date() }) })
+    await assertSucceeds(updateDoc(doc(dbAs(DESIGNER_A), 'requests', 's1'), { projectName: 'LA_Renamed', dueDate: '2026-12-15' }))
+    await assertFails(updateDoc(doc(dbAs(DESIGNER_A), 'requests', 's1'), { assignedDesigners: [DESIGNER_B] }))
+    await assertFails(updateDoc(doc(dbAs(DESIGNER_A), 'requests', 's1'), { selfCreated: false }))
+  })
+
+  it('別的設計師不能改或刪別人的自建工作，建立者本人可以刪', async () => {
+    await seedRequest('s2', { ...selfDoc(DESIGNER_A, { createdAt: new Date(), startedAt: new Date() }) })
+    await assertFails(updateDoc(doc(dbAs(DESIGNER_B), 'requests', 's2'), { projectName: 'hack' }))
+    await assertFails(deleteDoc(doc(dbAs(DESIGNER_B), 'requests', 's2')))
+    await assertSucceeds(deleteDoc(doc(dbAs(DESIGNER_A), 'requests', 's2')))
+  })
+
+  it('一般(非自建)被指派的需求，設計師仍然不能刪也不能改內容', async () => {
+    await seedRequest('n1', { submittedBy: PLANNER_SD1, region: 'SD1', status: 'assigned', projectName: 'x', assignedDesigners: [DESIGNER_A] })
+    await assertFails(deleteDoc(doc(dbAs(DESIGNER_A), 'requests', 'n1')))
+    await assertFails(updateDoc(doc(dbAs(DESIGNER_A), 'requests', 'n1'), { projectName: 'y' }))
+  })
+
+  it('自建工作仍可走設計師狀態機單步推進(設計中→確認中)', async () => {
+    await seedRequest('s3', { ...selfDoc(DESIGNER_A, { createdAt: new Date(), startedAt: new Date() }) })
+    await assertSucceeds(updateDoc(doc(dbAs(DESIGNER_A), 'requests', 's3'), { status: 'reviewing', reviewingAt: serverTimestamp() }))
+  })
+})
+
 describe('newProducts — 白名單可讀、manager/planner 可新增修改、僅 manager 可刪', () => {
   const seed = async () => {
     await testEnv.withSecurityRulesDisabled(async (ctx) => {

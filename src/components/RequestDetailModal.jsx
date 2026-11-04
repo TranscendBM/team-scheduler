@@ -54,6 +54,7 @@ export default function RequestDetailModal({ r, onClose, actions, shareable = tr
           <Row label="地區">{r.region}</Row>
           <Row label="稿件類型">{(r.docTypes || []).join('、')}</Row>
           <Row label="交期">{r.dueDate}</Row>
+          <Row label="來源">{r.selfCreated ? '設計師自行新增（未經提交審核）' : null}</Row>
           <Row label="需求簡述">{r.description ? <Linkify text={r.description} /> : null}</Row>
           <Row label="附件">{r.attachments?.length > 0 ? <Attachments items={r.attachments} requestId={r.id} /> : null}</Row>
           <Row label="指派設計師">{(r.assignedDesignersNames?.length ? r.assignedDesignersNames : (r.assignedDesigners || [])).join('、') || null}</Row>
