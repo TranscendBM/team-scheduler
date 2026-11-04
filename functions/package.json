@@ -8,12 +8,13 @@
   "main": "index.js",
   "scripts": {
     "lint": "node --check index.js",
-    "test": "node --test test/buildHtml.test.js test/previewFile.test.js test/notifications.test.js test/leaveReminder.test.js test/outingReminder.test.js test/overdueReminder.test.js test/tradeshowSheetSync.test.js",
-    "test:integration": "node --test --test-concurrency=1 test/renameUserLogin.test.js test/resolveActivePlannerCcEmails.test.js test/shareLink.test.js"
+    "test": "node --test test/buildHtml.test.js test/previewFile.test.js test/notifications.test.js test/leaveReminder.test.js test/outingReminder.test.js test/overdueReminder.test.js test/tradeshowSheetSync.test.js test/aiExport.test.js test/aiExportSync.test.js",
+    "test:integration": "node --test --test-concurrency=1 test/renameUserLogin.test.js test/resolveActivePlannerCcEmails.test.js test/shareLink.test.js test/aiExportSource.test.js"
   },
   "dependencies": {
     "firebase-admin": "^14.2.0",
     "firebase-functions": "^7.3.0",
+    "google-auth-library": "^9.15.1",
     "nodemailer": "^9.0.3"
   },
   "overrides": {

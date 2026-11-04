@@ -47,13 +47,14 @@ const rulesStatus = run(
 // 執行多個測試檔，這幾份檔案的 clear/seed 互相打架會造成間歇性失敗，所以這裡強制
 // --test-concurrency=1，確保測試檔依序執行、不平行清資料。
 const integrationStatus = run(
-  'renameUserLogin + resolveActivePlannerCcEmails + shareLink 整合測試',
+  'renameUserLogin + resolveActivePlannerCcEmails + shareLink + aiExportSource 整合測試',
   [
     '--test',
     '--test-concurrency=1',
     'functions/test/renameUserLogin.test.js',
     'functions/test/resolveActivePlannerCcEmails.test.js',
     'functions/test/shareLink.test.js',
+    'functions/test/aiExportSource.test.js',
   ]
 )
 

@@ -9,3 +9,5 @@ secrets/
 *service-account*.json
 .env
 .env.local
+.env.*
+!.env.example

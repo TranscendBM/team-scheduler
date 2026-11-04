@@ -2,12 +2,13 @@ import { randomUUID } from 'node:crypto'
 import { onDocumentUpdated, onDocumentDeleted } from 'firebase-functions/v2/firestore'
 import { onSchedule } from 'firebase-functions/v2/scheduler'
 import { onRequest, onCall, HttpsError } from 'firebase-functions/v2/https'
-import { defineSecret } from 'firebase-functions/params'
+import { defineSecret, defineString } from 'firebase-functions/params'
 import * as logger from 'firebase-functions/logger'
 import { initializeApp } from 'firebase-admin/app'
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'
 import { getStorage } from 'firebase-admin/storage'
 import { createMailer } from './mailer.cjs'
+import { runAiExport, createSheetsClient, classifyError } from './aiExportSync.js'
 
 const STORAGE_BUCKET = 'team-scheduler-dc7ce.firebasestorage.app'
 initializeApp({ storageBucket: STORAGE_BUCKET })
@@ -1434,5 +1435,74 @@ export const updateExchangeRates = onSchedule(
       updatedAt: new Date().toISOString(),
     })
     logger.info('匯率更新完成', { date: data.date })
+  }
+)
+
+// ── AI 專案管理資料表(Firestore → 私人 Google Sheet → ChatGPT 讀取) ────────────────
+// 每天 07:45(台灣時間)把 requests / projects 去識別化、彙總後寫進一份「私人」Google Sheet。
+// 設計重點與口徑見 docs/ai-sheet-export.md；純函式在 aiExport.js，寫入與失敗保護在 aiExportSync.js。
+//
+// 安全與最小權限：
+// - 用專用服務帳戶 ai-sheet-sync 當執行身分(只需 Firestore 讀取 roles/datastore.viewer、
+//   兩個 secret 的 secretAccessor)；Sheet 只分享給這個服務帳戶(編輯者)與指定檢視者，不開連結分享。
+// - 不使用任何服務帳戶金鑰：Sheets 權杖由執行環境的中繼資料伺服器簽發。
+// - 這支函式「只讀」Firestore，不寫任何文件；HMAC 代號無狀態，沒有對照表。
+// - 部署前的設定(secret、Sheet ID、服務帳戶)沒做完時，這支函式會部署失敗或同步失敗，不會影響其他函式。
+//
+// 設定值：
+//   secret  AI_EXPORT_HMAC_KEY  firebase functions:secrets:set AI_EXPORT_HMAC_KEY (至少 32 字元的隨機字串)
+//   param   AI_EXPORT_SHEET_ID  目標 Google Sheet 的 ID(放 functions/.env.<projectId>，不放程式碼)
+//   param   AI_EXPORT_ANONYMIZE 預設 true；只有明確設為 false 才輸出真實專案/需求名稱(第一階段必須維持 true)
+// 預設值給空字串/true，是為了「沒設定也不會讓其他函式的部署跳出互動式詢問」，缺設定時由函式本身失敗並通知。
+const AI_EXPORT_HMAC_KEY = defineSecret('AI_EXPORT_HMAC_KEY')
+const AI_EXPORT_SHEET_ID = defineString('AI_EXPORT_SHEET_ID', { default: '' })
+const AI_EXPORT_ANONYMIZE = defineString('AI_EXPORT_ANONYMIZE', { default: 'true' })
+const AI_EXPORT_SERVICE_ACCOUNT = 'ai-sheet-sync@team-scheduler-dc7ce.iam.gserviceaccount.com'
+
+// 失敗通知：只寄給主管本人(跟逾期彙整信同一位)，內容只有時間與錯誤類別，不含任何資料
+async function notifyAiExportFailure(e) {
+  const mailer = getMailer()
+  try {
+    const to = await resolveNotifyEmail(OVERDUE_MANAGER_LOGIN)
+    const cls = e?.errorClass || classifyError(e)
+    await mailer.send({
+      to,
+      subject: `[AI 資料表同步失敗] ${cls}`,
+      html: `<div style="font-family:${FONT};font-size:14px;color:#1f2937">
+        <p>AI 專案管理資料表今天的同步沒有成功，ChatGPT 讀到的資料<b>可能不是最新的</b>(資料表的 AI_Sync_Status 已標示為不可信)。</p>
+        <p>時間：${escapeHtml(new Date().toISOString())}<br/>錯誤類別：${escapeHtml(cls)}</p>
+        <p style="color:#6b7280;font-size:12px">詳細原因請看 Cloud Functions 日誌(函式 aiExportToSheet)。本信不含任何專案資料。</p>
+      </div>`,
+    })
+  } finally {
+    await mailer.close()
+  }
+}
+
+export const aiExportToSheet = onSchedule(
+  {
+    schedule: '45 7 * * *',
+    timeZone: 'Asia/Taipei',
+    region: 'asia-east1',
+    secrets: [AI_EXPORT_HMAC_KEY, SMTP_PASS],
+    serviceAccount: AI_EXPORT_SERVICE_ACCOUNT,
+    timeoutSeconds: 180,
+    memory: '256MiB',
+    maxInstances: 1,
+    retryCount: 0,
+  },
+  async () => {
+    // 只有明確寫 'false' 才輸出真實名稱；任何其他值(含打錯字)一律維持匿名，往安全的方向失敗
+    const anonymize = AI_EXPORT_ANONYMIZE.value().trim().toLowerCase() !== 'false'
+    try {
+      const sheets = await createSheetsClient(AI_EXPORT_SHEET_ID.value().trim())
+      const res = await runAiExport({ db, sheets, hmacKey: AI_EXPORT_HMAC_KEY.value(), anonymize, now: new Date() })
+      logger.info('AI 資料表同步完成', { snapshotId: res.snapshotId, ...res.counts, anonymize })
+    } catch (e) {
+      // 日誌只記錄錯誤類別與訊息(訊息由我們自己的程式產生，不含資料內容)
+      logger.error('AI 資料表同步失敗', { errorClass: e?.errorClass || classifyError(e), message: e?.message })
+      try { await notifyAiExportFailure(e) } catch (mailErr) { logger.error('AI 資料表失敗通知信寄送失敗', { message: mailErr?.message }) }
+      throw e
+    }
   }
 )
