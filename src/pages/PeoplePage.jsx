@@ -36,6 +36,7 @@ export default function PeoplePage() {
   const [managerForm, setManagerForm] = useState(emptyManagerForm)
   const [managerSaving, setManagerSaving] = useState(false)
   const [managerError, setManagerError] = useState('')
+  const [promoteConfirmed, setPromoteConfirmed] = useState(false) // 已看過「此 email 目前是其他角色」的提示，再按一次才改為主管
   const [deleteManagerConfirm, setDeleteManagerConfirm] = useState(null)
 
   useEffect(() => {
@@ -162,6 +163,7 @@ export default function PeoplePage() {
     setEditManagerEmail(null)
     setManagerForm(emptyManagerForm)
     setManagerError('')
+    setPromoteConfirmed(false)
     setShowManagerModal(true)
   }
   function openManagerEdit(u) {
@@ -174,11 +176,21 @@ export default function PeoplePage() {
     if (!isManager) return
     const email = managerForm.email.trim().toLowerCase()
     if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { setManagerError('請輸入有效的 email'); return }
-    if (!editManagerEmail && users.some(u => u.email === email)) { setManagerError('此 email 已存在'); return }
+    // 此 email 在 users 已有帳號：若已是主管就維持擋下；若是其他角色（畫面上的主管區看不到），
+    // 顯示現有角色並讓主管確認後「改為主管」，不再只丟一句看不到對象的「已存在」。
+    const existing = !editManagerEmail && users.find(u => u.email === email)
+    if (existing && !promoteConfirmed) {
+      if (existing.role === 'manager') { setManagerError('此 email 已是主管帳號，請在上方「主管帳號」清單中編輯'); return }
+      const roleLabel = { designer: '設計師', planner: 'Planner' }[existing.role] || (existing.role ? `角色「${existing.role}」` : '未設定角色')
+      setManagerError(`此 email 已存在，目前是「${roleLabel}」帳號${existing.displayName ? `（${existing.displayName}）` : ''}${existing.active === false ? '，已停用' : ''}。若要改為主管，請再按一次「確認改為主管」。`)
+      setPromoteConfirmed(true)
+      return
+    }
     setManagerSaving(true)
     try {
       await setDoc(doc(db, 'users', email), {
-        email, displayName: managerForm.displayName.trim(), notifyEmail: managerForm.notifyEmail.trim().toLowerCase(),
+        email, displayName: managerForm.displayName.trim() || existing?.displayName || '',
+        notifyEmail: managerForm.notifyEmail.trim().toLowerCase() || existing?.notifyEmail || '',
         role: 'manager', active: managerForm.active, regions: [],
       })
       setShowManagerModal(false)
@@ -486,7 +498,7 @@ export default function PeoplePage() {
             </div>
             <div className="px-6 py-5 space-y-3">
               <input type="email" placeholder="登入 Email (Gmail)" value={managerForm.email} disabled={!!editManagerEmail}
-                onChange={e => setManagerForm(f => ({ ...f, email: e.target.value }))}
+                onChange={e => { setManagerForm(f => ({ ...f, email: e.target.value })); setPromoteConfirmed(false); setManagerError('') }}
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm disabled:bg-gray-100" />
               <input type="text" placeholder="顯示名稱" value={managerForm.displayName}
                 onChange={e => setManagerForm(f => ({ ...f, displayName: e.target.value }))}
@@ -504,7 +516,7 @@ export default function PeoplePage() {
               <button onClick={() => setShowManagerModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">取消</button>
               <button onClick={handleManagerSave} disabled={managerSaving}
                 className="px-5 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium">
-                {managerSaving ? '儲存中…' : editManagerEmail ? '更新' : '新增'}
+                {managerSaving ? '儲存中…' : editManagerEmail ? '更新' : promoteConfirmed ? '確認改為主管' : '新增'}
               </button>
             </div>
           </div>
