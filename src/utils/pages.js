@@ -35,6 +35,8 @@ export const PAGES = [
   { key: 'dashboard',   path: '/dashboard',   label: '設計師儀表板', icon: '📈', group: 'requests', fixed: 'manager' },
   // 新品上官網進度追蹤：planner 負責更新進度，所以 planner 預設可見(寫入權限見 firestore.rules newProducts)
   { key: 'new-products', path: '/new-products', label: '新品上官網', icon: '🆕', group: 'website', defaults: { designer: true, planner: true } },
+  // 各產品線(官網分類)由哪位設計師負責；所有人可看，只有 manager 能編輯(見 firestore.rules productLineOwners)
+  { key: 'product-line-owners', path: '/product-line-owners', label: '產品線負責人', icon: '🧑‍🎨', group: 'website', defaults: { designer: true, planner: true } },
   { key: 'calendar',    path: '/calendar',    label: '日曆',     icon: '📅', group: 'schedule', defaults: { designer: true,  planner: false } },
   { key: 'leave',       path: '/leave',       label: '休假預排', icon: '🏖️', group: 'schedule', defaults: { designer: true,  planner: false } },
   { key: 'outings',     path: '/outings',     label: '外出通知', icon: '🚗', group: 'schedule', defaults: { designer: true,  planner: false } },

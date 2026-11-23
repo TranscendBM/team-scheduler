@@ -2,7 +2,7 @@ import { NavLink, Outlet } from 'react-router-dom'
 import {
   Home, BarChart3, TrendingUp, ClipboardList, Target, Users, FilePlus2, FileText,
   FolderOpen, Scale, LineChart, Calendar, Umbrella, Car, Trophy, Settings, PartyPopper,
-  Award, Palette, Shield, PackagePlus,
+  Award, Palette, Shield, PackagePlus, UserCheck,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { usePermissions } from '../contexts/PermissionsContext'
@@ -34,6 +34,7 @@ const NAV_ICONS = {
   leave: Umbrella,
   outings: Car,
   'new-products': PackagePlus,
+  'product-line-owners': UserCheck,
   sponsor: Trophy,
   people: Users,
   settings: Settings,

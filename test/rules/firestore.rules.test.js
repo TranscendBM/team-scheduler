@@ -705,6 +705,76 @@ describe('newProducts — 白名單可讀、manager/planner 可新增修改、�
   })
 })
 
+describe('productLineOwners — 白名單可讀、僅 manager 可寫', () => {
+  const seed = async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'productLineOwners', 'seed'), { line: 'consumer', category: 'usb', sub: '', owners: [] })
+    })
+  }
+
+  it('白名單的 designer、planner 都可讀', async () => {
+    await seed()
+    await assertSucceeds(getDoc(doc(dbAs(DESIGNER_A), 'productLineOwners', 'seed')))
+    await assertSucceeds(getDoc(doc(dbAs(PLANNER_SD1), 'productLineOwners', 'seed')))
+  })
+
+  it('不在白名單、已停用、未登入都不能讀', async () => {
+    await seed()
+    await assertFails(getDoc(doc(dbAs(STRANGER), 'productLineOwners', 'seed')))
+    await assertFails(getDoc(doc(dbAs(DEACTIVATED), 'productLineOwners', 'seed')))
+    await assertFails(getDoc(doc(dbAnon(), 'productLineOwners', 'seed')))
+  })
+
+  it('designer 與 planner 不能新增、修改、刪除', async () => {
+    await seed()
+    for (const who of [DESIGNER_A, PLANNER_SD1]) {
+      await assertFails(setDoc(doc(dbAs(who), 'productLineOwners', 'x'), { owners: [] }))
+      await assertFails(updateDoc(doc(dbAs(who), 'productLineOwners', 'seed'), { confirmed: true }))
+      await assertFails(deleteDoc(doc(dbAs(who), 'productLineOwners', 'seed')))
+    }
+  })
+
+  it('manager 可新增、修改、刪除', async () => {
+    await seed()
+    await assertSucceeds(setDoc(doc(dbAs(MANAGER), 'productLineOwners', 'x'), { owners: [] }))
+    await assertSucceeds(updateDoc(doc(dbAs(MANAGER), 'productLineOwners', 'seed'), { confirmed: true }))
+    await assertSucceeds(deleteDoc(doc(dbAs(MANAGER), 'productLineOwners', 'seed')))
+  })
+})
+
+describe('productLineOwnerHistory — 只增不改，且只能由 manager 以本人身分新增', () => {
+  const seed = async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'productLineOwnerHistory', 'h1'), { rowId: 'r', kind: 'owners', by: MANAGER })
+    })
+  }
+
+  it('白名單可讀；不在白名單不能讀', async () => {
+    await seed()
+    await assertSucceeds(getDoc(doc(dbAs(DESIGNER_A), 'productLineOwnerHistory', 'h1')))
+    await assertFails(getDoc(doc(dbAs(STRANGER), 'productLineOwnerHistory', 'h1')))
+  })
+
+  it('manager 可新增，且 by 必須是自己', async () => {
+    await assertSucceeds(setDoc(doc(dbAs(MANAGER), 'productLineOwnerHistory', 'a'), { rowId: 'r', kind: 'owners', by: MANAGER }))
+    await assertFails(setDoc(doc(dbAs(MANAGER), 'productLineOwnerHistory', 'b'), { rowId: 'r', kind: 'owners', by: DESIGNER_A }))
+    await assertFails(setDoc(doc(dbAs(MANAGER), 'productLineOwnerHistory', 'c'), { rowId: 'r', kind: 'owners' })) // 沒有 by
+  })
+
+  it('designer 與 planner 不能新增', async () => {
+    for (const who of [DESIGNER_A, PLANNER_SD1]) {
+      await assertFails(setDoc(doc(dbAs(who), 'productLineOwnerHistory', 'x'), { rowId: 'r', kind: 'owners', by: who }))
+    }
+  })
+
+  it('任何人(包含 manager)都不能修改或刪除歷史', async () => {
+    await seed()
+    await assertFails(updateDoc(doc(dbAs(MANAGER), 'productLineOwnerHistory', 'h1'), { kind: 'x' }))
+    await assertFails(deleteDoc(doc(dbAs(MANAGER), 'productLineOwnerHistory', 'h1')))
+    await assertFails(deleteDoc(doc(dbAs(DESIGNER_A), 'productLineOwnerHistory', 'h1')))
+  })
+})
+
 describe('projects / people / leaves / settings / hbl* — 讀白名單、寫僅 manager', () => {
   const collections = ['projects', 'people', 'leaves', 'outings', 'hblPayments', 'hblSchedule', 'hblAdStatus']
 

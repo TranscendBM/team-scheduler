@@ -301,6 +301,15 @@ service cloud.firestore {
       allow delete: if isManager();
     }
 
+    // 產品線負責設計師：白名單都能看(planner 要知道設計需求該找誰)，只有 manager 能新增/修改/刪除。
+    // 變更歷史是「只增不改」的紀錄：只能新增，不能改、不能刪，而且 by 必須是寫入者本人(不能代別人留紀錄)。
+    match /productLineOwners/{id} { allow read: if whitelisted(); allow write: if isManager(); }
+    match /productLineOwnerHistory/{id} {
+      allow read: if whitelisted();
+      allow create: if isManager() && request.resource.data.by == email();
+      allow update, delete: if false;
+    }
+
     // settings/permissions 只有 manager 能寫；其餘 settings（里程碑規則、設計類別）也收斂為 manager 可寫
     match /settings/{id} {
       allow read: if whitelisted();
