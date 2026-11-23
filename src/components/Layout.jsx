@@ -2,7 +2,7 @@ import { NavLink, Outlet } from 'react-router-dom'
 import {
   Home, BarChart3, TrendingUp, ClipboardList, Target, Users, FilePlus2, FileText,
   FolderOpen, Scale, LineChart, Calendar, Umbrella, Car, Trophy, Settings, PartyPopper,
-  Award, Palette, Shield, PackagePlus, UserCheck,
+  Award, Palette, Shield, PackagePlus, UserCheck, CalendarClock,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { usePermissions } from '../contexts/PermissionsContext'
@@ -41,6 +41,7 @@ const NAV_ICONS = {
   'projects-event': PartyPopper,
   'projects-award': Award,
   'projects-design': Palette,
+  'projects-rotation': CalendarClock,
 }
 
 // 系統管理頁（固定僅 manager）。使用者管理已併入「人員管理」，不再獨立列出

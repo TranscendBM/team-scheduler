@@ -16,6 +16,7 @@ import LeavePage from './pages/LeavePage'
 import OutingsPage from './pages/OutingsPage'
 import NewProductsPage from './pages/NewProductsPage'
 import ProductLineOwnersPage from './pages/ProductLineOwnersPage'
+import RotationPage from './pages/RotationPage'
 import SponsorPage from './pages/SponsorPage'
 import RequestNewPage from './pages/RequestNewPage'
 import SharedRequestPage from './pages/SharedRequestPage'
@@ -93,6 +94,7 @@ export default function App() {
         <Route path="projects/event" element={<PermRoute pageKey="projects-event"><EventsPage /></PermRoute>} />
         <Route path="projects/award" element={<PermRoute pageKey="projects-award"><AwardsPage /></PermRoute>} />
         <Route path="projects/design" element={<PermRoute pageKey="projects-design"><DesignPage /></PermRoute>} />
+        <Route path="projects/rotation" element={<PermRoute pageKey="projects-rotation"><RotationPage /></PermRoute>} />
         <Route path="people" element={<PermRoute pageKey="people"><PeoplePage /></PermRoute>} />
         <Route path="settings" element={<PermRoute pageKey="settings"><SettingsPage /></PermRoute>} />
         <Route path="leave" element={<PermRoute pageKey="leave"><LeavePage /></PermRoute>} />

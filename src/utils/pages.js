@@ -48,6 +48,8 @@ export const PAGES = [
   { key: 'projects-event',  path: '/projects/event',  label: '活動', icon: '🎉', group: 'projects', defaults: { designer: true, planner: false } },
   { key: 'projects-award',  path: '/projects/award',  label: '報獎', icon: '🏆', group: 'projects', defaults: { designer: true, planner: false } },
   { key: 'projects-design', path: '/projects/design', label: '設計', icon: '🎨', group: 'projects', defaults: { designer: true, planner: false } },
+  // 每月輪值的設計師(Transcend Info / IG / 工控 DM)；設計師可看，只有 manager 能編輯(見 firestore.rules designRotations)
+  { key: 'projects-rotation', path: '/projects/rotation', label: '輪值', icon: '🔄', group: 'projects', defaults: { designer: true, planner: false } },
 ]
 
 export const PAGE_BY_KEY = Object.fromEntries(PAGES.map(p => [p.key, p]))

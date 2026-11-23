@@ -310,6 +310,9 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // 每月輪值設計師(Transcend Info / IG / 工控 DM)：一個月一份文件，白名單可讀、僅 manager 可寫
+    match /designRotations/{id} { allow read: if whitelisted(); allow write: if isManager(); }
+
     // settings/permissions 只有 manager 能寫；其餘 settings（里程碑規則、設計類別）也收斂為 manager 可寫
     match /settings/{id} {
       allow read: if whitelisted();

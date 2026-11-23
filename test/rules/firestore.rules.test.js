@@ -775,6 +775,39 @@ describe('productLineOwnerHistory — 只增不改，且只能由 manager 以本
   })
 })
 
+describe('designRotations — 白名單可讀、僅 manager 可寫', () => {
+  const seed = async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'designRotations', '2026-11'), { month: '2026-11', ig: [] })
+    })
+  }
+
+  it('白名單的 designer、planner 可讀；不在白名單、已停用、未登入不能讀', async () => {
+    await seed()
+    await assertSucceeds(getDoc(doc(dbAs(DESIGNER_A), 'designRotations', '2026-11')))
+    await assertSucceeds(getDoc(doc(dbAs(PLANNER_SD1), 'designRotations', '2026-11')))
+    await assertFails(getDoc(doc(dbAs(STRANGER), 'designRotations', '2026-11')))
+    await assertFails(getDoc(doc(dbAs(DEACTIVATED), 'designRotations', '2026-11')))
+    await assertFails(getDoc(doc(dbAnon(), 'designRotations', '2026-11')))
+  })
+
+  it('designer 與 planner 不能新增、修改、刪除', async () => {
+    await seed()
+    for (const who of [DESIGNER_A, PLANNER_SD1]) {
+      await assertFails(setDoc(doc(dbAs(who), 'designRotations', '2026-12'), { month: '2026-12' }))
+      await assertFails(updateDoc(doc(dbAs(who), 'designRotations', '2026-11'), { ig: [] }))
+      await assertFails(deleteDoc(doc(dbAs(who), 'designRotations', '2026-11')))
+    }
+  })
+
+  it('manager 可新增、修改、刪除', async () => {
+    await seed()
+    await assertSucceeds(setDoc(doc(dbAs(MANAGER), 'designRotations', '2026-12'), { month: '2026-12' }))
+    await assertSucceeds(updateDoc(doc(dbAs(MANAGER), 'designRotations', '2026-11'), { ig: [] }))
+    await assertSucceeds(deleteDoc(doc(dbAs(MANAGER), 'designRotations', '2026-11')))
+  })
+})
+
 describe('projects / people / leaves / settings / hbl* — 讀白名單、寫僅 manager', () => {
   const collections = ['projects', 'people', 'leaves', 'outings', 'hblPayments', 'hblSchedule', 'hblAdStatus']
 
