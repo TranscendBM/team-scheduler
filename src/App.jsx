@@ -9,14 +9,13 @@ import DashboardPage from './pages/DashboardPage'
 import CalendarPage from './pages/CalendarPage'
 import EventsPage from './pages/EventsPage'
 import AwardsPage from './pages/AwardsPage'
-import DesignPage from './pages/DesignPage'
+import DesignHubPage from './pages/DesignHubPage'
 import PeoplePage from './pages/PeoplePage'
 import SettingsPage from './pages/SettingsPage'
 import LeavePage from './pages/LeavePage'
 import OutingsPage from './pages/OutingsPage'
 import NewProductsPage from './pages/NewProductsPage'
 import ProductLineOwnersPage from './pages/ProductLineOwnersPage'
-import RotationPage from './pages/RotationPage'
 import SponsorPage from './pages/SponsorPage'
 import RequestNewPage from './pages/RequestNewPage'
 import SharedRequestPage from './pages/SharedRequestPage'
@@ -43,6 +42,14 @@ function PermRoute({ pageKey, children }) {
   const { role } = useAuth()
   const { canAccess } = usePermissions()
   if (!canAccess(pageKey, role)) return <Navigate to="/" replace />
+  return children
+}
+
+// 一個頁面由多個權限項目組成(例如設計頁含「輪值」分頁)：任一項目有權限就能進入，頁內再各自控制分頁
+function AnyPermRoute({ pageKeys, children }) {
+  const { role } = useAuth()
+  const { canAccess } = usePermissions()
+  if (!pageKeys.some(k => canAccess(k, role))) return <Navigate to="/" replace />
   return children
 }
 
@@ -93,8 +100,8 @@ export default function App() {
         <Route path="tradeshow-gantt" element={<PermRoute pageKey="tradeshow-gantt"><TradeshowGanttPage /></PermRoute>} />
         <Route path="projects/event" element={<PermRoute pageKey="projects-event"><EventsPage /></PermRoute>} />
         <Route path="projects/award" element={<PermRoute pageKey="projects-award"><AwardsPage /></PermRoute>} />
-        <Route path="projects/design" element={<PermRoute pageKey="projects-design"><DesignPage /></PermRoute>} />
-        <Route path="projects/rotation" element={<PermRoute pageKey="projects-rotation"><RotationPage /></PermRoute>} />
+        <Route path="projects/design" element={<AnyPermRoute pageKeys={['projects-design', 'projects-rotation']}><DesignHubPage /></AnyPermRoute>} />
+        <Route path="projects/rotation" element={<Navigate to="/projects/design?tab=rotation" replace />} />
         <Route path="people" element={<PermRoute pageKey="people"><PeoplePage /></PermRoute>} />
         <Route path="settings" element={<PermRoute pageKey="settings"><SettingsPage /></PermRoute>} />
         <Route path="leave" element={<PermRoute pageKey="leave"><LeavePage /></PermRoute>} />
