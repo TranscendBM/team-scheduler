@@ -4,6 +4,23 @@ import { db } from '../firebase'
 import { statusMeta } from '../utils/requestConstants'
 import { URGENT_LEAD_DAYS, buildMonthlyStats, requestsOfMonth, urgentInfo, toLocalDateStr, dateStr } from '../utils/requestUrgency'
 import RequestDetailModal from '../components/RequestDetailModal'
+import { copyTable, statsToTable, requestsToTable } from '../utils/tableCopy'
+
+// 複製表格(HTML + 純文字)：貼到 Word / Outlook 是有框線的表格
+function CopyButton({ getTable, label = '複製表格' }) {
+  const [state, setState] = useState('idle') // idle | ok | err
+  async function onClick() {
+    try { await copyTable(getTable()); setState('ok') } catch { setState('err') }
+    setTimeout(() => setState('idle'), 2500)
+  }
+  return (
+    <button onClick={onClick}
+      className={`text-xs px-3 py-1.5 rounded-lg border transition-colors ${state === 'ok' ? 'border-emerald-300 bg-emerald-50 text-emerald-700' : state === 'err' ? 'border-red-300 bg-red-50 text-red-600' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50'}`}
+      title="複製後可直接貼到 Word 或 Outlook 郵件">
+      {state === 'ok' ? '✓ 已複製，可貼到 Word / Outlook' : state === 'err' ? '複製失敗，請改用手動選取' : `📋 ${label}`}
+    </button>
+  )
+}
 
 function Card({ title, value, sub, tone = 'text-gray-800' }) {
   return (
@@ -65,6 +82,9 @@ export default function RequestsStatsPage() {
             <span className="text-base font-semibold text-gray-800 w-20 text-center">{year} 年</span>
             <button onClick={() => { setYear(y => y + 1); setSel(null) }} className="px-3 py-1.5 rounded-lg border border-gray-200 bg-white text-sm text-gray-600 hover:bg-gray-50" aria-label="下一年">▶</button>
             {year !== thisYear && <button onClick={() => { setYear(thisYear); setSel(null) }} className="text-xs text-blue-500 hover:underline ml-1">回到今年</button>}
+            <div className="ml-auto">
+              <CopyButton getTable={() => statsToTable(stats, year)} label="複製統計表" />
+            </div>
           </div>
 
           <div className="grid gap-3 grid-cols-2 sm:grid-cols-4">
@@ -125,7 +145,10 @@ export default function RequestsStatsPage() {
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
               <div className="px-4 py-2.5 border-b border-gray-100 flex items-center justify-between">
                 <p className="text-sm font-semibold text-gray-800">{sel.month}{sel.region ? ` · ${sel.region}` : ' · 全部地區'} {list.length} 筆</p>
-                <button onClick={() => setSel(null)} className="text-xs text-gray-500 hover:text-gray-700">收起</button>
+                <div className="flex items-center gap-3">
+                  <CopyButton getTable={() => requestsToTable(list, `${sel.month}${sel.region ? ` ${sel.region}` : ''} 發稿明細`)} label="複製明細" />
+                  <button onClick={() => setSel(null)} className="text-xs text-gray-500 hover:text-gray-700">收起</button>
+                </div>
               </div>
               <ul className="divide-y divide-gray-100">
                 {list.map(r => {
