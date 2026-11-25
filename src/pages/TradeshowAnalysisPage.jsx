@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom'
 import { collection, onSnapshot, doc } from 'firebase/firestore'
 import { db } from '../firebase'
 import { sortByOfficeOrder } from '../utils/officeCurrency'
+import { perBoothRentByOffice } from '../utils/boothCost'
+import { copyTable } from '../utils/tableCopy'
 
 const MONTH_LABELS = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月']
 const BAR_COLORS = ['#3B82F6', '#6366F1', '#8B5CF6', '#EC4899', '#F97316', '#10B981', '#06B6D4', '#84CC16']
@@ -18,6 +20,7 @@ export default function TradeshowAnalysisPage() {
   const [target, setTarget] = useState(null)
   const [copyState, setCopyState] = useState('idle') // 'idle' | 'copied' | 'error'
   const [chartCopyState, setChartCopyState] = useState('idle') // 'idle' | 'copied' | 'error'
+  const [boothCopyState, setBoothCopyState] = useState('idle') // 'idle' | 'copied' | 'error'
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, 'projects'), snap =>
@@ -90,6 +93,23 @@ export default function TradeshowAnalysisPage() {
   const maxAvgRent = Math.max(1, ...avgRentRows.map(([, v]) => v))
   const avgPrRows = avgByOffice('prUSD')
   const maxAvgPr = Math.max(1, ...avgPrRows.map(([, v]) => v))
+
+  // 各分公司平均「單一攤位」租金：每場 租金÷攤位數量，再依分公司取平均
+  const booth = perBoothRentByOffice(yearShows)
+  const maxBoothAvg = Math.max(1, ...booth.rows.map(r => r.avg))
+  async function handleCopyBoothTable() {
+    const money = (n) => `$${Math.round(n).toLocaleString()}`
+    try {
+      await copyTable({
+        title: `${year} 年各分公司平均單一攤位租金(USD)`,
+        headers: ['分公司', '計入場數', '平均單一攤位租金', '最低', '最高'],
+        rows: booth.rows.map(r => [r.office, String(r.shows), money(r.avg), money(r.min), money(r.max)]),
+        note: '每場攤位租金 ÷ 攤位數量，再依分公司取平均；只計入租金與攤位數量都有填的場次。',
+      })
+      setBoothCopyState('copied')
+    } catch { setBoothCopyState('error') }
+    setTimeout(() => setBoothCopyState('idle'), 2000)
+  }
 
   const totalBudget = yearShows.reduce((sum, p) => sum + totalCostUSD(p), 0)
   const missingBudget = yearShows.filter(p => totalCostUSD(p) <= 0).length
@@ -348,6 +368,45 @@ export default function TradeshowAnalysisPage() {
               </div>
             ))}
           </div>
+        )}
+      </div>
+
+      {/* 各分公司平均單一攤位租金 */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+        <div className="flex items-start justify-between gap-3 mb-1">
+          <p className="text-sm font-semibold text-gray-700">🧱 各分公司平均單一攤位租金（USD）</p>
+          {booth.rows.length > 0 && (
+            <button onClick={handleCopyBoothTable}
+              className="text-xs px-2.5 py-1 rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50 shrink-0">
+              {boothCopyState === 'copied' ? '已複製' : boothCopyState === 'error' ? '複製失敗' : '📋 複製表格（可貼到 Word / Outlook）'}
+            </button>
+          )}
+        </div>
+        <p className="text-xs text-gray-500 mb-4">每場「攤位租金 ÷ 攤位數量」，再依分公司取平均；只計入租金與攤位數量都有填的場次</p>
+        {booth.rows.length === 0 ? (
+          <p className="text-sm text-gray-500 text-center py-8">目前沒有同時填了租金與攤位數量的場次</p>
+        ) : (
+          <div className="space-y-2.5">
+            {booth.rows.map((r, i) => (
+              <div key={r.office} className="flex items-center gap-3">
+                <span className="w-14 text-xs font-medium text-gray-600 shrink-0">{r.office}</span>
+                <div className="flex-1 h-6 bg-gray-50 rounded overflow-hidden">
+                  <div className="h-full rounded flex items-center justify-end px-2 transition-all"
+                    style={{ width: `${(r.avg / maxBoothAvg) * 100}%`, backgroundColor: BAR_COLORS[i % BAR_COLORS.length], minWidth: '2.5rem' }}>
+                    <span className="text-xs text-white font-medium whitespace-nowrap">{fmtUSD(r.avg)}</span>
+                  </div>
+                </div>
+                <span className="text-xs text-gray-500 w-36 shrink-0 text-right">
+                  {r.shows} 場{r.shows > 1 && `（${fmtUSD(r.min)}–${fmtUSD(r.max)}）`}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+        {booth.skippedTotal > 0 && (
+          <p className="text-xs text-gray-500 mt-3">
+            另有 {booth.skippedTotal} 場未計入（缺租金 {booth.skipped.noRent}、缺攤位數量 {booth.skipped.noBooths}、兩者都缺 {booth.skipped.both}），補齊資料後會自動納入。
+          </p>
         )}
       </div>
 
