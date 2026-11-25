@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { collection, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore'
 import { db } from '../firebase'
 import { REGIONS, DOC_TYPES } from '../utils/requestConstants'
+import { URGENT_LEAD_DAYS, dateStr, toLocalDateStr, isAutoUrgent } from '../utils/requestUrgency'
 
 const empty = { urgent: false, region: '', projectName: '', docTypes: [], dueDate: '', description: '' }
 
@@ -18,6 +19,9 @@ export default function SelfRequestModal({ request, email, designerName, onClose
   } : empty)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  // 發稿時間 = 登記日(編輯舊工作時沿用當初登記日)；到交期不滿 7 天自動標示急件
+  const [publishDate] = useState(() => (request && toLocalDateStr(request.createdAt)) || dateStr(new Date()))
+  const autoUrgent = isAutoUrgent(publishDate, form.dueDate)
 
   const toggleDocType = (t) => setForm(f => ({
     ...f, docTypes: f.docTypes.includes(t) ? f.docTypes.filter(x => x !== t) : [...f.docTypes, t],
@@ -31,7 +35,7 @@ export default function SelfRequestModal({ request, email, designerName, onClose
     setError('')
     setSaving(true)
     const fields = {
-      urgent: form.urgent,
+      urgent: form.urgent || autoUrgent,
       region: form.region,
       projectName: form.projectName.trim(),
       docTypes: form.docTypes,
@@ -78,8 +82,9 @@ export default function SelfRequestModal({ request, email, designerName, onClose
           )}
 
           <label className="flex items-center gap-2 text-sm text-gray-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 cursor-pointer">
-            <input type="checkbox" checked={form.urgent} onChange={e => setForm(f => ({ ...f, urgent: e.target.checked }))} />
+            <input type="checkbox" checked={form.urgent || autoUrgent} disabled={autoUrgent} onChange={e => setForm(f => ({ ...f, urgent: e.target.checked }))} />
             <span>🔥 急件</span>
+            {autoUrgent && <span className="text-xs text-amber-600">（發稿到交期不滿 {URGENT_LEAD_DAYS} 天，自動標示）</span>}
           </label>
 
           <div>

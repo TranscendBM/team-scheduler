@@ -4,6 +4,7 @@ import { collection, onSnapshot, query, where, doc } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
 import { statusMeta } from '../utils/requestConstants'
+import { urgentInfo } from '../utils/requestUrgency'
 import { TYPE_COLORS, TYPE_LABELS } from '../utils/milestoneUtils'
 import { addDays, showCountdown } from '../utils/tradeshowCountdown'
 import RequestDetailModal from '../components/RequestDetailModal'
@@ -412,7 +413,7 @@ export default function DashboardPage() {
                     className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-gray-50 transition-colors text-left">
                     <span className={`w-2 h-2 rounded-full flex-shrink-0 ${meta.dot}`} />
                     <p className="flex-1 min-w-0 text-sm font-medium text-gray-800 truncate">
-                      {r.urgent && <span className="text-red-500 mr-1">🔥</span>}{r.projectName || r.title}
+                      {urgentInfo(r).urgent && <span className="text-red-500 mr-1">🔥</span>}{r.projectName || r.title}
                     </p>
                     <span className="text-xs text-gray-500 whitespace-nowrap">交期 {r.dueDate || '未指定'}</span>
                     <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${meta.color}`}>{meta.label}</span>

@@ -4,6 +4,7 @@ import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
 import { statusMeta, ACTIVE_STATUSES } from '../utils/requestConstants'
 import { findSimilarPastRequest } from '../utils/requestActions'
+import { urgentInfo } from '../utils/requestUrgency'
 import Attachments from '../components/Attachments'
 import Linkify from '../components/Linkify'
 import ShareLinkPanel from '../components/ShareLinkPanel'
@@ -305,7 +306,7 @@ export default function ReviewPage() {
               <div className="flex items-start gap-3">
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-gray-800">
-                    {r.urgent && <span className="text-red-500 mr-1">🔥</span>}
+                    {urgentInfo(r).urgent && <span className="text-red-500 mr-1">🔥</span>}
                     {r.projectName || r.title}
                   </p>
                   <p className="text-xs text-gray-500 mt-1">

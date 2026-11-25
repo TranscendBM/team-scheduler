@@ -7,6 +7,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { REGIONS, DOC_TYPES, MAX_ATTACHMENT_MB } from '../utils/requestConstants'
 import { attachmentKey, markRemoved, unmarkRemoved, keptAttachments, removedAttachments, commitWithDeferredDeletion } from '../utils/attachmentDraft'
 import { getSafeAttachmentUrl, resolveSafeAttachmentPath } from '../utils/attachmentUrl'
+import { URGENT_LEAD_DAYS, dateStr, toLocalDateStr, leadDays, isAutoUrgent } from '../utils/requestUrgency'
 
 const MAX_BYTES = MAX_ATTACHMENT_MB * 1024 * 1024
 const empty = { urgent: false, region: '', projectName: '', docTypes: [], dueDate: '', description: '' }
@@ -25,6 +26,10 @@ export default function RequestNewPage() {
   const [uploadMsg, setUploadMsg] = useState('')
   const [error, setError] = useState('')
   const [done, setDone] = useState(false)
+  // 發稿時間 = 提交日(新需求是今天；編輯舊需求沿用當初提交日，不會因為改交期而重新起算)
+  const [publishDate, setPublishDate] = useState(() => dateStr(new Date()))
+  const autoUrgent = isAutoUrgent(publishDate, form.dueDate)
+  const gapDays = leadDays(publishDate, form.dueDate)
 
   // 編輯模式:載入既有需求
   useEffect(() => {
@@ -38,6 +43,7 @@ export default function RequestNewPage() {
         urgent: !!r.urgent, region: r.region || '', projectName: r.projectName || '',
         docTypes: r.docTypes || [], dueDate: r.dueDate || '', description: r.description || '',
       })
+      setPublishDate(toLocalDateStr(r.createdAt) || dateStr(new Date()))
       setExistingAtts(r.attachments || [])
       setRemovedKeys([])
       setLoading(false)
@@ -139,7 +145,7 @@ export default function RequestNewPage() {
     if (!form.dueDate) { setError('請選擇交期'); return }
     setSaving(true)
     const fields = {
-      urgent: form.urgent,
+      urgent: form.urgent || autoUrgent, // 發稿到交期不滿 7 天一律自動標示為急件
       region: form.region,
       projectName: form.projectName.trim(),
       docTypes: form.docTypes,
@@ -251,10 +257,14 @@ export default function RequestNewPage() {
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">發稿類型</label>
           <label className="flex items-center gap-2 text-sm text-gray-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 cursor-pointer">
-            <input type="checkbox" checked={form.urgent}
+            <input type="checkbox" checked={form.urgent || autoUrgent} disabled={autoUrgent}
               onChange={e => setForm(f => ({ ...f, urgent: e.target.checked }))} />
             <span>🔥 急件</span>
-            <span className="text-xs text-amber-600">（L/T 少於 5 個工作天，請勾選急件）</span>
+            <span className="text-xs text-amber-600">
+              {autoUrgent
+                ? `（發稿到交期僅 ${Math.max(gapDays, 0)} 天，不滿 ${URGENT_LEAD_DAYS} 天，系統已自動標示為急件）`
+                : `（發稿到交期不滿 ${URGENT_LEAD_DAYS} 天會自動標示為急件；其他情況需要趕件也可自行勾選）`}
+            </span>
           </label>
         </div>
 
@@ -296,6 +306,9 @@ export default function RequestNewPage() {
           <label className="block text-sm font-medium text-gray-700 mb-1">交期 <span className="text-red-500">*</span></label>
           <input type="date" value={form.dueDate}
             onChange={e => setForm(f => ({ ...f, dueDate: e.target.value }))} className={inputCls} />
+          <p className="text-xs text-gray-500 mt-1">
+            發稿日 {publishDate}{gapDays !== null && `，距交期 ${gapDays} 天`}{autoUrgent && <span className="text-red-500 font-medium">（急件）</span>}
+          </p>
         </div>
 
         {/* 需求簡述 */}

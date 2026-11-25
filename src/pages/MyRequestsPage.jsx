@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationsContext'
 import { statusMeta } from '../utils/requestConstants'
 import { groupRequestsForList, sortByDueDate } from '../utils/requestActions'
+import { urgentInfo } from '../utils/requestUrgency'
 import RequestDetailModal from '../components/RequestDetailModal'
 import CountBadge from '../components/CountBadge'
 
@@ -90,7 +91,7 @@ export default function MyRequestsPage() {
         <span className={`w-2 h-2 rounded-full ${meta.dot}`} />
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-gray-800 truncate">
-            {r.urgent && <span className="text-red-500 mr-1">🔥</span>}
+            {urgentInfo(r).urgent && <span className="text-red-500 mr-1">🔥</span>}
             {r.projectName || r.title}
           </p>
           <p className="text-xs text-gray-500 mt-0.5">

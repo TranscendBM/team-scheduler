@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useNotifications } from '../contexts/NotificationsContext'
 import { STATUS, statusMeta, STATUS_TIMESTAMP } from '../utils/requestConstants'
 import { getRequestAction, groupByDesigner, overdueDays } from '../utils/requestActions'
+import { urgentInfo } from '../utils/requestUrgency'
 import RequestDetailModal from '../components/RequestDetailModal'
 import CountBadge from '../components/CountBadge'
 import SelfRequestModal from '../components/SelfRequestModal'
@@ -199,7 +200,7 @@ export default function RequestsTablePage() {
               <span title="設計師自行新增，沒有經過提交審核"
                 className="inline-block text-[10px] font-medium bg-indigo-100 text-indigo-700 rounded px-1 py-0.5 mr-1.5 align-middle leading-none">自建</span>
             )}
-            {r.urgent && !faded && <span className="text-red-500 mr-1">🔥</span>}
+            {urgentInfo(r).urgent && !faded && <span className="text-red-500 mr-1">🔥</span>}
             {r.projectName || r.title}
           </div>
         </td>

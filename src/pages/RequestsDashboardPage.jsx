@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { collection, onSnapshot } from 'firebase/firestore'
 import { db } from '../firebase'
 import { statusMeta, ACTIVE_STATUSES } from '../utils/requestConstants'
+import { urgentInfo } from '../utils/requestUrgency'
 import RequestDetailModal from '../components/RequestDetailModal'
 
 const DAY = 24 * 60 * 60 * 1000
@@ -126,7 +127,7 @@ export default function RequestsDashboardPage() {
                     }`}
                     style={{ left: `${b.left}%`, width: `${b.width}%`, top: `${8 + i * 24}px` }}
                     title={`${b.r.projectName} · 交期 ${b.r.dueDate || '未定'}`}>
-                    {b.r.urgent ? '🔥' : ''}{b.r.projectName}
+                    {urgentInfo(b.r).urgent ? '🔥' : ''}{b.r.projectName}
                   </button>
                 ))}
                 {bars.length > 0 && <div style={{ height: `${bars.length * 24}px` }} />}

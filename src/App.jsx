@@ -23,6 +23,7 @@ import MyRequestsPage from './pages/MyRequestsPage'
 import RequestsTablePage from './pages/RequestsTablePage'
 import ReviewPage from './pages/ReviewPage'
 import RequestsDashboardPage from './pages/RequestsDashboardPage'
+import RequestsStatsPage from './pages/RequestsStatsPage'
 import PermissionsPage from './pages/PermissionsPage'
 import TradeshowAnalysisPage from './pages/TradeshowAnalysisPage'
 import TradeshowListPage from './pages/TradeshowListPage'
@@ -118,6 +119,7 @@ export default function App() {
         <Route path="requests" element={<PermRoute pageKey="requests"><RequestsTablePage /></PermRoute>} />
         <Route path="review" element={<ReviewRoute><ReviewPage /></ReviewRoute>} />
         <Route path="dashboard" element={<PermRoute pageKey="dashboard"><RequestsDashboardPage /></PermRoute>} />
+        <Route path="requests-stats" element={<PermRoute pageKey="requests-stats"><RequestsStatsPage /></PermRoute>} />
         {/* 使用者管理已併入「人員管理」，舊書籤導過去 */}
         <Route path="users" element={<Navigate to="/people" replace />} />
         <Route path="permissions" element={<ManagerRoute><PermissionsPage /></ManagerRoute>} />

@@ -1,4 +1,5 @@
 import { statusMeta } from '../utils/requestConstants'
+import { urgentInfo } from '../utils/requestUrgency'
 import Attachments from './Attachments'
 import Linkify from './Linkify'
 import ShareLinkPanel from './ShareLinkPanel'
@@ -27,6 +28,7 @@ function Row({ label, children, highlight }) {
 export default function RequestDetailModal({ r, onClose, actions, shareable = true }) {
   if (!r) return null
   const meta = statusMeta(r.status)
+  const urgency = urgentInfo(r)
   return (
     <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-2xl shadow-xl max-w-xl w-full max-h-[85vh] overflow-y-auto"
@@ -34,7 +36,7 @@ export default function RequestDetailModal({ r, onClose, actions, shareable = tr
         <div className="sticky top-0 bg-white border-b border-gray-100 px-6 py-4 flex items-start gap-3 rounded-t-2xl">
           <div className="flex-1 min-w-0">
             <h2 className="font-semibold text-gray-800">
-              {r.urgent && <span className="text-red-500 mr-1">🔥</span>}
+              {urgency.urgent && <span className="text-red-500 mr-1">🔥</span>}
               {r.projectName || r.title}
             </h2>
             <p className="text-xs text-gray-500 mt-0.5">提交：{r.submittedByName || r.submittedBy} · {fmt(r.createdAt) || '—'}</p>
@@ -50,7 +52,7 @@ export default function RequestDetailModal({ r, onClose, actions, shareable = tr
         )}
 
         <dl className="px-6 py-3">
-          <Row label="急件">{r.urgent ? '🔥 是(L/T 少於 5 個工作天)' : '否'}</Row>
+          <Row label="急件">{urgency.urgent ? '🔥 是' + (urgency.auto ? '(發稿到交期 ' + urgency.days + ' 天，不滿 7 天)' : '(提交時手動標示)') : '否'}</Row>
           <Row label="地區">{r.region}</Row>
           <Row label="稿件類型">{(r.docTypes || []).join('、')}</Row>
           <Row label="交期">{r.dueDate}</Row>

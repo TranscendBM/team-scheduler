@@ -2,7 +2,7 @@ import { NavLink, Outlet } from 'react-router-dom'
 import {
   Home, BarChart3, TrendingUp, ClipboardList, Target, Users, FilePlus2, FileText,
   FolderOpen, Scale, LineChart, Calendar, Umbrella, Car, Trophy, Settings, PartyPopper,
-  Award, Palette, Shield, PackagePlus, UserCheck, CalendarClock,
+  Award, Palette, Shield, PackagePlus, UserCheck, CalendarClock, Sigma,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { usePermissions } from '../contexts/PermissionsContext'
@@ -30,6 +30,7 @@ const NAV_ICONS = {
   requests: FolderOpen,
   review: Scale,
   dashboard: LineChart,
+  'requests-stats': Sigma,
   calendar: Calendar,
   leave: Umbrella,
   outings: Car,
