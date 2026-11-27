@@ -9,14 +9,14 @@ const TONE = {
 }
 
 // 哪些人有 3D 模型：public/avatars/manifest.json → { "glb": ["rachel.chen", ...], "aliases": { "登入信箱前綴": "rachel.chen" } }，
-// 對應 /avatars/<key>.glb；別名讓同一個人的不同信箱(公司信箱、登入 Gmail)都找得到同一個檔。
+// 對應 /avatars/<key>.glb。"v" 是版本號：換模型時加 1，網址跟著變，瀏覽器才不會用到快取(Firebase 對靜態檔預設快取 1 小時)；別名讓同一個人的不同信箱(公司信箱、登入 Gmail)都找得到同一個檔。
 // Firebase Hosting 對不存在的檔案會回首頁(不是 404)，所以不能用「試著抓檔案」來判斷，改用清單。
 let manifestPromise = null
 function loadManifest() {
-  manifestPromise ||= fetch('/avatars/manifest.json')
+  manifestPromise ||= fetch('/avatars/manifest.json', { cache: 'no-cache' })
     .then(r => r.json())
-    .then(j => ({ glb: Array.isArray(j?.glb) ? j.glb : [], aliases: j?.aliases && typeof j.aliases === 'object' ? j.aliases : {} }))
-    .catch(() => ({ glb: [], aliases: {} }))
+    .then(j => ({ v: j?.v ?? 0, glb: Array.isArray(j?.glb) ? j.glb : [], aliases: j?.aliases && typeof j.aliases === 'object' ? j.aliases : {} }))
+    .catch(() => ({ v: 0, glb: [], aliases: {} }))
   return manifestPromise
 }
 
@@ -29,14 +29,16 @@ export default function CompanionCard({ name, avatarKey, avatarKeys, photoURL, m
   const [imgFailed, setImgFailed] = useState(false)
   const [photoFailed, setPhotoFailed] = useState(false)
   const [glbKey, setGlbKey] = useState('')
+  const [glbVer, setGlbVer] = useState(0)
   const [glbFailed, setGlbFailed] = useState(false)
 
   const keysId = (avatarKeys || [avatarKey]).filter(Boolean).join('|')
   useEffect(() => {
     let alive = true
     if (keysId) {
-      loadManifest().then(({ glb, aliases }) => {
+      loadManifest().then(({ v, glb, aliases }) => {
         if (!alive) return
+        setGlbVer(v)
         const hit = keysId.split('|').map(k => aliases[k] || k).find(k => glb.includes(k))
         setGlbKey(hit || '')
       })
@@ -77,7 +79,7 @@ export default function CompanionCard({ name, avatarKey, avatarKeys, photoURL, m
     <span className={`block w-full h-full ${bouncing ? 'companion-bounce' : ''}`}>
       <span className="companion-float block w-full h-full">
         {show3d ? (
-          <CompanionModel src={`/avatars/${glbKey}.glb`} poster={png} tone={msg.tone}
+          <CompanionModel src={`/avatars/${glbKey}.glb?v=${glbVer}`} poster={png} tone={msg.tone}
             onTap={next} onError={failGlb} label={`${name || '我'}的夥伴`} />
         ) : fallback}
       </span>
