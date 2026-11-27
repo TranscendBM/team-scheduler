@@ -8,16 +8,19 @@ export const REGIONS = [
   { key: 'tw', label: 'TW', offices: ['TW'] },
   { key: 'us', label: 'US', offices: ['US'] },
   { key: 'eu', label: 'EU', offices: ['GM', 'NL', 'UK'] },
-  { key: 'jpkr', label: 'JPKR', offices: ['JP', 'KR'] },
+  { key: 'jpkr', label: 'JP & KR', offices: ['JP', 'KR'] },
   { key: 'cn', label: 'CN', offices: ['BJ', 'SH', 'SZ'] },
 ]
 
-// 每年固定的 Planner(姓名比對：people.name 含這個字，不分大小寫)；HQ 每年不同，所以沒有預設
+// 預設 Planner(姓名比對：people.name 含這個字，不分大小寫)。HQ 每年可能換人，換人時在
+// 「負責人與設計師管理」改當年度的設定即可(該年度設定過就不再用預設)
 export const DEFAULT_PLANNER_NAMES = {
+  hq: ['Ashley'],
   tw: ['Rachel'],
   us: ['Ashley'],
   eu: ['Ecco'],
   jpkr: ['Shinpei'],
+  cn: ['Rachel'],
 }
 
 export function regionKeyOfOffice(office) {

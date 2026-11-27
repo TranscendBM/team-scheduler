@@ -21,8 +21,12 @@ export function defaultAnalysisYear(shows, today) {
   return thisYear
 }
 
-// 圖表可切換的區域：全部 + HQ / TW / US / EU / JPKR / CN(分組定義在 regionPlanners.js)。offices = null 代表全部(含沒填分公司的)
-export const MONTH_REGIONS = [{ key: 'all', label: '全部', offices: null }, ...REGIONS]
+// 圖表的地區篩選可複選：傳入選到的地區 key 陣列，回傳這些地區包含的分公司代碼；
+// 沒選任何地區(空陣列)代表「全部」，回傳 null(含沒填分公司的秀展)
+export function officesOfRegions(keys) {
+  if (!keys || keys.length === 0) return null
+  return REGIONS.filter(r => keys.includes(r.key)).flatMap(r => r.offices)
+}
 
 // 只留下指定分公司的秀展；offices = null 不篩選
 export function filterByOffices(shows, offices) {

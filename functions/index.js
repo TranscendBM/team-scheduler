@@ -1030,6 +1030,119 @@ export const notifyUpcomingOuting = onSchedule(
   }
 )
 
+// ── 報獎：頒獎典禮前一週提醒報獎負責人與所有主管 ─────────────────────────
+// 報獎專案(projects, type='award')有「頒獎典禮日期」(ceremonyDate, yyyy-mm-dd，可選 ceremonyTime)。
+// 典禮前 7 天內(含當天)還沒寄過信就寄一次；寄完把 ceremonyNotifiedFor 記成當時的典禮日期，
+// 所以同一個日期只會寄一次，之後典禮日期被改掉就會自動重新排程。
+// 用「7 天內」而不是「剛好 7 天」：典禮日期是在距離典禮不到一週時才補填，或某天排程沒跑成功，也不會漏寄。
+const AWARD_CEREMONY_REMINDER_DAYS = 7
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+
+export function daysBetweenDateStrs(fromStr, toStr) {
+  return Math.round((Date.parse(`${toStr}T00:00:00Z`) - Date.parse(`${fromStr}T00:00:00Z`)) / 86400000)
+}
+
+// 純函式：找出「典禮在今天～今天+days 天內、而且這個日期還沒通知過」的報獎專案
+export function findAwardCeremoniesDue(projects, todayStr, days) {
+  const limit = addDaysToDateStr(todayStr, days)
+  return (projects || []).filter((p) =>
+    p?.type === 'award'
+    && typeof p.ceremonyDate === 'string' && DATE_RE.test(p.ceremonyDate)
+    && p.ceremonyDate >= todayStr && p.ceremonyDate <= limit
+    && p.ceremonyNotifiedFor !== p.ceremonyDate)
+}
+
+// 提醒信內容。所有欄位(獎項、名稱、地點、負責人姓名)都是使用者輸入，一律 escapeHtml
+export function buildAwardCeremonyHtml(award, owners, daysLeft) {
+  const when = award.ceremonyTime ? `${award.ceremonyDate} ${award.ceremonyTime}` : award.ceremonyDate
+  const ownerNames = (owners || []).map((o) => o.name).filter(Boolean).join('、')
+  const row = (label, value) => `<tr>
+        <td style="font-family:${FONT};padding:6px 0;color:#6b7280;width:90px;vertical-align:top">${label}</td>
+        <td style="font-family:${FONT};padding:6px 0;font-weight:500">${escapeHtml(value)}</td>
+      </tr>`
+  const lead = daysLeft <= 0 ? '就在今天' : `${daysLeft} 天後`
+  return `
+  <div style="font-family:${FONT};color:#1f2937;max-width:560px;margin:auto;padding:24px">
+    <div style="background:#fffbeb;border-left:4px solid #f59e0b;padding:14px 18px;border-radius:8px;margin-bottom:18px">
+      <h2 style="font-family:${FONT};margin:0 0 4px;font-size:17px">🏆 頒獎典禮提醒</h2>
+      <p style="font-family:${FONT};margin:0;color:#6b7280;font-size:13px">以下報獎的頒獎典禮${lead}舉行，請提前確認出席與相關準備</p>
+    </div>
+    <table style="font-family:${FONT};width:100%;border-collapse:collapse;font-size:13px">
+      ${row('報獎名稱', award.name || '')}
+      ${award.subtype ? row('獎項', award.subtype) : ''}
+      ${row('頒獎典禮', when)}
+      ${award.location ? row('地點', award.location) : ''}
+      ${row('報獎負責人', ownerNames || '（尚未指派）')}
+    </table>
+    <a href="${SITE}/#/projects/award" style="font-family:${FONT};display:inline-block;margin-top:20px;background:#f59e0b;color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-size:14px">查看報獎專案 →</a>
+    <p style="font-family:${FONT};color:#9ca3af;font-size:12px;margin-top:24px">此信由 Team Scheduler 於頒獎典禮前一週自動寄出，收件人為該報獎的負責人與所有主管。</p>
+    ${LOGO_HTML}
+  </div>`
+}
+
+// 報獎的負責人 = 專案指派人員(assignments)。查 people 取公司信箱；沒填信箱的略過
+async function resolveAwardOwners(award) {
+  const out = []
+  for (const a of award.assignments || []) {
+    if (!a?.personId) continue
+    try {
+      const snap = await db.collection('people').doc(a.personId).get()
+      if (!snap.exists) continue
+      const p = snap.data()
+      const email = String(p.email || '').trim().toLowerCase()
+      out.push({ name: p.name || '', email })
+    } catch (e) {
+      logger.warn('查報獎負責人失敗，略過', { personId: a.personId, e: e.message })
+    }
+  }
+  return out
+}
+
+// 每天 09:00(台灣時間)檢查。收件人：報獎負責人(有信箱的) + 所有啟用中的主管，去重後一封信寄出。
+export const notifyAwardCeremony = onSchedule(
+  { schedule: '0 9 * * *', timeZone: 'Asia/Taipei', region: 'asia-east1', secrets: [SMTP_PASS] },
+  async () => {
+    const today = taipeiTodayStr()
+    const snap = await db.collection('projects').where('type', '==', 'award').get()
+    const due = findAwardCeremoniesDue(snap.docs.map((d) => ({ id: d.id, ...d.data() })), today, AWARD_CEREMONY_REMINDER_DAYS)
+    if (due.length === 0) {
+      logger.info(`沒有需要提醒的頒獎典禮(${AWARD_CEREMONY_REMINDER_DAYS} 天內)，略過寄信`)
+      return
+    }
+    const managers = await getManagerEmails()
+    const mailer = getMailer()
+    const failures = []
+    try {
+      for (const award of due) {
+        const owners = await resolveAwardOwners(award)
+        const to = [...new Set([...owners.map((o) => o.email).filter(Boolean), ...managers])]
+        if (to.length === 0) {
+          logger.warn('頒獎典禮提醒：找不到任何收件人(沒有負責人信箱、也沒有主管)，略過', { id: award.id })
+          continue
+        }
+        try {
+          await mailer.send({
+            to,
+            subject: `[頒獎典禮提醒] ${award.name || '報獎'} — ${award.ceremonyDate}`,
+            html: buildAwardCeremonyHtml(award, owners, daysBetweenDateStrs(today, award.ceremonyDate)),
+          })
+          await db.collection('projects').doc(award.id).update({
+            ceremonyNotifiedFor: award.ceremonyDate,
+            ceremonyNotifiedAt: FieldValue.serverTimestamp(),
+          })
+          logger.info('已寄頒獎典禮提醒信', { id: award.id, to })
+        } catch (e) {
+          logger.error('頒獎典禮提醒信寄送失敗', { id: award.id, e: e.message })
+          failures.push(award.id)
+        }
+      }
+    } finally {
+      await mailer.close()
+    }
+    if (failures.length > 0) throw new Error(`頒獎典禮提醒有 ${failures.length} 封寄送失敗`)
+  }
+)
+
 // ── 逾期未更新狀態提醒：週一到週五早上 8 點，提醒負責設計師與主管 ──────────────
 // 「逾期未更新」= 已超過交期、狀態卻還停在「已發稿 / 設計中」(代表初稿還沒送出確認)。
 // ⚠️ 這份狀態清單跟 src/utils/requestActions.js 的 OVERDUE_WATCH_STATUSES 必須一致：

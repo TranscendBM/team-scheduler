@@ -6,8 +6,8 @@ import { OFFICE_ORDER, sortByOfficeOrder } from '../utils/officeCurrency'
 import { perBoothRentByOffice } from '../utils/boothCost'
 import { copyTable } from '../utils/tableCopy'
 import { dateStr } from '../utils/requestUrgency'
-import { defaultAnalysisYear, boothFormatByOffice, boothSizeByOffice, costByOffice, MONTH_REGIONS, monthlyCounts, filterByOffices } from '../utils/tradeshowStats'
-import { resolveRegionPlanners, plannerNames, regionKeyOfOffice } from '../utils/regionPlanners'
+import { defaultAnalysisYear, boothFormatByOffice, boothSizeByOffice, costByOffice, officesOfRegions, monthlyCounts, filterByOffices } from '../utils/tradeshowStats'
+import { REGIONS, resolveRegionPlanners, plannerNames, regionKeyOfOffice } from '../utils/regionPlanners'
 
 const MONTH_LABELS = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月']
 const BAR_COLORS = ['#3B82F6', '#6366F1', '#8B5CF6', '#EC4899', '#F97316', '#10B981', '#06B6D4', '#84CC16']
@@ -67,26 +67,34 @@ function CrosstabTable({ data, empty }) {
   )
 }
 
-// 圖表的地區篩選按鈕(全部 / HQ / TW / US / EU / JPKR / CN)；選了地區會在下面標出包含的分公司與該地區 Planner
+// 圖表的地區篩選按鈕(HQ / TW / US / EU / JP & KR / CN)，可複選；一個都不選 = 全部。
+// 選了地區會在下面標出包含的分公司與各地區 Planner
 function RegionFilter({ value, onChange, plannerMap, people }) {
-  const def = MONTH_REGIONS.find(r => r.key === value) || MONTH_REGIONS[0]
-  const names = def.offices ? plannerNames(plannerMap, def.key, people) : []
+  const toggle = (key) => onChange(value.includes(key) ? value.filter(k => k !== key) : [...value, key])
+  const chosen = REGIONS.filter(r => value.includes(r.key))
+  const chip = (active) => `text-xs px-2.5 py-1 rounded-full border transition-colors ${
+    active ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+  }`
   return (
     <div className="mb-4">
       <div className="flex flex-wrap gap-1.5">
-        {MONTH_REGIONS.map(r => (
-          <button key={r.key} onClick={() => onChange(r.key)}
-            className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
-              value === r.key ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-            }`}>
+        <button onClick={() => onChange([])} className={chip(value.length === 0)}>全部</button>
+        {REGIONS.map(r => (
+          <button key={r.key} onClick={() => toggle(r.key)} aria-pressed={value.includes(r.key)} className={chip(value.includes(r.key))}>
             {r.label}
           </button>
         ))}
+        <span className="text-xs text-gray-400 self-center ml-1">可複選</span>
       </div>
-      {def.offices && (
-        <p className="text-xs text-gray-500 mt-1.5">
-          {def.label} 包含 {def.offices.join('、')}・Planner：{names.length ? names.join('、') : '尚未指定（到「負責人與設計師管理」設定）'}
-        </p>
+      {chosen.length > 0 && (
+        <div className="text-xs text-gray-500 mt-1.5 space-y-0.5">
+          {chosen.map(r => {
+            const names = plannerNames(plannerMap, r.key, people)
+            return (
+              <p key={r.key}>{r.label}（{r.offices.join('、')}）・Planner：{names.length ? names.join('、') : '尚未指定（到「負責人與設計師管理」設定）'}</p>
+            )
+          })}
+        </div>
       )}
     </div>
   )
@@ -136,10 +144,10 @@ export default function TradeshowAnalysisPage() {
   const [projects, setProjects] = useState([])
   const [people, setPeople] = useState([])
   const [regionCfg, setRegionCfg] = useState({})
-  const [monthRegion, setMonthRegion] = useState('all')
-  const [costRegion, setCostRegion] = useState('all')
-  const [boothRegion, setBoothRegion] = useState('all')
-  const [prRegion, setPrRegion] = useState('all')
+  const [monthRegion, setMonthRegion] = useState([])
+  const [costRegion, setCostRegion] = useState([])
+  const [boothRegion, setBoothRegion] = useState([])
+  const [prRegion, setPrRegion] = useState([])
   const [savingTarget, setSavingTarget] = useState(false)
   const [editingTargets, setEditingTargets] = useState(false)
   // 沒手動選年份時，今年的秀展都結束了就自動看明年(例如 2026 年 11 月底直接顯示 2027)
@@ -191,8 +199,8 @@ export default function TradeshowAnalysisPage() {
   const pct = target ? Math.min(100, Math.round((count / target) * 100)) : null
 
   // 月份分布（依開始日期），可切換區域
-  const regionDef = MONTH_REGIONS.find(r => r.key === monthRegion) || MONTH_REGIONS[0]
-  const byMonth = monthlyCounts(yearShows, regionDef.offices)
+  const monthRegionLabel = monthRegion.length === 0 ? '全部' : REGIONS.filter(r => monthRegion.includes(r.key)).map(r => r.label).join(' + ')
+  const byMonth = monthlyCounts(yearShows, officesOfRegions(monthRegion))
   const maxMonthCount = Math.max(1, ...byMonth)
 
   // 儲存整年度目標：整個年度欄位一次覆蓋(updateDoc 會取代該年度的 map，清空的分公司才會真的被刪掉)
@@ -219,7 +227,7 @@ export default function TradeshowAnalysisPage() {
 
   const plannerMap = resolveRegionPlanners(regionCfg, year, people)
   const plannerOfOffice = (office) => plannerNames(plannerMap, regionKeyOfOffice(office), people).join('、')
-  const officesOf = (key) => (MONTH_REGIONS.find(r => r.key === key) || MONTH_REGIONS[0]).offices
+  const officesOf = officesOfRegions
 
   // 各 Office/地區費用比較（攤位租金+裝潢+PR 總預算 USD）
   const officeRows = costByOffice(filterByOffices(yearShows, officesOf(costRegion))) // [{office, shows, total, avg}]，依總額由高到低
@@ -548,7 +556,7 @@ export default function TradeshowAnalysisPage() {
       <div id="sec-months" className="scroll-mt-14 bg-white rounded-xl border border-gray-200 p-5 mb-6">
         <div className="flex items-start justify-between gap-3 mb-1">
           <p className="text-sm font-semibold text-gray-700">📅 月份分布（依開始日期）</p>
-          <span className="text-xs text-gray-500 shrink-0">{regionDef.label}：共 {byMonth.reduce((a, b) => a + b, 0)} 場</span>
+          <span className="text-xs text-gray-500 shrink-0">{monthRegionLabel}：共 {byMonth.reduce((a, b) => a + b, 0)} 場</span>
         </div>
         <RegionFilter value={monthRegion} onChange={setMonthRegion} plannerMap={plannerMap} people={people} />
         <div className="flex items-end gap-2 h-32">

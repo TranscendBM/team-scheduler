@@ -3,6 +3,8 @@ import { collection, onSnapshot, doc, updateDoc, setDoc } from 'firebase/firesto
 import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
 import { sortByOfficeOrder } from '../utils/officeCurrency'
+import { dateStr } from '../utils/requestUrgency'
+import { defaultAnalysisYear } from '../utils/tradeshowStats'
 import { REGIONS, DEFAULT_PLANNER_NAMES, regionKeyOfOffice, resolveRegionPlanners, plannerNames } from '../utils/regionPlanners'
 
 // 結束日期一過，狀態自動視為「已結束」（畫面顯示用，不覆蓋原本手動填的狀態文字）—— 跟展覽列表頁一致
@@ -18,7 +20,9 @@ export default function TradeshowAssignmentsPage() {
   const { isManager } = useAuth()
   const [projects, setProjects] = useState([])
   const [people, setPeople] = useState([])
-  const [year, setYear] = useState(new Date().getFullYear())
+  // 沒手動選年份時，今年的秀展都結束了就預設看明年(跟秀展分析頁一致)
+  const [pickedYear, setYear] = useState(null)
+  const [today] = useState(() => dateStr(new Date()))
   const [busy, setBusy] = useState(null)
   const [officeFilters, setOfficeFilters] = useState([])   // 空陣列 = 不篩選（全部）
   const [statusFilters, setStatusFilters] = useState([])
@@ -34,6 +38,7 @@ export default function TradeshowAssignmentsPage() {
     return () => { u1(); u2(); u3() }
   }, [])
 
+  const year = pickedYear ?? defaultAnalysisYear(projects, today)
   const designers = people.filter(p => p.role === 'designer').sort((a, b) => a.name.localeCompare(b.name, 'zh-TW'))
   const planners = people.filter(p => p.role === 'planner').sort((a, b) => a.name.localeCompare(b.name, 'zh-TW'))
 

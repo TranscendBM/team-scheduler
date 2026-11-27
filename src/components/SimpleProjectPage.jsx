@@ -6,7 +6,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { PHASE_DOT, projectPhase } from '../utils/milestoneUtils'
 
 const emptyForm = {
-  name: '', subtype: '', startDate: '', endDate: '', location: '',
+  name: '', subtype: '', startDate: '', endDate: '', location: '', ceremonyDate: '', ceremonyTime: '',
   year: new Date().getFullYear(), assignments: [],
 }
 
@@ -15,7 +15,9 @@ const emptyForm = {
 //   subtypeFieldLabel、sortBy（列表排序依據欄位，預設 startDate；報獎依 endDate=截止日期排序）
 //   dateLabels（選填 { start, end }）：給了就把「開始日期 / 結束日期」改成自訂名稱，列表也拆成兩欄顯示
 //     (資料欄位仍是 startDate / endDate，甘特圖、儀表板等其他頁面不受影響)。活動用：開始籌備日期 → 活動日期
-export default function SimpleProjectPage({ type, typeLabel, subtypeOptions, subtypeFieldLabel, sortBy = 'startDate', dateLabels = null }) {
+//   ceremony（選填 true）：多一個「頒獎典禮」日期/時間欄位(ceremonyDate / ceremonyTime)。報獎用；
+//     典禮前 7 天，排程(functions notifyAwardCeremony)會寄信給報獎負責人與所有主管
+export default function SimpleProjectPage({ type, typeLabel, subtypeOptions, subtypeFieldLabel, sortBy = 'startDate', dateLabels = null, ceremony = false }) {
   const { isManager } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const [projects, setProjects] = useState([])
@@ -63,6 +65,7 @@ export default function SimpleProjectPage({ type, typeLabel, subtypeOptions, sub
       name: p.name || '', subtype: p.subtype || '',
       startDate: p.startDate || '', endDate: p.endDate || '',
       location: p.location || '', year: p.year || new Date().getFullYear(),
+      ceremonyDate: p.ceremonyDate || '', ceremonyTime: p.ceremonyTime || '',
       assignments: p.assignments || [],
     })
     setShowModal(true)
@@ -76,6 +79,10 @@ export default function SimpleProjectPage({ type, typeLabel, subtypeOptions, sub
       startDate: form.startDate, endDate: form.endDate, location: form.location,
       year: parseInt(form.year), assignments: form.assignments,
       updatedAt: new Date().toISOString(),
+    }
+    if (ceremony) {
+      data.ceremonyDate = form.ceremonyDate
+      data.ceremonyTime = form.ceremonyDate ? form.ceremonyTime : ''
     }
     try {
       if (editProject) {
@@ -167,6 +174,7 @@ export default function SimpleProjectPage({ type, typeLabel, subtypeOptions, sub
                   ) : (
                     <th className="text-left px-3 py-2 font-medium text-gray-500 border-b border-gray-200 whitespace-nowrap">日期</th>
                   )}
+                  {ceremony && <th className="text-left px-3 py-2 font-medium text-gray-500 border-b border-gray-200 whitespace-nowrap">頒獎典禮</th>}
                   <th className="text-left px-3 py-2 font-medium text-gray-500 border-b border-gray-200">地點</th>
                   <th className="text-left px-3 py-2 font-medium text-gray-500 border-b border-gray-200">指派人員</th>
                   {isManager && <th className="px-3 py-2 border-b border-gray-200"></th>}
@@ -199,6 +207,12 @@ export default function SimpleProjectPage({ type, typeLabel, subtypeOptions, sub
                       ) : (
                         <td className={`px-3 py-2 whitespace-nowrap ${expired ? 'text-gray-500' : 'text-gray-600'}`}>
                           {p.startDate ? `${p.startDate} ~ ${p.endDate}` : '—'}
+                        </td>
+                      )}
+                      {ceremony && (
+                        <td className={`px-3 py-2 whitespace-nowrap ${expired ? 'text-gray-500' : 'text-gray-600'}`}>
+                          {p.ceremonyDate ? `${p.ceremonyDate}${p.ceremonyTime ? ' ' + p.ceremonyTime : ''}` : '—'}
+                          {p.ceremonyDate && p.ceremonyNotifiedFor === p.ceremonyDate && <span className="ml-1 text-xs text-emerald-600" title="已寄提醒信給負責人與主管">✉️ 已通知</span>}
                         </td>
                       )}
                       <td className={`px-3 py-2 ${expired ? 'text-gray-500' : 'text-gray-600'}`}>{p.location || '—'}</td>
@@ -257,6 +271,21 @@ export default function SimpleProjectPage({ type, typeLabel, subtypeOptions, sub
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500" />
                 </div>
               </div>
+
+              {ceremony && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">頒獎典禮時間</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <input type="date" value={form.ceremonyDate} disabled={!isManager}
+                      onChange={e => setForm(f => ({ ...f, ceremonyDate: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500" />
+                    <input type="time" value={form.ceremonyTime} disabled={!isManager || !form.ceremonyDate}
+                      onChange={e => setForm(f => ({ ...f, ceremonyTime: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500" />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">選填。典禮前 7 天，系統會自動寄信通知這個報獎的負責人（下方指派人員）和所有主管；負責人要在「人員管理」填了公司信箱才收得到。</p>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">地點</label>

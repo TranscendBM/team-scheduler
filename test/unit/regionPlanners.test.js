@@ -12,7 +12,7 @@ const people = [
 
 describe('regionKeyOfOffice', () => {
   it('分公司代碼 → 地區', () => {
-    expect(REGIONS.map(r => r.label)).toEqual(['HQ', 'TW', 'US', 'EU', 'JPKR', 'CN'])
+    expect(REGIONS.map(r => r.label)).toEqual(['HQ', 'TW', 'US', 'EU', 'JP & KR', 'CN'])
     expect(regionKeyOfOffice('GM')).toBe('eu')
     expect(regionKeyOfOffice('NL')).toBe('eu')
     expect(regionKeyOfOffice('KR')).toBe('jpkr')
@@ -24,15 +24,15 @@ describe('regionKeyOfOffice', () => {
 })
 
 describe('resolveRegionPlanners', () => {
-  it('沒設定時：TW Rachel、US Ashley、EU Ecco、JPKR Shinpei(姓名比對、優先 planner)，HQ、CN 沒人', () => {
+  it('沒設定時預設：HQ Ashley、TW Rachel、US Ashley、EU Ecco、JP & KR Shinpei、CN Rachel(姓名比對、優先 planner)', () => {
     const m = resolveRegionPlanners({}, 2027, people)
-    expect(m).toEqual({ hq: [], tw: ['p1'], us: ['p4'], eu: ['p2'], jpkr: ['p3'], cn: [] })
+    expect(m).toEqual({ hq: ['p4'], tw: ['p1'], us: ['p4'], eu: ['p2'], jpkr: ['p3'], cn: ['p1'] })
   })
   it('年度有設定的地區以設定為準(HQ 每年不同)，沒設定的地區仍用預設', () => {
     const cfg = { 2027: { hq: ['p5'] }, 2026: { hq: ['p2'] } }
     expect(resolveRegionPlanners(cfg, 2027, people).hq).toEqual(['p5'])
     expect(resolveRegionPlanners(cfg, 2026, people).hq).toEqual(['p2'])
-    expect(resolveRegionPlanners(cfg, 2028, people).hq).toEqual([])
+    expect(resolveRegionPlanners(cfg, 2028, people).hq).toEqual(['p4']) // 沒設定的年度回到預設 Ashley
     expect(resolveRegionPlanners(cfg, 2027, people).tw).toEqual(['p1'])
   })
   it('設成空陣列＝刻意不指定，不會再套預設', () => {

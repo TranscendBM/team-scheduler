@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   defaultAnalysisYear, isTradeshowEnded, boothFormatByOffice, boothSizeByOffice, boothSizeBucket, costByOffice,
-  monthlyCounts, MONTH_REGIONS,
+  monthlyCounts, officesOfRegions, filterByOffices,
 } from '../../src/utils/tradeshowStats.js'
 
 describe('defaultAnalysisYear', () => {
@@ -67,7 +67,7 @@ describe('boothSizeByOffice', () => {
   })
 })
 
-describe('monthlyCounts / MONTH_REGIONS', () => {
+describe('monthlyCounts / officesOfRegions', () => {
   const shows = [
     { office: 'US', startDate: '2027-01-10' }, { office: 'JP', startDate: '2027-01-20' },
     { office: 'KR', startDate: '2027-03-02' }, { office: 'GM', startDate: '2027-03-09' },
@@ -80,11 +80,19 @@ describe('monthlyCounts / MONTH_REGIONS', () => {
     expect(c.reduce((a, b) => a + b, 0)).toBe(6)
   })
   it('區域分組：JP KR 一區合併計算；沒填分公司的只出現在全部', () => {
-    const jpkr = MONTH_REGIONS.find(r => r.key === 'jpkr').offices
-    expect(monthlyCounts(shows, jpkr).filter(Boolean)).toEqual([1, 1])
-    expect(monthlyCounts(shows, MONTH_REGIONS.find(r => r.key === 'eu').offices)[2]).toBe(1)
-    expect(monthlyCounts(shows, MONTH_REGIONS.find(r => r.key === 'cn').offices)[11]).toBe(1)
+    expect(monthlyCounts(shows, officesOfRegions(['jpkr'])).filter(Boolean)).toEqual([1, 1])
+    expect(monthlyCounts(shows, officesOfRegions(['eu']))[2]).toBe(1)
+    expect(monthlyCounts(shows, officesOfRegions(['cn']))[11]).toBe(1)
     expect(monthlyCounts(shows, ['US']).reduce((a, b) => a + b, 0)).toBe(1)
+  })
+  it('地區可複選：把選到的地區的分公司合起來；沒選 = 全部(null)', () => {
+    expect(officesOfRegions([])).toBe(null)
+    expect(officesOfRegions(undefined)).toBe(null)
+    expect(officesOfRegions(['us', 'jpkr']).sort()).toEqual(['JP', 'KR', 'US'])
+    const m = monthlyCounts(shows, officesOfRegions(['us', 'eu']))
+    expect(m.reduce((a, b) => a + b, 0)).toBe(2)
+    expect(filterByOffices(shows, officesOfRegions(['cn'])).map(p => p.office)).toEqual(['SH'])
+    expect(filterByOffices(shows, null).length).toBe(shows.length)
   })
 })
 
