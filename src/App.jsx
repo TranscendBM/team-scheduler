@@ -27,7 +27,6 @@ import RequestsStatsPage from './pages/RequestsStatsPage'
 import PermissionsPage from './pages/PermissionsPage'
 import TradeshowAnalysisPage from './pages/TradeshowAnalysisPage'
 import TradeshowListPage from './pages/TradeshowListPage'
-import TradeshowTargetsPage from './pages/TradeshowTargetsPage'
 import TradeshowAssignmentsPage from './pages/TradeshowAssignmentsPage'
 import TradeshowGanttPage from './pages/TradeshowGanttPage'
 
@@ -96,7 +95,7 @@ export default function App() {
         <Route path="calendar" element={<PermRoute pageKey="calendar"><CalendarPage /></PermRoute>} />
         <Route path="tradeshow-analysis" element={<PermRoute pageKey="tradeshow-analysis"><TradeshowAnalysisPage /></PermRoute>} />
         <Route path="tradeshow-list" element={<PermRoute pageKey="tradeshow-list"><TradeshowListPage /></PermRoute>} />
-        <Route path="tradeshow-targets" element={<PermRoute pageKey="tradeshow-targets"><TradeshowTargetsPage /></PermRoute>} />
+        <Route path="tradeshow-targets" element={<Navigate to="/tradeshow-analysis" replace />} />
         <Route path="tradeshow-assignments" element={<PermRoute pageKey="tradeshow-assignments"><TradeshowAssignmentsPage /></PermRoute>} />
         <Route path="tradeshow-gantt" element={<PermRoute pageKey="tradeshow-gantt"><TradeshowGanttPage /></PermRoute>} />
         <Route path="projects/event" element={<PermRoute pageKey="projects-event"><EventsPage /></PermRoute>} />

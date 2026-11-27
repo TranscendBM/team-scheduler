@@ -20,6 +20,28 @@ export function defaultAnalysisYear(shows, today) {
   return thisYear
 }
 
+// 月份分布可切換的區域(分公司代碼分組)。offices = null 代表全部(含沒填分公司的)
+export const MONTH_REGIONS = [
+  { key: 'all', label: '全部', offices: null },
+  { key: 'us', label: 'US 一區', offices: ['US'] },
+  { key: 'hq', label: 'HQ 一區', offices: ['HQ'] },
+  { key: 'tw', label: 'TW 一區', offices: ['TW'] },
+  { key: 'jpkr', label: 'JP KR 一區', offices: ['JP', 'KR'] },
+  { key: 'eu', label: '歐洲一區', offices: ['GM', 'NL', 'UK'] },
+  { key: 'cn', label: '中國一區', offices: ['BJ', 'SH', 'SZ'] },
+]
+
+// 各月份(依開始日期)的秀展場數，長度 12；offices 給陣列就只算這些分公司
+export function monthlyCounts(shows, offices = null) {
+  const out = Array(12).fill(0)
+  for (const p of shows || []) {
+    if (offices && !offices.includes(String(p.office || '').trim())) continue
+    const m = parseInt(String(p.startDate || '').slice(5, 7), 10) - 1
+    if (m >= 0 && m < 12) out[m]++
+  }
+  return out
+}
+
 // 攤位形式：空字串歸「未填」；已知形式照固定順序，其他自訂值接在後面，「未填」放最後
 export function boothFormatOf(p) {
   return String(p?.boothFormat || '').trim() || NO_FORMAT

@@ -1,6 +1,6 @@
 import { NavLink, Outlet } from 'react-router-dom'
 import {
-  Home, BarChart3, TrendingUp, ClipboardList, Target, Users, FilePlus2, FileText,
+  Home, BarChart3, TrendingUp, ClipboardList, Users, FilePlus2, FileText,
   FolderOpen, Scale, LineChart, Calendar, Umbrella, Car, Trophy, Settings, PartyPopper,
   Award, Palette, Shield, PackagePlus, UserCheck, CalendarClock, Sigma,
 } from 'lucide-react'
@@ -22,7 +22,6 @@ const NAV_ICONS = {
   gantt: BarChart3,
   'tradeshow-analysis': TrendingUp,
   'tradeshow-list': ClipboardList,
-  'tradeshow-targets': Target,
   'tradeshow-assignments': Users,
   'tradeshow-gantt': BarChart3,
   'request/new': FilePlus2,
