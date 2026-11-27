@@ -3,7 +3,7 @@
   "description": "Team Scheduler Cloud Functions",
   "type": "module",
   "engines": {
-    "node": "20"
+    "node": "22"
   },
   "main": "index.js",
   "scripts": {
