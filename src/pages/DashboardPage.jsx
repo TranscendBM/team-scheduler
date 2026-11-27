@@ -8,6 +8,8 @@ import { urgentInfo } from '../utils/requestUrgency'
 import { TYPE_COLORS, TYPE_LABELS } from '../utils/milestoneUtils'
 import { addDays, showCountdown } from '../utils/tradeshowCountdown'
 import RequestDetailModal from '../components/RequestDetailModal'
+import CompanionCard from '../components/CompanionCard'
+import { buildCompanionMessages, avatarKey } from '../utils/companionMessages'
 import { STAGES, lineMeta, categoryMeta, isLive, stageMeta, launchStatus, sortByLaunch, countByStage, localTodayStr } from '../utils/newProducts'
 
 const PROJECT_TYPES = ['event', 'award', 'design', 'seasonal_kv']
@@ -162,6 +164,18 @@ export default function DashboardPage() {
     <div className="p-8 max-w-5xl mx-auto">
       <h1 className="text-2xl font-bold text-gray-800 mb-1">{user?.displayName ? `${user.displayName}，你好` : '總覽'}</h1>
       <p className="text-sm text-gray-500 mb-6">登入時的重點資訊一覽</p>
+
+      {/* 我的夥伴：角色圖 + 個人化訊息(圖放 public/avatars/<公司信箱前綴>.png) */}
+      <CompanionCard
+        name={me?.name || user?.displayName || ''}
+        avatarKey={avatarKey(me?.email, myUser?.notifyEmail, email)}
+        photoURL={user?.photoURL}
+        messages={buildCompanionMessages({
+          name: me?.name || user?.displayName || '', role, today, hour: new Date().getHours(),
+          ongoingShows, upcomingShows, assignedRequests, myRequests,
+          manager: { newProductAttention, showsSoon: companyUpcomingShows.length, onLeaveSoon: upcomingLeaves.length },
+        })}
+      />
 
       {role !== 'manager' && !me && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-6 text-sm text-amber-700">
