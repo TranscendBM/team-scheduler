@@ -13,7 +13,9 @@ const emptyForm = {
 // 「活動」「報獎」共用的單一類型專案管理頁（各自獨立路由，互不干擾）
 // props: type（Firestore 的 project.type）、typeLabel（頁面標題）、subtypeOptions（子類型下拉選項）、
 //   subtypeFieldLabel、sortBy（列表排序依據欄位，預設 startDate；報獎依 endDate=截止日期排序）
-export default function SimpleProjectPage({ type, typeLabel, subtypeOptions, subtypeFieldLabel, sortBy = 'startDate' }) {
+//   dateLabels（選填 { start, end }）：給了就把「開始日期 / 結束日期」改成自訂名稱，列表也拆成兩欄顯示
+//     (資料欄位仍是 startDate / endDate，甘特圖、儀表板等其他頁面不受影響)。活動用：開始籌備日期 → 活動日期
+export default function SimpleProjectPage({ type, typeLabel, subtypeOptions, subtypeFieldLabel, sortBy = 'startDate', dateLabels = null }) {
   const { isManager } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const [projects, setProjects] = useState([])
@@ -157,7 +159,14 @@ export default function SimpleProjectPage({ type, typeLabel, subtypeOptions, sub
                 <tr>
                   <th className="text-left px-3 py-2 font-medium text-gray-500 border-b border-r border-gray-200 sticky left-0 bg-gray-50 min-w-[200px]">名稱</th>
                   <th className="text-left px-3 py-2 font-medium text-gray-500 border-b border-gray-200 whitespace-nowrap">{subtypeFieldLabel}</th>
-                  <th className="text-left px-3 py-2 font-medium text-gray-500 border-b border-gray-200 whitespace-nowrap">日期</th>
+                  {dateLabels ? (
+                    <>
+                      <th className="text-left px-3 py-2 font-medium text-gray-500 border-b border-gray-200 whitespace-nowrap">{dateLabels.end}</th>
+                      <th className="text-left px-3 py-2 font-medium text-gray-500 border-b border-gray-200 whitespace-nowrap">{dateLabels.start}</th>
+                    </>
+                  ) : (
+                    <th className="text-left px-3 py-2 font-medium text-gray-500 border-b border-gray-200 whitespace-nowrap">日期</th>
+                  )}
                   <th className="text-left px-3 py-2 font-medium text-gray-500 border-b border-gray-200">地點</th>
                   <th className="text-left px-3 py-2 font-medium text-gray-500 border-b border-gray-200">指派人員</th>
                   {isManager && <th className="px-3 py-2 border-b border-gray-200"></th>}
@@ -182,9 +191,16 @@ export default function SimpleProjectPage({ type, typeLabel, subtypeOptions, sub
                         {p.name}
                       </td>
                       <td className={`px-3 py-2 whitespace-nowrap ${expired ? 'text-gray-500' : 'text-gray-600'}`}>{p.subtype || '—'}</td>
-                      <td className={`px-3 py-2 whitespace-nowrap ${expired ? 'text-gray-500' : 'text-gray-600'}`}>
-                        {p.startDate ? `${p.startDate} ~ ${p.endDate}` : '—'}
-                      </td>
+                      {dateLabels ? (
+                        <>
+                          <td className={`px-3 py-2 whitespace-nowrap ${expired ? 'text-gray-500' : 'text-gray-600'}`}>{p.endDate || '—'}</td>
+                          <td className={`px-3 py-2 whitespace-nowrap ${expired ? 'text-gray-500' : 'text-gray-600'}`}>{p.startDate || '—'}</td>
+                        </>
+                      ) : (
+                        <td className={`px-3 py-2 whitespace-nowrap ${expired ? 'text-gray-500' : 'text-gray-600'}`}>
+                          {p.startDate ? `${p.startDate} ~ ${p.endDate}` : '—'}
+                        </td>
+                      )}
                       <td className={`px-3 py-2 ${expired ? 'text-gray-500' : 'text-gray-600'}`}>{p.location || '—'}</td>
                       <td className={`px-3 py-2 whitespace-nowrap ${expired ? 'text-gray-500' : 'text-gray-600'}`}>
                         {assigned.length > 0 ? assigned.map(a => `${a.name}${a.role === 'designer' ? '(設計)' : '(Planner)'}`).join('、') : '—'}
@@ -231,12 +247,12 @@ export default function SimpleProjectPage({ type, typeLabel, subtypeOptions, sub
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">開始日期 *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{dateLabels ? dateLabels.start : '開始日期'} *</label>
                   <input type="date" value={form.startDate} disabled={!isManager} onChange={e => setForm(f => ({ ...f, startDate: e.target.value }))}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">結束日期 *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{dateLabels ? dateLabels.end : '結束日期'} *</label>
                   <input type="date" value={form.endDate} disabled={!isManager} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500" />
                 </div>
