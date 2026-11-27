@@ -1,4 +1,5 @@
 import { sortByOfficeOrder } from './officeCurrency.js'
+import { REGIONS } from './regionPlanners.js'
 
 export const BOOTH_FORMAT_ORDER = ['Show Kit', '標準', '特裝', '空地', 'Counter Booth']
 export const NO_FORMAT = '未填'
@@ -20,16 +21,14 @@ export function defaultAnalysisYear(shows, today) {
   return thisYear
 }
 
-// 月份分布可切換的區域(分公司代碼分組)。offices = null 代表全部(含沒填分公司的)
-export const MONTH_REGIONS = [
-  { key: 'all', label: '全部', offices: null },
-  { key: 'us', label: 'US 一區', offices: ['US'] },
-  { key: 'hq', label: 'HQ 一區', offices: ['HQ'] },
-  { key: 'tw', label: 'TW 一區', offices: ['TW'] },
-  { key: 'jpkr', label: 'JP KR 一區', offices: ['JP', 'KR'] },
-  { key: 'eu', label: '歐洲一區', offices: ['GM', 'NL', 'UK'] },
-  { key: 'cn', label: '中國一區', offices: ['BJ', 'SH', 'SZ'] },
-]
+// 圖表可切換的區域：全部 + HQ / TW / US / EU / JPKR / CN(分組定義在 regionPlanners.js)。offices = null 代表全部(含沒填分公司的)
+export const MONTH_REGIONS = [{ key: 'all', label: '全部', offices: null }, ...REGIONS]
+
+// 只留下指定分公司的秀展；offices = null 不篩選
+export function filterByOffices(shows, offices) {
+  if (!offices) return shows || []
+  return (shows || []).filter(p => offices.includes(String(p.office || '').trim()))
+}
 
 // 各月份(依開始日期)的秀展場數，長度 12；offices 給陣列就只算這些分公司
 export function monthlyCounts(shows, offices = null) {

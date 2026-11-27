@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
-import { collection, onSnapshot, doc, setDoc, deleteField } from 'firebase/firestore'
+import { collection, onSnapshot, doc, setDoc, updateDoc } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
 import { OFFICE_ORDER, sortByOfficeOrder } from '../utils/officeCurrency'
 import { perBoothRentByOffice } from '../utils/boothCost'
 import { copyTable } from '../utils/tableCopy'
 import { dateStr } from '../utils/requestUrgency'
-import { defaultAnalysisYear, boothFormatByOffice, boothSizeByOffice, costByOffice, MONTH_REGIONS, monthlyCounts } from '../utils/tradeshowStats'
+import { defaultAnalysisYear, boothFormatByOffice, boothSizeByOffice, costByOffice, MONTH_REGIONS, monthlyCounts, filterByOffices } from '../utils/tradeshowStats'
+import { resolveRegionPlanners, plannerNames, regionKeyOfOffice } from '../utils/regionPlanners'
 
 const MONTH_LABELS = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月']
 const BAR_COLORS = ['#3B82F6', '#6366F1', '#8B5CF6', '#EC4899', '#F97316', '#10B981', '#06B6D4', '#84CC16']
@@ -23,9 +24,9 @@ const SECTIONS = [
   ['sec-months', '月份分布'],
   ['sec-region-cost', '地區費用'],
   ['sec-booth-rent', '單一攤位租金'],
+  ['sec-avg-pr', 'PR 費用'],
   ['sec-booth-format', '攤位形式'],
   ['sec-booth-count', '攤位數量'],
-  ['sec-avg-pr', 'PR 費用'],
 ]
 
 // 分公司 × 分類 的場數表(攤位形式、攤位數量共用)
@@ -66,38 +67,81 @@ function CrosstabTable({ data, empty }) {
   )
 }
 
-// 年度目標欄位：管理者點一下可編輯，Enter/離開欄位儲存，清空 = 刪除該分公司目標
-function TargetCell({ value, canEdit, onSave }) {
-  const [draft, setDraft] = useState(null)
-  async function commit() {
-    const raw = draft
-    setDraft(null)
-    if (raw === null || raw === (value == null ? '' : String(value))) return
-    await onSave(raw)
-  }
-  if (draft !== null) {
-    return (
-      <input type="number" min="0" autoFocus value={draft}
-        onChange={e => setDraft(e.target.value)}
-        onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setDraft(null) }}
-        onBlur={commit}
-        className="w-16 border border-blue-400 rounded px-1 py-0.5 text-sm text-center" />
-    )
-  }
-  const text = value ?? '—'
-  return canEdit ? (
-    <button onClick={() => setDraft(value == null ? '' : String(value))} title="點一下修改目標場數"
-      className="w-16 py-0.5 rounded border border-dashed border-gray-300 hover:bg-blue-50 hover:border-blue-300 text-gray-700 tabular-nums">{text}</button>
-  ) : (
-    <span className="w-16 inline-block text-center text-gray-700 tabular-nums">{text}</span>
+// 圖表的地區篩選按鈕(全部 / HQ / TW / US / EU / JPKR / CN)；選了地區會在下面標出包含的分公司與該地區 Planner
+function RegionFilter({ value, onChange, plannerMap, people }) {
+  const def = MONTH_REGIONS.find(r => r.key === value) || MONTH_REGIONS[0]
+  const names = def.offices ? plannerNames(plannerMap, def.key, people) : []
+  return (
+    <div className="mb-4">
+      <div className="flex flex-wrap gap-1.5">
+        {MONTH_REGIONS.map(r => (
+          <button key={r.key} onClick={() => onChange(r.key)}
+            className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+              value === r.key ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+            }`}>
+            {r.label}
+          </button>
+        ))}
+      </div>
+      {def.offices && (
+        <p className="text-xs text-gray-500 mt-1.5">
+          {def.label} 包含 {def.offices.join('、')}・Planner：{names.length ? names.join('、') : '尚未指定（到「負責人與設計師管理」設定）'}
+        </p>
+      )}
+    </div>
+  )
+}
+
+// 編輯年度目標的視窗：每個分公司一格，留空 = 沒有目標；按儲存才會寫入
+function TargetEditor({ year, offices, initial, saving, onSave, onClose }) {
+  const [draft, setDraft] = useState(() => Object.fromEntries(offices.map(o => [o, initial[o] == null ? '' : String(initial[o])])))
+  const sum = Object.values(draft).reduce((a, v) => a + (parseInt(v, 10) || 0), 0)
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4"
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <div className="px-6 py-4 border-b flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-gray-800">編輯 {year} 年度秀展目標</h3>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-600 text-xl" aria-label="關閉">×</button>
+        </div>
+        <div className="px-6 py-5">
+          <p className="text-xs text-gray-500 mb-3">填各分公司今年計畫參展的場數；留空代表不設目標。HQ（COMPUTEX 主辦單位）獨立於 TW。</p>
+          <div className="space-y-2">
+            {offices.map(o => (
+              <label key={o} className="flex items-center gap-3">
+                <span className="w-16 text-sm font-medium text-gray-700">{o}</span>
+                <input type="number" min="0" value={draft[o]}
+                  onChange={e => setDraft(d => ({ ...d, [o]: e.target.value }))}
+                  className="w-24 border border-gray-300 rounded-lg px-3 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                <span className="text-xs text-gray-500">場</span>
+              </label>
+            ))}
+          </div>
+          <p className="text-sm font-semibold text-gray-800 mt-4">合計目標：{sum} 場</p>
+        </div>
+        <div className="px-6 py-4 border-t flex gap-3 justify-end">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg">取消</button>
+          <button onClick={() => onSave(draft)} disabled={saving}
+            className="px-5 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 font-medium">
+            {saving ? '儲存中…' : '儲存'}
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 
 export default function TradeshowAnalysisPage() {
   const { isManager } = useAuth()
   const [projects, setProjects] = useState([])
+  const [people, setPeople] = useState([])
+  const [regionCfg, setRegionCfg] = useState({})
   const [monthRegion, setMonthRegion] = useState('all')
+  const [costRegion, setCostRegion] = useState('all')
+  const [boothRegion, setBoothRegion] = useState('all')
+  const [prRegion, setPrRegion] = useState('all')
   const [savingTarget, setSavingTarget] = useState(false)
+  const [editingTargets, setEditingTargets] = useState(false)
   // 沒手動選年份時，今年的秀展都結束了就自動看明年(例如 2026 年 11 月底直接顯示 2027)
   const [pickedYear, setPickedYear] = useState(null)
   const [today] = useState(() => dateStr(new Date()))
@@ -109,9 +153,14 @@ export default function TradeshowAnalysisPage() {
   const [boothCopyState, setBoothCopyState] = useState('idle') // 'idle' | 'copied' | 'error'
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, 'projects'), snap =>
+    const u1 = onSnapshot(collection(db, 'projects'), snap =>
       setProjects(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(p => p.type === 'tradeshow')))
-    return unsub
+    const u2 = onSnapshot(collection(db, 'people'), snap =>
+      setPeople(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
+    // 地區 → Planner 對應(在「負責人與設計師管理」設定，每年可不同)
+    const u3 = onSnapshot(doc(db, 'settings', 'regionPlanners'), snap =>
+      setRegionCfg(snap.exists() ? snap.data() : {}))
+    return () => { u1(); u2(); u3() }
   }, [])
 
   // 年度目標：settings/tradeshowTargets，格式 { 年度: { 分公司: 場數 } }(更舊的格式是 { 年度: 場數 })
@@ -146,41 +195,40 @@ export default function TradeshowAnalysisPage() {
   const byMonth = monthlyCounts(yearShows, regionDef.offices)
   const maxMonthCount = Math.max(1, ...byMonth)
 
-  async function saveTarget(office, raw) {
-    const v = String(raw).trim()
-    let value
-    if (v === '') value = deleteField()
-    else {
-      const n = parseInt(v, 10)
-      if (!Number.isFinite(n) || n < 0) return
-      value = n
+  // 儲存整年度目標：整個年度欄位一次覆蓋(updateDoc 會取代該年度的 map，清空的分公司才會真的被刪掉)
+  async function saveTargets(draft) {
+    const obj = {}
+    for (const [o, v] of Object.entries(draft)) {
+      const t = String(v).trim()
+      if (t === '') continue
+      const n = Number(t)
+      if (!Number.isInteger(n) || n < 0) { alert(`${o} 的目標要填 0 以上的整數`); return }
+      obj[o] = n
     }
     setSavingTarget(true)
     try {
-      await setDoc(doc(db, 'settings', 'tradeshowTargets'), { [String(year)]: { [office]: value } }, { merge: true })
+      const ref = doc(db, 'settings', 'tradeshowTargets')
+      try { await updateDoc(ref, { [String(year)]: obj }) }
+      catch (e) { if (e.code === 'not-found') await setDoc(ref, { [String(year)]: obj }); else throw e }
+      setEditingTargets(false)
     } catch (e) {
       alert('儲存失敗：' + (e.code || e.message))
     }
     setSavingTarget(false)
   }
-  async function convertLegacy() {
-    setSavingTarget(true)
-    try {
-      await setDoc(doc(db, 'settings', 'tradeshowTargets'), { [String(year)]: { '未分公司': legacyTarget } }, { merge: true })
-    } catch (e) {
-      alert('轉換失敗：' + (e.code || e.message))
-    }
-    setSavingTarget(false)
-  }
+
+  const plannerMap = resolveRegionPlanners(regionCfg, year, people)
+  const plannerOfOffice = (office) => plannerNames(plannerMap, regionKeyOfOffice(office), people).join('、')
+  const officesOf = (key) => (MONTH_REGIONS.find(r => r.key === key) || MONTH_REGIONS[0]).offices
 
   // 各 Office/地區費用比較（攤位租金+裝潢+PR 總預算 USD）
-  const officeRows = costByOffice(yearShows) // [{office, shows, total, avg}]，依總額由高到低
+  const officeRows = costByOffice(filterByOffices(yearShows, officesOf(costRegion))) // [{office, shows, total, avg}]，依總額由高到低
   const maxOfficeCost = Math.max(1, ...officeRows.map(r => r.total))
 
   // 各分公司平均 PR 費用（USD，只計入有填 PR 費用的場次）
   function avgByOffice(field) {
     const sum = {}, cnt = {}
-    yearShows.forEach(p => {
+    filterByOffices(yearShows, officesOf(prRegion)).forEach(p => {
       const v = p[field]
       if (!v || v <= 0) return
       const office = p.office || '未指定'
@@ -193,7 +241,7 @@ export default function TradeshowAnalysisPage() {
   const maxAvgPr = Math.max(1, ...avgPrRows.map(([, v]) => v))
 
   // 各分公司平均「單一攤位」租金：每場 租金÷攤位數量，再依分公司取平均
-  const booth = perBoothRentByOffice(yearShows)
+  const booth = perBoothRentByOffice(filterByOffices(yearShows, officesOf(boothRegion)))
   const maxBoothAvg = Math.max(1, ...booth.rows.map(r => r.avg))
   async function handleCopyBoothTable() {
     const money = (n) => `$${Math.round(n).toLocaleString()}`
@@ -431,66 +479,69 @@ export default function TradeshowAnalysisPage() {
       <div id="sec-targets" className="scroll-mt-14 bg-white rounded-xl border border-gray-200 p-5 mb-6">
         <div className="flex items-start justify-between gap-3 mb-1">
           <p className="text-sm font-semibold text-gray-700">🎯 {year} 年各分公司目標與達成率</p>
-          {officeTargetRows.length > 0 && (
-            <div className="flex gap-2 shrink-0">
-              <button onClick={handleCopyTargetTable}
-                className="text-xs px-2.5 py-1 rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50">
-                {copyState === 'copied' ? '已複製' : copyState === 'error' ? '複製失敗' : '📋 複製表格（可貼到 PPT）'}
-              </button>
-              <button onClick={handleCopyTargetChart}
-                className="text-xs px-2.5 py-1 rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50">
-                {chartCopyState === 'copied' ? '已複製' : chartCopyState === 'error' ? '複製失敗' : '📊 複製長條圖（可貼到 PPT）'}
-              </button>
-            </div>
-          )}
-        </div>
-        <p className="text-xs text-gray-500 mb-4">
-          達成率 = 該分公司當年度秀展場數 ÷ 目標場數；HQ(COMPUTEX 主辦單位)獨立於 TW。{isManager ? '右邊的「目標」欄點一下可直接修改，清空即刪除該分公司目標。' : ''}
-        </p>
-        {legacyTarget !== null ? (
-          <div className="rounded-lg bg-amber-50 px-3 py-3 text-sm text-amber-700 flex items-center justify-between gap-3">
-            <span>{year} 年的目標是舊格式（未分公司，共 {legacyTarget} 場），需轉換後才能依分公司設定。</span>
+          <div className="flex flex-wrap justify-end gap-2">
             {isManager && (
-              <button onClick={convertLegacy} disabled={savingTarget}
-                className="text-xs bg-amber-600 text-white px-3 py-1 rounded-lg hover:bg-amber-700 disabled:opacity-50 whitespace-nowrap">
-                轉換為「未分公司」→ 可再拆分
+              <button onClick={() => setEditingTargets(true)}
+                className="text-xs px-2.5 py-1 rounded-full border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100">
+                ✏️ 編輯年度目標
               </button>
             )}
+            {officeTargetRows.length > 0 && (
+              <>
+                <button onClick={handleCopyTargetTable}
+                  className="text-xs px-2.5 py-1 rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50">
+                  {copyState === 'copied' ? '已複製' : copyState === 'error' ? '複製失敗' : '📋 複製表格（可貼到 PPT）'}
+                </button>
+                <button onClick={handleCopyTargetChart}
+                  className="text-xs px-2.5 py-1 rounded-full border border-gray-200 text-gray-600 hover:bg-gray-50">
+                  {chartCopyState === 'copied' ? '已複製' : chartCopyState === 'error' ? '複製失敗' : '📊 複製長條圖（可貼到 PPT）'}
+                </button>
+              </>
+            )}
           </div>
-        ) : (
-          <>
-            <div className="flex items-center gap-3 text-xs text-gray-500 mb-1.5">
-              <span className="w-14 shrink-0">分公司</span>
-              <span className="flex-1">已報名 / 目標</span>
-              <span className="w-10 text-right">達成率</span>
-              <span className="w-16 text-center">目標</span>
-            </div>
-            <div className="space-y-2">
-              {goalRows.map(r => {
-                const p = r.target ? Math.min(100, Math.round((r.count / r.target) * 100)) : 0
-                return (
-                  <div key={r.office} className="flex items-center gap-3">
-                    <span className="w-14 text-xs font-medium text-gray-600 shrink-0">{r.office}</span>
-                    <div className="flex-1 h-6 bg-gray-50 rounded overflow-hidden">
-                      <div className={`h-full rounded flex items-center justify-end px-2 transition-all ${p >= 100 ? 'bg-emerald-500' : 'bg-blue-500'}`}
-                        style={{ width: `${Math.max(p, r.count > 0 ? 8 : 0)}%`, minWidth: r.count > 0 ? '2.5rem' : 0 }}>
-                        {r.count > 0 && <span className="text-xs text-white font-medium whitespace-nowrap">{r.target != null ? `${r.count} / ${r.target}` : `${r.count} 場`}</span>}
-                      </div>
-                    </div>
-                    <span className="text-xs text-gray-500 w-10 text-right">{r.target ? `${r.rate}%` : '—'}</span>
-                    <TargetCell value={r.target} canEdit={isManager && !savingTarget} onSave={raw => saveTarget(r.office, raw)} />
-                  </div>
-                )
-              })}
-              <div className="flex items-center gap-3 pt-2 mt-1 border-t border-gray-100 text-sm font-semibold text-gray-800">
-                <span className="w-14 shrink-0 text-xs">合計</span>
-                <span className="flex-1 text-xs font-normal text-gray-500">{count} 場{target != null ? ` / 目標 ${target} 場` : '（尚未設定目標）'}</span>
-                <span className="w-10 text-right text-xs">{target ? `${Math.round((count / target) * 100)}%` : '—'}</span>
-                <span className="w-16 text-center tabular-nums">{target ?? '—'}</span>
-              </div>
-            </div>
-          </>
+        </div>
+        <p className="text-xs text-gray-500 mb-4">
+          達成率 = 該分公司當年度秀展場數 ÷ 目標場數；HQ(COMPUTEX 主辦單位)獨立於 TW。Planner 依「負責人與設計師管理」設定的地區對應顯示。
+        </p>
+        {legacyTarget !== null && (
+          <div className="rounded-lg bg-amber-50 px-3 py-2.5 text-sm text-amber-700 mb-4">
+            {year} 年原本的目標是舊格式（未分公司，共 {legacyTarget} 場）。{isManager ? '請按「編輯年度目標」改成依分公司設定，儲存後會取代舊格式。' : '尚未依分公司設定。'}
+          </div>
         )}
+        <div className="flex items-center gap-3 text-xs text-gray-500 mb-1.5">
+          <span className="w-14 shrink-0">分公司</span>
+          <span className="w-24 shrink-0 hidden sm:block">Planner</span>
+          <span className="flex-1">進度</span>
+          <span className="w-10 text-right">達成率</span>
+          <span className="w-12 text-center">已報名</span>
+          <span className="w-12 text-center">目標</span>
+        </div>
+        <div className="space-y-2">
+          {goalRows.map(r => {
+            const p = r.target ? Math.min(100, Math.round((r.count / r.target) * 100)) : 0
+            return (
+              <div key={r.office} className="flex items-center gap-3">
+                <span className="w-14 text-xs font-medium text-gray-600 shrink-0">{r.office}</span>
+                <span className="w-24 shrink-0 text-xs text-gray-500 truncate hidden sm:block" title={plannerOfOffice(r.office)}>{plannerOfOffice(r.office) || '—'}</span>
+                <div className="flex-1 h-6 bg-gray-50 rounded overflow-hidden">
+                  <div className={`h-full rounded transition-all ${p >= 100 ? 'bg-emerald-500' : 'bg-blue-500'}`}
+                    style={{ width: `${r.target ? Math.max(p, r.count > 0 ? 4 : 0) : 0}%` }} />
+                </div>
+                <span className="text-xs text-gray-500 w-10 text-right">{r.target ? `${r.rate}%` : '—'}</span>
+                <span className="w-12 text-center text-sm text-gray-800 tabular-nums">{r.count || <span className="text-gray-300">0</span>}</span>
+                <span className="w-12 text-center text-sm text-gray-700 tabular-nums">{r.target ?? <span className="text-gray-300">—</span>}</span>
+              </div>
+            )
+          })}
+          <div className="flex items-center gap-3 pt-2 mt-1 border-t border-gray-100 font-semibold text-gray-800">
+            <span className="w-14 shrink-0 text-xs">合計</span>
+            <span className="w-24 shrink-0 hidden sm:block" />
+            <span className="flex-1" />
+            <span className="w-10 text-right text-xs">{target ? `${Math.round((count / target) * 100)}%` : '—'}</span>
+            <span className="w-12 text-center text-sm tabular-nums">{count}</span>
+            <span className="w-12 text-center text-sm tabular-nums">{target ?? '—'}</span>
+          </div>
+        </div>
       </div>
 
       {/* 月份分布 */}
@@ -499,17 +550,7 @@ export default function TradeshowAnalysisPage() {
           <p className="text-sm font-semibold text-gray-700">📅 月份分布（依開始日期）</p>
           <span className="text-xs text-gray-500 shrink-0">{regionDef.label}：共 {byMonth.reduce((a, b) => a + b, 0)} 場</span>
         </div>
-        <div className="flex flex-wrap gap-1.5 mb-4">
-          {MONTH_REGIONS.map(r => (
-            <button key={r.key} onClick={() => setMonthRegion(r.key)}
-              title={r.offices ? r.offices.join('、') : '所有分公司'}
-              className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
-                monthRegion === r.key ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-              }`}>
-              {r.label}
-            </button>
-          ))}
-        </div>
+        <RegionFilter value={monthRegion} onChange={setMonthRegion} plannerMap={plannerMap} people={people} />
         <div className="flex items-end gap-2 h-32">
           {byMonth.map((c, i) => (
             <div key={i} className="flex-1 flex flex-col items-center gap-1">
@@ -525,7 +566,8 @@ export default function TradeshowAnalysisPage() {
       {/* 各地區費用比較 */}
       <div id="sec-region-cost" className="scroll-mt-14 bg-white rounded-xl border border-gray-200 p-5 mb-6">
         <p className="text-sm font-semibold text-gray-700 mb-1">🌏 各地區費用比較（依 Office，USD）</p>
-        <p className="text-xs text-gray-500 mb-4">各分公司當年度「所有秀展」的攤位租金＋裝潢費用＋PR 費用加總</p>
+        <p className="text-xs text-gray-500 mb-3">各分公司當年度「所有秀展」的攤位租金＋裝潢費用＋PR 費用加總</p>
+        <RegionFilter value={costRegion} onChange={setCostRegion} plannerMap={plannerMap} people={people} />
         {officeRows.length === 0 ? (
           <p className="text-sm text-gray-500 text-center py-8">目前沒有可比較的預算資料</p>
         ) : (
@@ -546,7 +588,7 @@ export default function TradeshowAnalysisPage() {
         )}
         <div className="mt-4 rounded-lg bg-gray-50 px-3 py-2.5 text-xs text-gray-600 leading-relaxed space-y-1">
           <p className="font-medium text-gray-700">統計規則</p>
-          <p>・這是「總額」：該分公司當年度每一場秀展的（攤位租金 + 裝潢費用 + PR 費用）直接相加，所以<b>參展場次越多，總額自然越高</b>，不代表單場比較貴。要比較貴不貴，請看右側「平均每場」，或下方的「單一攤位租金」。</p>
+          <p>・這是「總額」：該分公司當年度每一場秀展的（攤位租金 + 裝潢費用 + PR 費用）直接相加，所以<b>參展場次越多，總額自然越高</b>，不代表單場比較貴。要比較貴不貴，請看右側「平均每場」，或下面的「單一攤位租金」。</p>
           <p>・年度：依秀展的「年度」欄位歸年；費用都已換算成美金(USD)。</p>
           <p>・租金、裝潢、PR 三項都沒填的秀展不計入(右側場數只算有填費用的場次)；只填部分費用的，就只加有填的那幾項。</p>
           <p>・沒填分公司的歸在「未指定」。</p>
@@ -564,7 +606,8 @@ export default function TradeshowAnalysisPage() {
             </button>
           )}
         </div>
-        <p className="text-xs text-gray-500 mb-4">每場「攤位租金 ÷ 攤位數量」，再依分公司取平均；只計入租金與攤位數量都有填的場次</p>
+        <p className="text-xs text-gray-500 mb-3">每場「攤位租金 ÷ 攤位數量」，再依分公司取平均；只計入租金與攤位數量都有填的場次</p>
+        <RegionFilter value={boothRegion} onChange={setBoothRegion} plannerMap={plannerMap} people={people} />
         {booth.rows.length === 0 ? (
           <p className="text-sm text-gray-500 text-center py-8">目前沒有同時填了租金與攤位數量的場次</p>
         ) : (
@@ -589,6 +632,30 @@ export default function TradeshowAnalysisPage() {
           <p className="text-xs text-gray-500 mt-3">
             另有 {booth.skippedTotal} 場未計入（缺租金 {booth.skipped.noRent}、缺攤位數量 {booth.skipped.noBooths}、兩者都缺 {booth.skipped.both}），補齊資料後會自動納入。
           </p>
+        )}
+      </div>
+
+      {/* 各分公司平均 PR 費用比較 */}
+      <div id="sec-avg-pr" className="scroll-mt-14 bg-white rounded-xl border border-gray-200 p-5 mb-6">
+        <p className="text-sm font-semibold text-gray-700 mb-1">📣 各分公司平均 PR 費用比較（USD）</p>
+        <p className="text-xs text-gray-500 mb-3">每個分公司「平均每場」PR 預算，只計入已填 PR 費用的場次</p>
+        <RegionFilter value={prRegion} onChange={setPrRegion} plannerMap={plannerMap} people={people} />
+        {avgPrRows.length === 0 ? (
+          <p className="text-sm text-gray-500 text-center py-8">目前沒有可比較的 PR 費用資料</p>
+        ) : (
+          <div className="space-y-2.5">
+            {avgPrRows.map(([office, avg], i) => (
+              <div key={office} className="flex items-center gap-3">
+                <span className="w-14 text-xs font-medium text-gray-600 shrink-0">{office}</span>
+                <div className="flex-1 h-6 bg-gray-50 rounded overflow-hidden">
+                  <div className="h-full rounded flex items-center justify-end px-2 transition-all"
+                    style={{ width: `${(avg / maxAvgPr) * 100}%`, backgroundColor: BAR_COLORS[i % BAR_COLORS.length], minWidth: '2.5rem' }}>
+                    <span className="text-xs text-white font-medium whitespace-nowrap">{fmtUSD(avg)}</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         )}
       </div>
 
@@ -622,28 +689,10 @@ export default function TradeshowAnalysisPage() {
         <CrosstabTable data={sizeTable} empty="目前沒有秀展資料" />
       </div>
 
-      {/* 各分公司平均 PR 費用比較 */}
-      <div id="sec-avg-pr" className="scroll-mt-14 bg-white rounded-xl border border-gray-200 p-5">
-        <p className="text-sm font-semibold text-gray-700 mb-1">📣 各分公司平均 PR 費用比較（USD）</p>
-        <p className="text-xs text-gray-500 mb-4">每個分公司「平均每場」PR 預算，只計入已填 PR 費用的場次</p>
-        {avgPrRows.length === 0 ? (
-          <p className="text-sm text-gray-500 text-center py-8">目前沒有可比較的 PR 費用資料</p>
-        ) : (
-          <div className="space-y-2.5">
-            {avgPrRows.map(([office, avg], i) => (
-              <div key={office} className="flex items-center gap-3">
-                <span className="w-14 text-xs font-medium text-gray-600 shrink-0">{office}</span>
-                <div className="flex-1 h-6 bg-gray-50 rounded overflow-hidden">
-                  <div className="h-full rounded flex items-center justify-end px-2 transition-all"
-                    style={{ width: `${(avg / maxAvgPr) * 100}%`, backgroundColor: BAR_COLORS[i % BAR_COLORS.length], minWidth: '2.5rem' }}>
-                    <span className="text-xs text-white font-medium whitespace-nowrap">{fmtUSD(avg)}</span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+      {editingTargets && (
+        <TargetEditor year={year} offices={goalOffices} initial={targetByOffice} saving={savingTarget}
+          onSave={saveTargets} onClose={() => setEditingTargets(false)} />
+      )}
     </div>
     </div>
   )

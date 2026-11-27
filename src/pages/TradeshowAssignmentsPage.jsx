@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { collection, onSnapshot, doc, updateDoc } from 'firebase/firestore'
+import { collection, onSnapshot, doc, updateDoc, setDoc } from 'firebase/firestore'
 import { db } from '../firebase'
 import { useAuth } from '../contexts/AuthContext'
 import { sortByOfficeOrder } from '../utils/officeCurrency'
+import { REGIONS, DEFAULT_PLANNER_NAMES, regionKeyOfOffice, resolveRegionPlanners, plannerNames } from '../utils/regionPlanners'
 
 // 結束日期一過，狀態自動視為「已結束」（畫面顯示用，不覆蓋原本手動填的狀態文字）—— 跟展覽列表頁一致
 function effectiveStatus(p) {
@@ -21,13 +22,16 @@ export default function TradeshowAssignmentsPage() {
   const [busy, setBusy] = useState(null)
   const [officeFilters, setOfficeFilters] = useState([])   // 空陣列 = 不篩選（全部）
   const [statusFilters, setStatusFilters] = useState([])
+  const [regionCfg, setRegionCfg] = useState({})   // settings/regionPlanners：{ 年度: { 地區key: [personId] } }
 
   useEffect(() => {
     const u1 = onSnapshot(collection(db, 'projects'), snap =>
       setProjects(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(p => p.type === 'tradeshow')))
     const u2 = onSnapshot(collection(db, 'people'), snap =>
       setPeople(snap.docs.map(d => ({ id: d.id, ...d.data() }))))
-    return () => { u1(); u2() }
+    const u3 = onSnapshot(doc(db, 'settings', 'regionPlanners'), snap =>
+      setRegionCfg(snap.exists() ? snap.data() : {}))
+    return () => { u1(); u2(); u3() }
   }, [])
 
   const designers = people.filter(p => p.role === 'designer').sort((a, b) => a.name.localeCompare(b.name, 'zh-TW'))
@@ -38,6 +42,42 @@ export default function TradeshowAssignmentsPage() {
   years.sort()
 
   const offices = sortByOfficeOrder([...new Set(projects.filter(p => p.year === year).map(p => p.office).filter(Boolean))])
+
+  // 地區 → Planner：每年可不同(HQ 每年都可能換人)；沒設定的地區用預設姓名(TW Rachel、US Ashley、EU Ecco、JPKR Shinpei)
+  const plannerMap = resolveRegionPlanners(regionCfg, year, people)
+  const regionPlannerIdsOf = (p) => plannerMap[regionKeyOfOffice(p.office)] || []
+  async function toggleRegionPlanner(regionKey, personId) {
+    const cur = plannerMap[regionKey] || []
+    const next = cur.includes(personId) ? cur.filter(id => id !== personId) : [...cur, personId]
+    setBusy('region:' + regionKey + personId)
+    try {
+      await setDoc(doc(db, 'settings', 'regionPlanners'), { [String(year)]: { [regionKey]: next } }, { merge: true })
+    } catch (e) {
+      alert('更新失敗：' + (e.code || e.message))
+    }
+    setBusy(null)
+  }
+
+  // 本年度還沒指派到地區 Planner 的秀展 → 一鍵補上(只新增，不會移除任何既有指派)
+  const yearShows = projects.filter(p => p.year === year)
+  const missingShows = yearShows
+    .map(p => ({ p, ids: regionPlannerIdsOf(p).filter(id => !(p.assignments || []).some(a => a.personId === id)) }))
+    .filter(x => x.ids.length > 0)
+  async function applyRegionPlanners() {
+    if (missingShows.length === 0) return
+    const names = missingShows.slice(0, 8).map(x => x.p.name).join('、') + (missingShows.length > 8 ? '…' : '')
+    if (!window.confirm(`要把地區 Planner 補到 ${missingShows.length} 場 ${year} 年秀展的指派嗎？\n只會新增，不會移除原本的指派。\n\n${names}`)) return
+    setBusy('apply-region')
+    try {
+      for (const { p, ids } of missingShows) {
+        const next = [...(p.assignments || []), ...ids.map(personId => ({ personId, role: 'planner' }))]
+        await updateDoc(doc(db, 'projects', p.id), { assignments: next, updatedAt: new Date().toISOString() })
+      }
+    } catch (e) {
+      alert('套用失敗：' + (e.code || e.message))
+    }
+    setBusy(null)
+  }
 
   function toggleFilter(setFn, value) {
     setFn(cur => cur.includes(value) ? cur.filter(v => v !== value) : [...cur, value])
@@ -81,6 +121,39 @@ export default function TradeshowAssignmentsPage() {
         </select>
       </div>
       <p className="text-sm text-gray-500 mb-3">一次檢視每場秀展的指派，點擊姓名直接切換，不用逐場開編輯視窗</p>
+
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-5">
+        <div className="flex items-start justify-between gap-3 mb-2">
+          <div>
+            <p className="text-sm font-semibold text-gray-700">🌏 {year} 年地區 Planner</p>
+            <p className="text-xs text-gray-500">點姓名切換。每年可以不同（HQ 每年都可能換人）；沒特別設定的地區，預設 {Object.entries(DEFAULT_PLANNER_NAMES).map(([k, v]) => `${REGIONS.find(r => r.key === k).label} ${v.join('/')}`).join('、')}。秀展分析頁會依這裡顯示各地區 Planner。</p>
+          </div>
+          <button onClick={applyRegionPlanners} disabled={missingShows.length === 0 || busy === 'apply-region'}
+            title="把地區 Planner 補進這一年各場秀展的指派(只新增，不移除)"
+            className="text-xs px-3 py-1.5 rounded-lg border border-teal-300 bg-teal-50 text-teal-700 hover:bg-teal-100 disabled:opacity-40 disabled:cursor-default whitespace-nowrap shrink-0">
+            {missingShows.length > 0 ? `套用到 ${missingShows.length} 場秀展` : '各場都已有地區 Planner'}
+          </button>
+        </div>
+        <div className="space-y-2">
+          {REGIONS.map(r => (
+            <div key={r.key} className="flex flex-wrap items-center gap-1.5">
+              <span className="w-24 text-xs font-medium text-gray-700 shrink-0">{r.label}<span className="text-gray-400 font-normal ml-1">{r.offices.join('/')}</span></span>
+              {planners.map(pl => {
+                const selected = (plannerMap[r.key] || []).includes(pl.id)
+                return (
+                  <button key={pl.id} disabled={busy === 'region:' + r.key + pl.id} onClick={() => toggleRegionPlanner(r.key, pl.id)}
+                    className={`text-xs px-2 py-1 rounded-lg border transition-colors disabled:opacity-50 ${
+                      selected ? 'bg-teal-600 text-white border-teal-600' : 'border-gray-200 text-gray-500 hover:bg-gray-50'
+                    }`}>
+                    {pl.name}
+                  </button>
+                )
+              })}
+              {planners.length === 0 && <span className="text-xs text-gray-500">尚無 Planner</span>}
+            </div>
+          ))}
+        </div>
+      </div>
 
       <div className="mb-4">
         {(officeFilters.length > 0 || statusFilters.length > 0) && (
@@ -126,7 +199,14 @@ export default function TradeshowAssignmentsPage() {
               const ended = effectiveStatus(p) === '已結束'
               return (
               <tr key={p.id} className="hover:bg-gray-50/60 align-top">
-                <td className={`px-4 py-3 font-medium ${ended ? 'text-gray-500' : 'text-gray-800'}`}>{p.name}</td>
+                <td className={`px-4 py-3 font-medium ${ended ? 'text-gray-500' : 'text-gray-800'}`}>
+                  {p.name}
+                  {regionKeyOfOffice(p.office) && (
+                    <div className="text-xs font-normal text-gray-500 mt-0.5">
+                      {p.office}・地區 Planner：{plannerNames(plannerMap, regionKeyOfOffice(p.office), people).join('、') || '未指定'}
+                    </div>
+                  )}
+                </td>
                 <td className={`px-4 py-3 whitespace-nowrap ${ended ? 'text-gray-500' : 'text-gray-500'}`}>{p.startDate || '—'}</td>
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap gap-1.5">
@@ -152,9 +232,10 @@ export default function TradeshowAssignmentsPage() {
                       const key = p.id + pl.id
                       return (
                         <button key={pl.id} disabled={busy === key} onClick={() => toggle(p, pl.id, 'planner')}
+                          title={regionPlannerIdsOf(p).includes(pl.id) ? '此地區的 Planner' : undefined}
                           className={`text-xs px-2 py-1 rounded-lg border transition-colors disabled:opacity-50 ${
                             selected ? 'bg-teal-600 text-white border-teal-600' : 'border-gray-200 text-gray-500 hover:bg-gray-50'
-                          }`}>
+                          } ${regionPlannerIdsOf(p).includes(pl.id) ? 'ring-2 ring-amber-300' : ''}`}>
                           {pl.name}
                         </button>
                       )
