@@ -11,13 +11,18 @@ export function greeting(hour) {
   return '辛苦了'
 }
 
-// 頭像檔名 key：公司信箱 @ 前面那段(小寫)，沒有就用登入信箱；檔案放 public/avatars/<key>.png
+// 頭像檔名 key：信箱 @ 前面那段(小寫)；檔案放 public/avatars/<key>.png / .glb
+export function emailKey(e) {
+  return String(e || '').trim().toLowerCase().split('@')[0].replace(/[^a-z0-9._-]/g, '')
+}
+// 第一個有值的信箱(公司信箱優先，其次通知信箱、登入信箱)
 export function avatarKey(...emails) {
-  for (const e of emails) {
-    const k = String(e || '').trim().toLowerCase().split('@')[0].replace(/[^a-z0-9._-]/g, '')
-    if (k) return k
-  }
+  for (const e of emails) { const k = emailKey(e); if (k) return k }
   return ''
+}
+// 一個人可能有多個信箱(公司信箱、登入 Gmail)，全部列出，讓 manifest 的任何一個寫法都能對到
+export function avatarKeys(...emails) {
+  return [...new Set(emails.map(emailKey).filter(Boolean))]
 }
 
 // 找不到圖時顯示的縮寫：英文取前兩個字母，中文取第一個字

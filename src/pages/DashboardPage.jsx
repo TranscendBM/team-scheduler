@@ -9,7 +9,7 @@ import { TYPE_COLORS, TYPE_LABELS } from '../utils/milestoneUtils'
 import { addDays, showCountdown } from '../utils/tradeshowCountdown'
 import RequestDetailModal from '../components/RequestDetailModal'
 import CompanionCard from '../components/CompanionCard'
-import { buildCompanionMessages, avatarKey } from '../utils/companionMessages'
+import { buildCompanionMessages, avatarKey, avatarKeys } from '../utils/companionMessages'
 import { STAGES, lineMeta, categoryMeta, isLive, stageMeta, launchStatus, sortByLaunch, countByStage, localTodayStr } from '../utils/newProducts'
 
 const PROJECT_TYPES = ['event', 'award', 'design', 'seasonal_kv']
@@ -169,6 +169,7 @@ export default function DashboardPage() {
       <CompanionCard
         name={me?.name || user?.displayName || ''}
         avatarKey={avatarKey(me?.email, myUser?.notifyEmail, email)}
+        avatarKeys={avatarKeys(me?.email, myUser?.notifyEmail, email)}
         photoURL={user?.photoURL}
         messages={buildCompanionMessages({
           name: me?.name || user?.displayName || '', role, today, hour: new Date().getHours(),

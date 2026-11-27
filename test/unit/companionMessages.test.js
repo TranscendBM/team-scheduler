@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildCompanionMessages, avatarKey, initialsOf, greeting } from '../../src/utils/companionMessages.js'
+import { buildCompanionMessages, avatarKey, avatarKeys, initialsOf, greeting } from '../../src/utils/companionMessages.js'
 
 const today = '2026-11-27'
 
@@ -8,6 +8,11 @@ describe('avatarKey / initialsOf / greeting', () => {
     expect(avatarKey('Rachel.Chen@transcend-info.com', 'x@y.com')).toBe('rachel.chen')
     expect(avatarKey('', null, 'Ecco@gmail.com')).toBe('ecco')
     expect(avatarKey(undefined, '')).toBe('')
+  })
+  it('一個人的所有信箱前綴都列出(公司信箱、登入 Gmail)，去重、略過空值', () => {
+    expect(avatarKeys('Elvis_Cheng@transcend-info.com', undefined, 'tselvis814@gmail.com')).toEqual(['elvis_cheng', 'tselvis814'])
+    expect(avatarKeys('a@x.com', 'A@y.com')).toEqual(['a'])
+    expect(avatarKeys()).toEqual([])
   })
   it('縮寫：英文前兩個字母、中文第一個字、空白給 ?', () => {
     expect(initialsOf('Rachel Chen')).toBe('RC')
